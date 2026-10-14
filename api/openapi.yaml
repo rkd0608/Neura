@@ -1,0 +1,3902 @@
+# Neura management API (design §20). Spec-first: this file is the source of truth.
+# Clients and server conformance tests are derived from it. Lint rules are enforced by
+# tests/api/test_openapi.py.
+openapi: 3.1.1
+info:
+  title: Neura management API
+  version: 1.0.0-alpha.1
+  summary: Manage sites, servers, robots, contracts and deployments.
+  description: 'The single public API used by the console, CLI, SDK and customer automation (design §20).
+    It is never on the robot action path.
+
+
+    Conventions:
+
+    - Resources have `metadata`, `spec` (desired, client-set) and `status` (observed, site-reported, read-only).
+
+    - Every POST requires `Idempotency-Key`, except read-only computations marked as such.
+
+    - PATCH and DELETE require `If-Match` with the resource version.
+
+    - Site-dependent work returns `202` with an Operation that succeeds only on site acknowledgement.
+
+    - Errors are RFC 9457 problem details with a stable `reason` code.
+
+    - Lists are cursor-paginated.
+
+
+    Status: Proposed. Implementation lands in milestone M3.'
+servers:
+- url: https://api.example.invalid
+  description: Placeholder until the domain is decided.
+security:
+- oidc: []
+- apiToken: []
+tags:
+- name: Meta
+- name: Organizations
+- name: Projects
+- name: Sites
+- name: Servers
+- name: Robots
+- name: Contracts
+- name: Deployments
+- name: Operations
+- name: Operations data
+- name: Events
+- name: Audit
+- name: Access
+paths:
+  /v1/api-tokens/{api_token_id}:
+    delete:
+      operationId: revokeApiToken
+      tags:
+      - Access
+      summary: Revoke an API token.
+      parameters:
+      - $ref: '#/components/parameters/ApiTokenId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}:
+    get:
+      operationId: getDeployment
+      tags:
+      - Deployments
+      summary: Get a deployment.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateDeployment
+      tags:
+      - Deployments
+      summary: Update a deployment.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/DeploymentUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteDeployment
+      tags:
+      - Deployments
+      summary: Delete a deployment.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}/activation-requests:
+    get:
+      operationId: listActivationRequests
+      tags:
+      - Deployments
+      summary: List activation requests.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationRequestPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: requestActivation
+      tags:
+      - Deployments
+      summary: Request activation of a prepared revision.
+      description: Creates an ActivationRequest and an Operation. The operation succeeds only when a site
+        operator approves locally and the robots acknowledge the new revision at a task boundary (design
+        §20.9).
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivationRequestCreate'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}/revisions:
+    get:
+      operationId: listRevisions
+      tags:
+      - Deployments
+      summary: List a deployment's revisions.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createRevision
+      tags:
+      - Deployments
+      summary: Create an immutable revision.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevisionCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}/rollbacks:
+    post:
+      operationId: rollbackDeployment
+      tags:
+      - Deployments
+      summary: Roll back to an earlier compatible revision.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackCreate'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/execution-profiles/{execution_profile_id}:
+    get:
+      operationId: getExecutionProfile
+      tags:
+      - Contracts
+      summary: Get a registered execution profile.
+      parameters:
+      - $ref: '#/components/parameters/ExecutionProfileId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/faults/{fault_id}:
+    get:
+      operationId: getFault
+      tags:
+      - Operations data
+      summary: Get a fault.
+      parameters:
+      - $ref: '#/components/parameters/FaultId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fault'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/meta:
+    get:
+      operationId: getMeta
+      tags:
+      - Meta
+      summary: Service and API version information.
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceMeta'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security: []
+  /v1/model-artifacts/{model_artifact_id}:
+    get:
+      operationId: getModelArtifact
+      tags:
+      - Contracts
+      summary: Get a registered model artifact.
+      parameters:
+      - $ref: '#/components/parameters/ModelArtifactId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelArtifact'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/operations/{operation_id}:
+    get:
+      operationId: getOperation
+      tags:
+      - Operations
+      summary: Get an operation.
+      parameters:
+      - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/operations/{operation_id}/cancel:
+    post:
+      operationId: cancelOperation
+      tags:
+      - Operations
+      summary: Cancel an operation that has not finished.
+      parameters:
+      - $ref: '#/components/parameters/OperationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/organizations/{organization_id}:
+    get:
+      operationId: getOrganization
+      tags:
+      - Organizations
+      summary: Get an organization.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/organizations/{organization_id}/api-tokens:
+    get:
+      operationId: listApiTokens
+      tags:
+      - Access
+      summary: List API tokens.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createApiToken
+      tags:
+      - Access
+      summary: Create an API token. The secret is returned once.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenWithSecret'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/organizations/{organization_id}/projects:
+    get:
+      operationId: listProjects
+      tags:
+      - Projects
+      summary: List projects.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createProject
+      tags:
+      - Projects
+      summary: Create a project.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/organizations/{organization_id}/support-grants:
+    get:
+      operationId: listSupportGrants
+      tags:
+      - Access
+      summary: List support access grants.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportGrantPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createSupportGrant
+      tags:
+      - Access
+      summary: Grant time-boxed support access.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportGrantCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportGrant'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}:
+    get:
+      operationId: getProject
+      tags:
+      - Projects
+      summary: Get a project.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateProject
+      tags:
+      - Projects
+      summary: Update a project.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/audit-records:
+    get:
+      operationId: listAuditRecords
+      tags:
+      - Audit
+      summary: List audit records.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditRecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/compatibility-checks:
+    post:
+      operationId: checkCompatibility
+      tags:
+      - Contracts
+      summary: Check a model artifact, robot profile and execution profile together.
+      description: A read-only computation; safe to repeat, so no Idempotency-Key is required.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompatibilityCheckRequest'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompatibilityReport'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/deployments:
+    get:
+      operationId: listDeployments
+      tags:
+      - Deployments
+      summary: List deployments.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createDeployment
+      tags:
+      - Deployments
+      summary: Create a deployment.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/events:
+    get:
+      operationId: streamEvents
+      tags:
+      - Events
+      summary: Stream change events (server-sent events).
+      description: Resumable with `Last-Event-ID` or `cursor` within the retention window. Each SSE message's
+        data is an Event (design §20.6).
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - name: Last-Event-ID
+        in: header
+        schema:
+          type: string
+      responses:
+        '200':
+          description: An SSE stream of Event objects.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              x-neura-event-schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: The cursor is older than the retention window; re-list resources.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/projects/{project_id}/execution-profiles:
+    get:
+      operationId: listExecutionProfiles
+      tags:
+      - Contracts
+      summary: List registered execution profiles.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfilePage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: registerExecutionProfile
+      tags:
+      - Contracts
+      summary: Register an immutable execution profile document.
+      description: The document is validated with neura-contracts; registering an identical document again
+        returns the existing resource.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionProfileCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/faults:
+    get:
+      operationId: listFaults
+      tags:
+      - Operations data
+      summary: List faults.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaultPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/metrics/query:
+    post:
+      operationId: queryMetrics
+      tags:
+      - Operations data
+      summary: Query aggregate metrics.
+      description: A read-only query; safe to repeat, so no Idempotency-Key is required.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricsQuery'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/model-artifacts:
+    get:
+      operationId: listModelArtifacts
+      tags:
+      - Contracts
+      summary: List registered model artifacts.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelArtifactPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: registerModelArtifact
+      tags:
+      - Contracts
+      summary: Register an immutable model artifact document.
+      description: The document is validated with neura-contracts; registering an identical document again
+        returns the existing resource.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelArtifactCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelArtifact'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/robot-profiles:
+    get:
+      operationId: listRobotProfiles
+      tags:
+      - Contracts
+      summary: List registered robot profiles.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RobotProfilePage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: registerRobotProfile
+      tags:
+      - Contracts
+      summary: Register an immutable robot profile document.
+      description: The document is validated with neura-contracts; registering an identical document again
+        returns the existing resource.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RobotProfileCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RobotProfile'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/robots:
+    get:
+      operationId: listRobots
+      tags:
+      - Robots
+      summary: List robots.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RobotPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createRobot
+      tags:
+      - Robots
+      summary: Create a robot.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RobotCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Robot'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/sessions:
+    get:
+      operationId: listSessions
+      tags:
+      - Operations data
+      summary: List live and recent robot sessions.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/sites:
+    get:
+      operationId: listSites
+      tags:
+      - Sites
+      summary: List sites.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SitePage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createSite
+      tags:
+      - Sites
+      summary: Create a site.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/revisions/{revision_id}:
+    get:
+      operationId: getRevision
+      tags:
+      - Deployments
+      summary: Get a revision.
+      parameters:
+      - $ref: '#/components/parameters/RevisionId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/revisions/{revision_id}/prepare:
+    post:
+      operationId: prepareRevision
+      tags:
+      - Deployments
+      summary: 'Prepare a revision at its site: pull, verify, warm and profile.'
+      parameters:
+      - $ref: '#/components/parameters/RevisionId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/robot-profiles/{robot_profile_id}:
+    get:
+      operationId: getRobotProfile
+      tags:
+      - Contracts
+      summary: Get a registered robot profile.
+      parameters:
+      - $ref: '#/components/parameters/RobotProfileId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RobotProfile'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/robots/{robot_id}:
+    get:
+      operationId: getRobot
+      tags:
+      - Robots
+      summary: Get a robot.
+      parameters:
+      - $ref: '#/components/parameters/RobotId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Robot'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateRobot
+      tags:
+      - Robots
+      summary: Update a robot.
+      parameters:
+      - $ref: '#/components/parameters/RobotId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/RobotUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Robot'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteRobot
+      tags:
+      - Robots
+      summary: Delete a robot.
+      parameters:
+      - $ref: '#/components/parameters/RobotId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/servers/{server_id}:
+    get:
+      operationId: getServer
+      tags:
+      - Servers
+      summary: Get a server, its GPUs and preflight results.
+      parameters:
+      - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateServer
+      tags:
+      - Servers
+      summary: Update a server's GPU allocation or labels.
+      parameters:
+      - $ref: '#/components/parameters/ServerId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/ServerUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteServer
+      tags:
+      - Servers
+      summary: Unenroll a server and revoke its certificate.
+      parameters:
+      - $ref: '#/components/parameters/ServerId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/sessions/{session_id}:
+    get:
+      operationId: getSession
+      tags:
+      - Operations data
+      summary: Get a session.
+      parameters:
+      - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/sites/{site_id}:
+    get:
+      operationId: getSite
+      tags:
+      - Sites
+      summary: Get a site.
+      parameters:
+      - $ref: '#/components/parameters/SiteId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateSite
+      tags:
+      - Sites
+      summary: Update a site.
+      parameters:
+      - $ref: '#/components/parameters/SiteId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/SiteUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteSite
+      tags:
+      - Sites
+      summary: Delete a site.
+      parameters:
+      - $ref: '#/components/parameters/SiteId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/sites/{site_id}/enrollment-tokens:
+    post:
+      operationId: createEnrollmentToken
+      tags:
+      - Sites
+      summary: Create a one-time server enrollment token.
+      description: The secret is returned once. It enrolls one server, then cannot be reused (design §17.2).
+      parameters:
+      - $ref: '#/components/parameters/SiteId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollmentTokenCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentToken'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/sites/{site_id}/servers:
+    get:
+      operationId: listServers
+      tags:
+      - Servers
+      summary: List servers enrolled at a site.
+      parameters:
+      - $ref: '#/components/parameters/SiteId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/support-grants/{support_grant_id}:
+    delete:
+      operationId: revokeSupportGrant
+      tags:
+      - Access
+      summary: Revoke a support grant.
+      parameters:
+      - $ref: '#/components/parameters/SupportGrantId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.invalid/.well-known/openid-configuration
+      description: Customer SSO; authorization code with PKCE for the console.
+    apiToken:
+      type: http
+      scheme: bearer
+      description: Scoped, expiring API token.
+  parameters:
+    ActivationRequestId:
+      name: activation_request_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ActivationRequestId'
+    ApiTokenId:
+      name: api_token_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ApiTokenId'
+    AuditRecordId:
+      name: audit_record_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/AuditRecordId'
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    DeploymentId:
+      name: deployment_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/DeploymentId'
+    EnrollmentTokenId:
+      name: enrollment_token_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/EnrollmentTokenId'
+    ExecutionProfileId:
+      name: execution_profile_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ExecutionProfileId'
+    FaultId:
+      name: fault_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/FaultId'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required on every POST. A repeated key with the same body returns the original result;
+        with a different body it returns API_IDEMPOTENCY_KEY_REUSED.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The resource version (ETag) the change is based on.
+      schema:
+        type: string
+    LabelSelector:
+      name: label
+      in: query
+      description: Filter by label, `key=value`. Repeat to AND several labels.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    ModelArtifactId:
+      name: model_artifact_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ModelArtifactId'
+    OperationId:
+      name: operation_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/OperationId'
+    OrganizationId:
+      name: organization_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/OrganizationId'
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ProjectId'
+    RevisionId:
+      name: revision_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/RevisionId'
+    RobotId:
+      name: robot_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/RobotId'
+    RobotProfileId:
+      name: robot_profile_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/RobotProfileId'
+    RollbackId:
+      name: rollback_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/RollbackId'
+    ServerId:
+      name: server_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ServerId'
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/SessionId'
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/SiteId'
+    SupportGrantId:
+      name: support_grant_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/SupportGrantId'
+  headers:
+    ETag:
+      description: Resource version for optimistic concurrency.
+      schema:
+        type: string
+    Location:
+      description: URL of the created resource.
+      schema:
+        type: string
+    RateLimitLimit:
+      schema:
+        type: integer
+    RateLimitRemaining:
+      schema:
+        type: integer
+    RetryAfter:
+      schema:
+        type: integer
+      description: Seconds to wait.
+  responses:
+    Conflict:
+      description: API_CONFLICT
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: API_FORBIDDEN
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: API_INTERNAL_ERROR
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: API_NOT_FOUND
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionFailed:
+      description: API_PRECONDITION_FAILED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionRequired:
+      description: API_IDEMPOTENCY_KEY_REQUIRED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: API_RATE_LIMITED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+    Unauthenticated:
+      description: API_UNAUTHENTICATED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unavailable:
+      description: API_UNAVAILABLE
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationFailed:
+      description: API_VALIDATION_FAILED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    ActivationRequest:
+      type: object
+      description: A request to activate a prepared revision. Motion requires local approval at the site
+        at a task boundary; the cloud cannot authorize it (design §20.9).
+      required:
+      - metadata
+      - revision_id
+      - robot_ids
+      - operation_id
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        robot_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotId'
+        operation_id:
+          $ref: '#/components/schemas/OperationId'
+        state:
+          enum:
+          - AwaitingLocalApproval
+          - Approved
+          - Refused
+          - Activated
+          - Failed
+          - Cancelled
+        approved_by:
+          type:
+          - string
+          - 'null'
+          description: Local operator identity.
+        note:
+          type: string
+    ActivationRequestCreate:
+      type: object
+      required:
+      - revision_id
+      properties:
+        revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        robot_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotId'
+          uniqueItems: true
+          description: Defaults to the rollout strategy's robots.
+        note:
+          type: string
+          maxLength: 2000
+      additionalProperties: false
+    ActivationRequestId:
+      type: string
+      pattern: ^actr_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'ActivationRequest identifier: `actr_` followed by a ULID.'
+      examples:
+      - actr_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ActivationRequestPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivationRequest'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    ApiToken:
+      type: object
+      required:
+      - metadata
+      - display_name
+      - scopes
+      - expires_at
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiTokenScope'
+        project_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectId'
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        last_used_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+    ApiTokenCreate:
+      type: object
+      required:
+      - display_name
+      - scopes
+      - expires_in_days
+      properties:
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiTokenScope'
+          minItems: 1
+          uniqueItems: true
+        project_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectId'
+          uniqueItems: true
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+      additionalProperties: false
+    ApiTokenId:
+      type: string
+      pattern: ^tok_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'ApiToken identifier: `tok_` followed by a ULID.'
+      examples:
+      - tok_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ApiTokenPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiToken'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    ApiTokenScope:
+      type: string
+      enum:
+      - read
+      - deploy
+      - admin
+      description: Token scopes. No token scope can approve physical activation (design §19.2).
+    ApiTokenWithSecret:
+      allOf:
+      - $ref: '#/components/schemas/ApiToken'
+      required:
+      - secret
+      properties:
+        secret:
+          type: string
+          description: Shown once, in this response only.
+    AuditRecord:
+      type: object
+      readOnly: true
+      required:
+      - metadata
+      - actor
+      - action
+      - target
+      - result
+      - occurred_at
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        actor:
+          type: string
+        actor_kind:
+          enum:
+          - user
+          - api_token
+          - site_agent
+          - support
+          - system
+        action:
+          type: string
+          examples:
+          - deployment.update
+          - activation_request.create
+        target:
+          type: string
+        result:
+          enum:
+          - succeeded
+          - failed
+          - denied
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonCode'
+          - type: 'null'
+        request_id:
+          type: string
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+    AuditRecordId:
+      type: string
+      pattern: ^aud_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'AuditRecord identifier: `aud_` followed by a ULID.'
+      examples:
+      - aud_01JA2B3C4D5E6F7G8H9JKMNPQR
+    AuditRecordPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditRecord'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    CompatibilityCheckRequest:
+      type: object
+      required:
+      - model_artifact_id
+      - robot_profile_id
+      - execution_profile_id
+      properties:
+        model_artifact_id:
+          $ref: '#/components/schemas/ModelArtifactId'
+        robot_profile_id:
+          $ref: '#/components/schemas/RobotProfileId'
+        execution_profile_id:
+          $ref: '#/components/schemas/ExecutionProfileId'
+      additionalProperties: false
+    CompatibilityIssue:
+      type: object
+      required:
+      - code
+      - path
+      - message
+      properties:
+        code:
+          $ref: '#/components/schemas/ReasonCode'
+        path:
+          type: string
+        message:
+          type: string
+    CompatibilityReport:
+      type: object
+      required:
+      - compatible
+      - artifact_digest
+      - robot_profile_digest
+      - execution_profile_digest
+      - issues
+      properties:
+        compatible:
+          type: boolean
+        artifact_digest:
+          $ref: '#/components/schemas/Digest'
+        robot_profile_digest:
+          $ref: '#/components/schemas/Digest'
+        execution_profile_digest:
+          $ref: '#/components/schemas/Digest'
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompatibilityIssue'
+    ConsolePhase:
+      type: string
+      enum:
+      - Unknown
+      - Preparing
+      - Ready
+      - Running
+      - Waiting
+      - NeedsAttention
+      - Offline
+      description: Observed phase shown in the console (design §19.4).
+    ContractDocument:
+      type: object
+      description: A contract document (ModelArtifact, RobotProfile or ExecutionProfile) as defined by
+        the JSON Schemas in schemas/. Validated server-side by neura-contracts.
+      required:
+      - api_version
+      - kind
+      - metadata
+      - spec
+      properties:
+        api_version:
+          const: neura.dev/v1alpha1
+        kind:
+          enum:
+          - ModelArtifact
+          - RobotProfile
+          - ExecutionProfile
+        metadata:
+          type: object
+        spec:
+          type: object
+      additionalProperties: false
+    Deployment:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/DeploymentSpec'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - phase
+          description: Desired, prepared and active revisions are reported separately; a successful request
+            never implies a robot runs the revision (design §20.2).
+          properties:
+            phase:
+              $ref: '#/components/schemas/DeploymentPhase'
+            reason:
+              oneOf:
+              - $ref: '#/components/schemas/ReasonCode'
+              - type: 'null'
+            message:
+              type: string
+            prepared_revision_id:
+              oneOf:
+              - $ref: '#/components/schemas/RevisionId'
+              - type: 'null'
+            active_revision_ids:
+              type: object
+              description: Observed active revision per robot id.
+              additionalProperties:
+                oneOf:
+                - $ref: '#/components/schemas/RevisionId'
+                - type: 'null'
+            observed_at:
+              oneOf:
+              - $ref: '#/components/schemas/Timestamp'
+              - type: 'null'
+            data_age_seconds:
+              type:
+              - number
+              - 'null'
+              minimum: 0
+      additionalProperties: false
+    DeploymentCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/DeploymentSpec'
+      additionalProperties: false
+    DeploymentId:
+      type: string
+      pattern: ^dep_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Deployment identifier: `dep_` followed by a ULID.'
+      examples:
+      - dep_01JA2B3C4D5E6F7G8H9JKMNPQR
+    DeploymentPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Deployment'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    DeploymentPhase:
+      type: string
+      enum:
+      - Pending
+      - Preparing
+      - Prepared
+      - Activating
+      - Active
+      - RollingBack
+      - NeedsAttention
+    DeploymentSpec:
+      type: object
+      required:
+      - name
+      - display_name
+      - site_id
+      - robot_ids
+      - rollout
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        robot_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotId'
+          uniqueItems: true
+          minItems: 1
+        desired_revision_id:
+          oneOf:
+          - $ref: '#/components/schemas/RevisionId'
+          - type: 'null'
+        rollout:
+          type: object
+          required:
+          - strategy
+          properties:
+            strategy:
+              enum:
+              - all_at_task_boundary
+              - single_robot_canary
+            canary_robot_id:
+              $ref: '#/components/schemas/RobotId'
+          additionalProperties: false
+        labels:
+          $ref: '#/components/schemas/Labels'
+      additionalProperties: false
+    DeploymentUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396) of the mutable spec fields.
+      properties:
+        spec:
+          type: object
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+            labels:
+              $ref: '#/components/schemas/Labels'
+            robot_ids:
+              type: array
+              items:
+                $ref: '#/components/schemas/RobotId'
+              uniqueItems: true
+              minItems: 1
+            desired_revision_id:
+              oneOf:
+              - $ref: '#/components/schemas/RevisionId'
+              - type: 'null'
+          additionalProperties: false
+      additionalProperties: false
+    Digest:
+      type: string
+      pattern: ^sha256:[0-9a-f]{64}$
+    DisplayName:
+      type: string
+      minLength: 1
+      maxLength: 200
+    EnrollmentToken:
+      type: object
+      description: One-time token for enrolling a server (design §17.2). The secret is shown only in this
+        response.
+      required:
+      - id
+      - site_id
+      - secret
+      - expires_at
+      - install_command
+      properties:
+        id:
+          $ref: '#/components/schemas/EnrollmentTokenId'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        secret:
+          type: string
+          writeOnly: false
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        install_command:
+          type: string
+    EnrollmentTokenCreate:
+      type: object
+      properties:
+        ttl_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 60
+      additionalProperties: false
+    EnrollmentTokenId:
+      type: string
+      pattern: ^enr_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'EnrollmentToken identifier: `enr_` followed by a ULID.'
+      examples:
+      - enr_01JA2B3C4D5E6F7G8H9JKMNPQR
+    Event:
+      type: object
+      description: A change notification. Events say what changed; re-read the resource for its current
+        state (design §20.6).
+      required:
+      - cursor
+      - type
+      - resource
+      - occurred_at
+      properties:
+        cursor:
+          type: string
+        type:
+          enum:
+          - resource.created
+          - resource.updated
+          - resource.deleted
+          - operation.updated
+          - fault.raised
+          - fault.cleared
+        resource:
+          type: string
+          description: Resource identifier.
+        resource_version:
+          type: string
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+    ExecutionProfile:
+      type: object
+      description: An immutable, registered ExecutionProfile document. Changes are new documents.
+      required:
+      - metadata
+      - digest
+      - document
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        digest:
+          $ref: '#/components/schemas/Digest'
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    ExecutionProfileCreate:
+      type: object
+      required:
+      - document
+      properties:
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    ExecutionProfileId:
+      type: string
+      pattern: ^exp_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'ExecutionProfile identifier: `exp_` followed by a ULID.'
+      examples:
+      - exp_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ExecutionProfilePage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionProfile'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Fault:
+      type: object
+      readOnly: true
+      required:
+      - metadata
+      - robot_id
+      - reason
+      - latched
+      - occurred_at
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        robot_id:
+          $ref: '#/components/schemas/RobotId'
+        session_id:
+          oneOf:
+          - $ref: '#/components/schemas/SessionId'
+          - type: 'null'
+        revision_id:
+          oneOf:
+          - $ref: '#/components/schemas/RevisionId'
+          - type: 'null'
+        reason:
+          $ref: '#/components/schemas/ReasonCode'
+        message:
+          type: string
+        latched:
+          type: boolean
+        local_response:
+          type:
+          - string
+          - 'null'
+          description: The local fault response taken.
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        cleared_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        trace_ids:
+          type: array
+          items:
+            type: string
+    FaultId:
+      type: string
+      pattern: ^flt_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Fault identifier: `flt_` followed by a ULID.'
+      examples:
+      - flt_01JA2B3C4D5E6F7G8H9JKMNPQR
+    FaultPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fault'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    GpuDevice:
+      type: object
+      required:
+      - index
+      - model
+      - memory_mib
+      - allocated_to_neura
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        uuid:
+          type: string
+        model:
+          type: string
+        memory_mib:
+          type: integer
+          minimum: 0
+        mig_enabled:
+          type: boolean
+        allocated_to_neura:
+          type: boolean
+    Labels:
+      type: object
+      maxProperties: 64
+      propertyNames:
+        $ref: '#/components/schemas/Name'
+      additionalProperties:
+        type: string
+        maxLength: 256
+    Metadata:
+      type: object
+      description: Identity and bookkeeping common to every resource (design §20.2).
+      required:
+      - id
+      - version
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          description: Typed identifier, e.g. `rbt_<ULID>`.
+        project_id:
+          $ref: '#/components/schemas/ProjectId'
+        organization_id:
+          $ref: '#/components/schemas/OrganizationId'
+        version:
+          type: string
+          description: Opaque resource version; equals the ETag. Send it in If-Match to update.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+        created_by:
+          type: string
+          description: Principal that created the resource.
+    MetricsQuery:
+      type: object
+      required:
+      - metric
+      - start
+      - end
+      - step_seconds
+      properties:
+        metric:
+          enum:
+          - deadline_miss_rate
+          - observation_age_p99_ms
+          - starvation_events
+          - robots_per_gpu
+          - gpu_utilization
+          - gpu_hours_per_robot_hour
+        start:
+          $ref: '#/components/schemas/Timestamp'
+        end:
+          $ref: '#/components/schemas/Timestamp'
+        step_seconds:
+          type: integer
+          minimum: 10
+          maximum: 86400
+        filters:
+          type: object
+          properties:
+            site_id:
+              $ref: '#/components/schemas/SiteId'
+            robot_id:
+              $ref: '#/components/schemas/RobotId'
+            revision_id:
+              $ref: '#/components/schemas/RevisionId'
+          additionalProperties: false
+      additionalProperties: false
+    MetricsResult:
+      type: object
+      description: Aggregates only; never payloads (design §18).
+      required:
+      - metric
+      - series
+      properties:
+        metric:
+          type: string
+        series:
+          type: array
+          items:
+            type: object
+            required:
+            - labels
+            - points
+            properties:
+              labels:
+                type: object
+                additionalProperties:
+                  type: string
+              points:
+                type: array
+                items:
+                  type: array
+                  prefixItems:
+                  - $ref: '#/components/schemas/Timestamp'
+                  - type:
+                    - number
+                    - 'null'
+                  minItems: 2
+                  maxItems: 2
+    ModelArtifact:
+      type: object
+      description: An immutable, registered ModelArtifact document. Changes are new documents.
+      required:
+      - metadata
+      - digest
+      - document
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        digest:
+          $ref: '#/components/schemas/Digest'
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    ModelArtifactCreate:
+      type: object
+      required:
+      - document
+      properties:
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    ModelArtifactId:
+      type: string
+      pattern: ^art_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'ModelArtifact identifier: `art_` followed by a ULID.'
+      examples:
+      - art_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ModelArtifactPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelArtifact'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Name:
+      type: string
+      pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+    ObservedStatus:
+      type: object
+      description: Observed state, written only from site observations (design §20.2). Never set by clients.
+      required:
+      - phase
+      readOnly: true
+      properties:
+        phase:
+          $ref: '#/components/schemas/ConsolePhase'
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonCode'
+          - type: 'null'
+        message:
+          type: string
+        observed_revision_id:
+          oneOf:
+          - $ref: '#/components/schemas/RevisionId'
+          - type: 'null'
+        observed_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        data_age_seconds:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          description: Seconds since the site last reported this state; null if never.
+    Operation:
+      type: object
+      description: Long-running work that completes only when the site acknowledges it (design §20.4).
+      required:
+      - metadata
+      - kind
+      - target
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        kind:
+          type: string
+          enum:
+          - prepare_revision
+          - activate_revision
+          - rollback
+          - collect_diagnostics
+        target:
+          type: string
+          description: Identifier of the resource the operation acts on.
+        state:
+          $ref: '#/components/schemas/OperationState'
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonCode'
+          - type: 'null'
+        message:
+          type: string
+        started_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        finished_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        result:
+          type: object
+          description: Kind-specific result once Succeeded.
+    OperationId:
+      type: string
+      pattern: ^op_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Operation identifier: `op_` followed by a ULID.'
+      examples:
+      - op_01JA2B3C4D5E6F7G8H9JKMNPQR
+    OperationState:
+      type: string
+      enum:
+      - Pending
+      - Running
+      - Succeeded
+      - Failed
+      - Cancelled
+    Organization:
+      type: object
+      required:
+      - metadata
+      - spec
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          type: object
+          required:
+          - display_name
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+          additionalProperties: false
+    OrganizationId:
+      type: string
+      pattern: ^org_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Organization identifier: `org_` followed by a ULID.'
+      examples:
+      - org_01JA2B3C4D5E6F7G8H9JKMNPQR
+    PageInfo:
+      type: object
+      required:
+      - next_cursor
+      properties:
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Pass as `cursor` to fetch the next page; null on the last page.
+    PreflightCheck:
+      type: object
+      required:
+      - name
+      - passed
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonCode'
+          - type: 'null'
+        detail:
+          type: string
+        fix:
+          type: string
+    Problem:
+      type: object
+      description: RFC 9457 problem details with a Neura reason code.
+      required:
+      - type
+      - title
+      - status
+      - reason
+      - retryable
+      properties:
+        type:
+          type: string
+          format: uri
+          examples:
+          - urn:neura:reason-code:API_NOT_FOUND
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+        reason:
+          $ref: '#/components/schemas/ReasonCode'
+        retryable:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+    Project:
+      type: object
+      required:
+      - metadata
+      - spec
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/ProjectSpec'
+      additionalProperties: false
+    ProjectCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/ProjectSpec'
+      additionalProperties: false
+    ProjectId:
+      type: string
+      pattern: ^prj_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Project identifier: `prj_` followed by a ULID.'
+      examples:
+      - prj_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ProjectPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    ProjectSpec:
+      type: object
+      required:
+      - name
+      - display_name
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        labels:
+          $ref: '#/components/schemas/Labels'
+      additionalProperties: false
+    ProjectUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396) of the mutable spec fields.
+      properties:
+        spec:
+          type: object
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+            labels:
+              $ref: '#/components/schemas/Labels'
+          additionalProperties: false
+      additionalProperties: false
+    ReasonCode:
+      type: string
+      pattern: ^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$
+      description: A code from the shared reason-code catalog (catalog/reason_codes.yaml).
+    Revision:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/RevisionSpec'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - phase
+          - revision_digest
+          properties:
+            phase:
+              $ref: '#/components/schemas/RevisionPhase'
+            revision_digest:
+              $ref: '#/components/schemas/Digest'
+            compatibility:
+              $ref: '#/components/schemas/CompatibilityReport'
+            reason:
+              oneOf:
+              - $ref: '#/components/schemas/ReasonCode'
+              - type: 'null'
+            message:
+              type: string
+      additionalProperties: false
+      description: 'An immutable deployment revision: one artifact, robot profile and execution profile.'
+    RevisionCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/RevisionSpec'
+      additionalProperties: false
+    RevisionId:
+      type: string
+      pattern: ^rev_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Revision identifier: `rev_` followed by a ULID.'
+      examples:
+      - rev_01JA2B3C4D5E6F7G8H9JKMNPQR
+    RevisionPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Revision'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    RevisionPhase:
+      type: string
+      enum:
+      - Created
+      - Preparing
+      - Prepared
+      - Failed
+      - Retired
+    RevisionSpec:
+      type: object
+      required:
+      - model_artifact_id
+      - execution_profile_id
+      - robot_profile_id
+      properties:
+        model_artifact_id:
+          $ref: '#/components/schemas/ModelArtifactId'
+        execution_profile_id:
+          $ref: '#/components/schemas/ExecutionProfileId'
+        robot_profile_id:
+          $ref: '#/components/schemas/RobotProfileId'
+        notes:
+          type: string
+          maxLength: 4000
+      additionalProperties: false
+    Robot:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/RobotSpec'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ObservedStatus'
+          properties:
+            active_revision_id:
+              oneOf:
+              - $ref: '#/components/schemas/RevisionId'
+              - type: 'null'
+            lease_holder_session_id:
+              oneOf:
+              - $ref: '#/components/schemas/SessionId'
+              - type: 'null'
+            task_epoch:
+              type:
+              - integer
+              - 'null'
+              minimum: 0
+      additionalProperties: false
+    RobotCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/RobotSpec'
+      additionalProperties: false
+    RobotId:
+      type: string
+      pattern: ^rbt_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Robot identifier: `rbt_` followed by a ULID.'
+      examples:
+      - rbt_01JA2B3C4D5E6F7G8H9JKMNPQR
+    RobotPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Robot'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    RobotProfile:
+      type: object
+      description: An immutable, registered RobotProfile document. Changes are new documents.
+      required:
+      - metadata
+      - digest
+      - document
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        digest:
+          $ref: '#/components/schemas/Digest'
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    RobotProfileCreate:
+      type: object
+      required:
+      - document
+      properties:
+        document:
+          $ref: '#/components/schemas/ContractDocument'
+      additionalProperties: false
+    RobotProfileId:
+      type: string
+      pattern: ^rpf_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'RobotProfile identifier: `rpf_` followed by a ULID.'
+      examples:
+      - rpf_01JA2B3C4D5E6F7G8H9JKMNPQR
+    RobotProfilePage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotProfile'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    RobotSpec:
+      type: object
+      required:
+      - name
+      - display_name
+      - site_id
+      - robot_profile_id
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        robot_profile_id:
+          $ref: '#/components/schemas/RobotProfileId'
+        labels:
+          $ref: '#/components/schemas/Labels'
+      additionalProperties: false
+    RobotUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396) of the mutable spec fields.
+      properties:
+        spec:
+          type: object
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+            labels:
+              $ref: '#/components/schemas/Labels'
+            robot_profile_id:
+              $ref: '#/components/schemas/RobotProfileId'
+          additionalProperties: false
+      additionalProperties: false
+    RollbackCreate:
+      type: object
+      required:
+      - to_revision_id
+      properties:
+        to_revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        robot_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotId'
+          uniqueItems: true
+        note:
+          type: string
+          maxLength: 2000
+      additionalProperties: false
+    RollbackId:
+      type: string
+      pattern: ^rbk_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Rollback identifier: `rbk_` followed by a ULID.'
+      examples:
+      - rbk_01JA2B3C4D5E6F7G8H9JKMNPQR
+    Server:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/ServerSpec'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ObservedStatus'
+          properties:
+            site_id:
+              $ref: '#/components/schemas/SiteId'
+            hostname:
+              type: string
+            driver_version:
+              type:
+              - string
+              - 'null'
+            cuda_version:
+              type:
+              - string
+              - 'null'
+            gpus:
+              type: array
+              items:
+                $ref: '#/components/schemas/GpuDevice'
+            preflight:
+              type: array
+              items:
+                $ref: '#/components/schemas/PreflightCheck'
+      additionalProperties: false
+    ServerCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/ServerSpec'
+      additionalProperties: false
+    ServerId:
+      type: string
+      pattern: ^srv_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Server identifier: `srv_` followed by a ULID.'
+      examples:
+      - srv_01JA2B3C4D5E6F7G8H9JKMNPQR
+    ServerPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Server'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    ServerSpec:
+      type: object
+      required:
+      - display_name
+      - allocated_gpu_indexes
+      properties:
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        labels:
+          $ref: '#/components/schemas/Labels'
+        allocated_gpu_indexes:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+          uniqueItems: true
+          description: GPUs Neura may use; others stay untouched (design §17.2).
+      additionalProperties: false
+    ServerUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396) of the mutable spec fields.
+      properties:
+        spec:
+          type: object
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+            labels:
+              $ref: '#/components/schemas/Labels'
+            allocated_gpu_indexes:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+              uniqueItems: true
+          additionalProperties: false
+      additionalProperties: false
+    ServiceMeta:
+      type: object
+      required:
+      - service
+      - service_version
+      - api_version
+      - api_spec_version
+      - contracts_api_version
+      - protocol_version
+      properties:
+        service:
+          type: string
+        service_version:
+          type: string
+        api_version:
+          const: v1
+        api_spec_version:
+          type: string
+        contracts_api_version:
+          type: string
+        protocol_version:
+          type: string
+        environment:
+          type: string
+    Session:
+      type: object
+      readOnly: true
+      required:
+      - metadata
+      - robot_id
+      - site_id
+      - revision_id
+      - lease_generation
+      - task_epoch
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        robot_id:
+          $ref: '#/components/schemas/RobotId'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        lease_generation:
+          type: integer
+          minimum: 0
+        task_epoch:
+          type: integer
+          minimum: 0
+        state:
+          enum:
+          - Disconnected
+          - Ready
+          - Armed
+          - Running
+          - Waiting
+          - Faulted
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonCode'
+          - type: 'null'
+        metrics:
+          type: object
+          properties:
+            buffer_actions:
+              type: integer
+              minimum: 0
+            observation_age_p99_ms:
+              type: number
+              minimum: 0
+            deadline_misses_last_hour:
+              type: integer
+              minimum: 0
+        data_age_seconds:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+    SessionId:
+      type: string
+      pattern: ^ses_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Session identifier: `ses_` followed by a ULID.'
+      examples:
+      - ses_01JA2B3C4D5E6F7G8H9JKMNPQR
+    SessionPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Site:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/SiteSpec'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ObservedStatus'
+          properties:
+            agent_version:
+              type:
+              - string
+              - 'null'
+            connected:
+              type: boolean
+            offline_authorization_expires_at:
+              oneOf:
+              - $ref: '#/components/schemas/Timestamp'
+              - type: 'null'
+      additionalProperties: false
+    SiteCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/SiteSpec'
+      additionalProperties: false
+    SiteId:
+      type: string
+      pattern: ^site_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Site identifier: `site_` followed by a ULID.'
+      examples:
+      - site_01JA2B3C4D5E6F7G8H9JKMNPQR
+    SitePage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Site'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    SiteSpec:
+      type: object
+      required:
+      - name
+      - display_name
+      - offline_authorization_hours
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        labels:
+          $ref: '#/components/schemas/Labels'
+        offline_authorization_hours:
+          type: integer
+          minimum: 1
+          maximum: 8760
+          description: How long the site keeps operating on its committed configuration without reaching
+            the control plane (design §13).
+      additionalProperties: false
+    SiteUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396) of the mutable spec fields.
+      properties:
+        spec:
+          type: object
+          properties:
+            display_name:
+              $ref: '#/components/schemas/DisplayName'
+            labels:
+              $ref: '#/components/schemas/Labels'
+            offline_authorization_hours:
+              type: integer
+              minimum: 1
+              maximum: 8760
+          additionalProperties: false
+      additionalProperties: false
+    SupportGrant:
+      type: object
+      description: Customer-approved, time-boxed break-glass access (design §18.2).
+      required:
+      - metadata
+      - site_id
+      - operations
+      - expires_at
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        operations:
+          type: array
+          items:
+            type: string
+        justification:
+          type: string
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        state:
+          enum:
+          - Active
+          - Expired
+          - Revoked
+    SupportGrantCreate:
+      type: object
+      required:
+      - site_id
+      - operations
+      - duration_minutes
+      - justification
+      properties:
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        operations:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            enum:
+            - read_status
+            - collect_diagnostics
+            - prepare_revision
+            - rollback
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        justification:
+          type: string
+          minLength: 10
+          maxLength: 2000
+      additionalProperties: false
+    SupportGrantId:
+      type: string
+      pattern: ^sgr_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'SupportGrant identifier: `sgr_` followed by a ULID.'
+      examples:
+      - sgr_01JA2B3C4D5E6F7G8H9JKMNPQR
+    SupportGrantPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportGrant'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Timestamp:
+      type: string
+      format: date-time

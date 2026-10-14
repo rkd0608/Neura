@@ -1,0 +1,21 @@
+[project]
+name = "neura-agent"
+version = "0.1.0.dev0"
+description = "Neura site agent: enrollment, reconciliation, artifact verification and the local site API."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-proto",
+    "fastapi>=0.120,<1",
+    "uvicorn[standard]>=0.38",
+    "httpx>=0.28",
+    "pydantic-settings>=2.10",
+]
+
+[project.scripts]
+neura-agent = "neura_agent.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

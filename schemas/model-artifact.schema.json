@@ -1,0 +1,786 @@
+{
+  "$defs": {
+    "ActionFeature": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "$ref": "#/$defs/Frame"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "semantics": {
+          "$ref": "#/$defs/ActionSemantics"
+        },
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        }
+      },
+      "required": [
+        "name",
+        "unit",
+        "frame",
+        "semantics"
+      ],
+      "title": "ActionFeature",
+      "type": "object"
+    },
+    "ActionOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_length": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chunk Length",
+          "type": "integer"
+        },
+        "control_period_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Control Period Us",
+          "type": "integer"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype",
+          "default": "float32"
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/ActionFeature"
+          },
+          "minItems": 1,
+          "title": "Features",
+          "type": "array"
+        }
+      },
+      "required": [
+        "features",
+        "chunk_length",
+        "control_period_us"
+      ],
+      "title": "ActionOutput",
+      "type": "object"
+    },
+    "ActionSemantics": {
+      "enum": [
+        "absolute_joint_position",
+        "delta_joint_position",
+        "joint_velocity",
+        "joint_torque",
+        "ee_pose_absolute",
+        "ee_pose_delta",
+        "gripper_position"
+      ],
+      "title": "ActionSemantics",
+      "type": "string"
+    },
+    "AdapterRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "AdapterRef",
+      "type": "object"
+    },
+    "ColorOrder": {
+      "enum": [
+        "rgb",
+        "bgr"
+      ],
+      "title": "ColorOrder",
+      "type": "string"
+    },
+    "DeviceKind": {
+      "enum": [
+        "cuda",
+        "cpu"
+      ],
+      "title": "DeviceKind",
+      "type": "string"
+    },
+    "DeviceSupport": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "$ref": "#/$defs/DeviceKind"
+        },
+        "min_memory_mib": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Memory Mib"
+        },
+        "precisions": {
+          "items": {
+            "$ref": "#/$defs/Precision"
+          },
+          "minItems": 1,
+          "title": "Precisions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "device",
+        "precisions"
+      ],
+      "title": "DeviceSupport",
+      "type": "object"
+    },
+    "Dtype": {
+      "enum": [
+        "float64",
+        "float32",
+        "float16",
+        "bfloat16",
+        "int64",
+        "int32",
+        "uint8",
+        "bool"
+      ],
+      "title": "Dtype",
+      "type": "string"
+    },
+    "EncodingRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "$ref": "#/$defs/ImageEncoding"
+        },
+        "min_quality": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Quality"
+        }
+      },
+      "required": [
+        "encoding"
+      ],
+      "title": "EncodingRequirement",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest"
+        },
+        "kind": {
+          "enum": [
+            "contract_tests",
+            "parity",
+            "closed_loop",
+            "fault_suite",
+            "physical_trial"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "Frame": {
+      "enum": [
+        "joint_space",
+        "robot_base",
+        "world",
+        "end_effector",
+        "camera"
+      ],
+      "title": "Frame",
+      "type": "string"
+    },
+    "ImageEncoding": {
+      "enum": [
+        "raw",
+        "jpeg",
+        "png"
+      ],
+      "title": "ImageEncoding",
+      "type": "string"
+    },
+    "ImageInput": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_encodings": {
+          "items": {
+            "$ref": "#/$defs/EncodingRequirement"
+          },
+          "minItems": 1,
+          "title": "Accepted Encodings",
+          "type": "array"
+        },
+        "camera_role": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Camera Role",
+          "type": "string"
+        },
+        "color_order": {
+          "$ref": "#/$defs/ColorOrder"
+        },
+        "height": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Height",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "image",
+          "default": "image",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "width": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "camera_role",
+        "width",
+        "height",
+        "color_order",
+        "accepted_encodings"
+      ],
+      "title": "ImageInput",
+      "type": "object"
+    },
+    "LanguageInput": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "language",
+          "default": "language",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_length_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Max Length Bytes",
+          "type": "integer"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "max_length_bytes"
+      ],
+      "title": "LanguageInput",
+      "type": "object"
+    },
+    "LicenseRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "spdx_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9.+-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spdx Id"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "pattern": "^https://\\S{1,2000}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "title": "LicenseRef",
+      "type": "object"
+    },
+    "Licenses": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/LicenseRef"
+        },
+        "weights": {
+          "$ref": "#/$defs/LicenseRef"
+        }
+      },
+      "required": [
+        "code",
+        "weights"
+      ],
+      "title": "Licenses",
+      "type": "object"
+    },
+    "MergeMode": {
+      "description": "How a new action chunk combines with queued future actions (design §5.3).",
+      "enum": [
+        "replace",
+        "append",
+        "blend",
+        "rtc"
+      ],
+      "title": "MergeMode",
+      "type": "string"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "labels": {
+          "patternProperties": {
+            "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "name": {
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "ModelArtifactSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/AdapterRef"
+        },
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/DeviceSupport"
+          },
+          "minItems": 1,
+          "title": "Devices",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "inputs": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image": "#/$defs/ImageInput",
+                "language": "#/$defs/LanguageInput",
+                "state": "#/$defs/StateInput"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StateInput"
+              },
+              {
+                "$ref": "#/$defs/ImageInput"
+              },
+              {
+                "$ref": "#/$defs/LanguageInput"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "licenses": {
+          "$ref": "#/$defs/Licenses"
+        },
+        "outputs": {
+          "$ref": "#/$defs/ActionOutput"
+        },
+        "processing": {
+          "$ref": "#/$defs/Processing"
+        },
+        "properties": {
+          "$ref": "#/$defs/PolicyProperties"
+        },
+        "provenance": {
+          "patternProperties": {
+            "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$": {
+              "maxLength": 2000,
+              "type": "string"
+            }
+          },
+          "title": "Provenance",
+          "type": "object"
+        },
+        "runtime_image": {
+          "$ref": "#/$defs/RuntimeImage"
+        },
+        "validated_merge_modes": {
+          "items": {
+            "$ref": "#/$defs/MergeMode"
+          },
+          "minItems": 1,
+          "title": "Validated Merge Modes",
+          "type": "array"
+        },
+        "weights": {
+          "items": {
+            "$ref": "#/$defs/WeightFile"
+          },
+          "minItems": 1,
+          "title": "Weights",
+          "type": "array"
+        }
+      },
+      "required": [
+        "weights",
+        "runtime_image",
+        "adapter",
+        "processing",
+        "inputs",
+        "outputs",
+        "properties",
+        "validated_merge_modes",
+        "devices",
+        "licenses"
+      ],
+      "title": "ModelArtifactSpec",
+      "type": "object"
+    },
+    "PolicyProperties": {
+      "additionalProperties": false,
+      "properties": {
+        "batchable": {
+          "title": "Batchable",
+          "type": "boolean"
+        },
+        "deterministic": {
+          "title": "Deterministic",
+          "type": "boolean"
+        },
+        "language_conditioned": {
+          "title": "Language Conditioned",
+          "type": "boolean"
+        },
+        "rtc_capable": {
+          "title": "Rtc Capable",
+          "type": "boolean"
+        },
+        "stateful": {
+          "title": "Stateful",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deterministic",
+        "stateful",
+        "language_conditioned",
+        "rtc_capable",
+        "batchable"
+      ],
+      "title": "PolicyProperties",
+      "type": "object"
+    },
+    "Precision": {
+      "enum": [
+        "fp32",
+        "fp16",
+        "bf16",
+        "fp8",
+        "int8"
+      ],
+      "title": "Precision",
+      "type": "string"
+    },
+    "Processing": {
+      "additionalProperties": false,
+      "properties": {
+        "normalization_stats_digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalization Stats Digest"
+        },
+        "postprocessing_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Postprocessing Version",
+          "type": "string"
+        },
+        "preprocessing_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Preprocessing Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preprocessing_version",
+        "postprocessing_version"
+      ],
+      "title": "Processing",
+      "type": "object"
+    },
+    "RuntimeImage": {
+      "additionalProperties": false,
+      "properties": {
+        "reference": {
+          "description": "OCI image reference pinned by digest, e.g. registry/neura/act@sha256:<hex>.",
+          "title": "Reference",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "title": "RuntimeImage",
+      "type": "object"
+    },
+    "StateComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "$ref": "#/$defs/Frame"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        }
+      },
+      "required": [
+        "name",
+        "unit",
+        "frame"
+      ],
+      "title": "StateComponent",
+      "type": "object"
+    },
+    "StateInput": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "items": {
+            "$ref": "#/$defs/StateComponent"
+          },
+          "minItems": 1,
+          "title": "Components",
+          "type": "array"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype",
+          "default": "float32"
+        },
+        "kind": {
+          "const": "state",
+          "default": "state",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "components"
+      ],
+      "title": "StateInput",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "rad",
+        "deg",
+        "m",
+        "mm",
+        "rad_per_s",
+        "deg_per_s",
+        "m_per_s",
+        "newton",
+        "newton_meter",
+        "normalized",
+        "fraction",
+        "unitless"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "WeightFile": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "path": {
+          "description": "Relative POSIX path inside the artifact package.",
+          "title": "Path",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "digest",
+        "size_bytes"
+      ],
+      "title": "WeightFile",
+      "type": "object"
+    }
+  },
+  "$id": "urn:neura:schema:neura.dev/v1alpha1:model-artifact",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "neura.dev/v1alpha1",
+      "default": "neura.dev/v1alpha1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ModelArtifact",
+      "default": "ModelArtifact",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/ModelArtifactSpec"
+    }
+  },
+  "required": [
+    "metadata",
+    "spec"
+  ],
+  "title": "ModelArtifact",
+  "type": "object"
+}

@@ -1,0 +1,17 @@
+[project]
+name = "neura-contracts"
+version = "0.1.0.dev0"
+description = "Neura contracts: model artifacts, robot profiles, execution profiles and compatibility checks."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.13,<3",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+neura-contracts = "neura_contracts.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

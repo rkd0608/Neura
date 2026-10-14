@@ -1,0 +1,22 @@
+[project]
+name = "neura-control"
+version = "0.1.0.dev0"
+description = "Neura cloud control plane: management API, metadata, audit and site coordination."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-proto",
+    "fastapi>=0.120,<1",
+    "uvicorn[standard]>=0.38",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.10",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+neura-control = "neura_control.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

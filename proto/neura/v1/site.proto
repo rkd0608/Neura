@@ -1,0 +1,125 @@
+// Control plane <-> site agent protocol (design §17.3, §20.8).
+//
+// The agent always dials out; the control plane never connects in. The control plane sends
+// signed desired state and allowed commands; the agent sends acknowledgements, observed status
+// and telemetry restricted to the published schema.
+syntax = "proto3";
+
+package neura.v1;
+
+import "neura/v1/common.proto";
+
+service SiteControl {
+  // Long-lived bidirectional stream opened by the site agent.
+  rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+}
+
+message AgentMessage {
+  oneof body {
+    AgentHello hello = 1;
+    Acknowledgement ack = 2;
+    SiteStatus status = 3;
+    TelemetryBatch telemetry = 4;
+  }
+}
+
+message ControlPlaneMessage {
+  oneof body {
+    DesiredState desired_state = 1;
+    Command command = 2;
+  }
+}
+
+message AgentHello {
+  ProtocolVersion protocol_version = 1;
+  string site_id = 2;
+  string agent_version = 3;
+  // Highest desired-state generation the agent has committed locally.
+  uint64 committed_generation = 4;
+}
+
+// Desired state for the whole site. `manifest` is canonical JSON; the agent verifies
+// `signature` before acting on it and rejects anything unsigned (AGENT_MANIFEST_SIGNATURE_INVALID).
+message DesiredState {
+  uint64 generation = 1;
+  bytes manifest = 2;
+  Signature signature = 3;
+}
+
+message Signature {
+  // Signing key identifier, resolved against keys the site trusts.
+  string key_id = 1;
+  // Ed25519 signature over the manifest bytes.
+  bytes value = 2;
+}
+
+message Command {
+  // Idempotency: the agent executes each command_id at most once.
+  string command_id = 1;
+  oneof kind {
+    PrepareRevision prepare = 2;
+    RequestActivation request_activation = 3;
+    Rollback rollback = 4;
+    CollectDiagnostics collect_diagnostics = 5;
+  }
+}
+
+message PrepareRevision {
+  string revision_id = 1;
+}
+
+// Asks the site to activate a prepared revision. Activation still requires local approval at a
+// task boundary (design §20.9); the control plane cannot authorize motion.
+message RequestActivation {
+  string revision_id = 1;
+  repeated string robot_ids = 2;
+}
+
+message Rollback {
+  string to_revision_id = 1;
+  repeated string robot_ids = 2;
+}
+
+message CollectDiagnostics {
+  string scope = 1;
+}
+
+message Acknowledgement {
+  oneof subject {
+    uint64 desired_state_generation = 1;
+    string command_id = 2;
+  }
+  bool accepted = 3;
+  Reason reason = 4;
+}
+
+message SiteStatus {
+  // Agent monotonic time; the control plane records its own receive time separately.
+  uint64 agent_time_us = 1;
+  repeated ComponentStatus components = 2;
+}
+
+message ComponentStatus {
+  // Resource kind and id, e.g. ("robot", "rbt_..."), ("server", "srv_..."), ("revision", "rev_...").
+  string kind = 1;
+  string id = 2;
+  // Console phase (design §19.4): Preparing, Ready, Running, Waiting, NeedsAttention.
+  string phase = 3;
+  Reason reason = 4;
+  // Revision actually observed on this component, if any.
+  string observed_revision_id = 5;
+}
+
+// Telemetry restricted to the published schema (design §18.2). Payload data never appears here.
+message TelemetryBatch {
+  string schema_version = 1;
+  uint64 sequence = 2;
+  repeated MetricPoint metrics = 3;
+}
+
+message MetricPoint {
+  string name = 1;
+  map<string, string> labels = 2;
+  double value = 3;
+  uint64 agent_time_us = 4;
+}

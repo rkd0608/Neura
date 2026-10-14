@@ -1,0 +1,71 @@
+# Illustrative model artifact manifest. Weight and image digests are placeholders.
+api_version: neura.dev/v1alpha1
+kind: ModelArtifact
+metadata:
+  name: smolvla-so101
+  version: example-1
+  description: SmolVLA policy for an SO-101-class arm (language conditioned, flow matching).
+spec:
+  weights:
+    - path: model.safetensors
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000001
+      size_bytes: 2147483648
+  runtime_image:
+    reference: registry.example.com/neura/smolvla@sha256:0000000000000000000000000000000000000000000000000000000000000002
+  adapter:
+    name: lerobot-smolvla
+    version: 0.1.0
+  processing:
+    preprocessing_version: 0.1.0
+    postprocessing_version: 0.1.0
+  inputs:
+    - kind: state
+      name: observation.state
+      components:
+        - {name: shoulder_pan.pos, unit: deg, frame: joint_space}
+        - {name: shoulder_lift.pos, unit: deg, frame: joint_space}
+        - {name: elbow_flex.pos, unit: deg, frame: joint_space}
+        - {name: wrist_flex.pos, unit: deg, frame: joint_space}
+        - {name: wrist_roll.pos, unit: deg, frame: joint_space}
+        - {name: gripper.pos, unit: normalized, frame: joint_space}
+    - kind: image
+      name: observation.images.front
+      camera_role: front
+      width: 640
+      height: 480
+      color_order: rgb
+      accepted_encodings: [{encoding: raw}, {encoding: jpeg, min_quality: 90}]
+    - kind: image
+      name: observation.images.wrist
+      camera_role: wrist
+      width: 640
+      height: 480
+      color_order: rgb
+      accepted_encodings: [{encoding: raw}, {encoding: jpeg, min_quality: 90}]
+    - kind: language
+      name: task
+      max_length_bytes: 512
+  outputs:
+    chunk_length: 50
+    control_period_us: 33333
+    features:
+      - {name: shoulder_pan.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position}
+      - {name: shoulder_lift.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position}
+      - {name: elbow_flex.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position}
+      - {name: wrist_flex.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position}
+      - {name: wrist_roll.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position}
+      - {name: gripper.pos, unit: normalized, frame: joint_space, semantics: gripper_position}
+  properties:
+    deterministic: false
+    stateful: false
+    language_conditioned: true
+    rtc_capable: false
+    batchable: true
+  validated_merge_modes: [replace]
+  devices:
+    - device: cuda
+      precisions: [fp32, bf16]
+      min_memory_mib: 4096
+  licenses:
+    code: {spdx_id: Apache-2.0, url: "https://github.com/huggingface/lerobot"}
+    weights: {name: Customer fine-tune of SmolVLA base (verify base license)}

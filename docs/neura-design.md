@@ -1,10 +1,24 @@
 # Neura: engineering design v0.1
 
-Status: proposed design, no code written · October 14, 2026
+Status: design in effect; M1 (foundation) implemented, M2 onward not yet built · October 14, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
 This document turns the blueprint into decisions an implementation can follow. Each decision lists what it is, why, and what evidence would make us revisit it. Numbers marked *illustrative* are starting points for simulation and tests, never operating values for a customer robot.
+
+## 0. Vision and positioning
+
+**Vision:** make deploying robot AI a repeatable software operation. A robotics company should be able to take a supported trained model, connect its robots and computing hardware, and operate that deployment without repeatedly building the serving, coordination and release infrastructure itself. The long-term ambition is that Neura becomes the execution layer robotics developers routinely use.
+
+**First step:** deploying one supported policy across multiple manipulation robots using shared compute.
+
+**How we describe it:** *NucleiLabs builds infrastructure that makes robot AI easier to run. Our first product, Neura, lets robotics companies deploy their models across multiple robots using shared GPU servers. It coordinates inference around each robot's timing requirements and handles model updates, helping teams scale without rebuilding their serving infrastructure.*
+
+**Category:** robot AI serving infrastructure. Deployment management makes the product usable; coordination makes shared serving effective.
+
+**What the customer keeps:** their model, robot design, task capability and operating procedures. Neura owns a supported portion of the recurring infrastructure work around them.
+
+**Intended benefit, still to be validated:** less infrastructure work and better compute efficiency while preserving task performance. The first meaningful milestone is a customer operating multiple robots through Neura, showing a measurable benefit, and choosing the same system for its next installation.
 
 ---
 
@@ -325,25 +339,35 @@ Repository rule from day one: open packages never import proprietary packages. G
 
 ---
 
-## 15. Repository layout (planned, not created)
+## 15. Repository layout
+
+A uv workspace; each component is a package under `packages/`. Entries marked *(M1)* exist; the others are created by the milestone that needs them.
 
 ```
-proto/neura/v1/            # protobuf schema (open)
-neura_contracts/           # manifests, profiles, compatibility checks (open)
-neura_runtime/             # robot runtime, merge, fencing, state machine (open)
-neura_sdk/                 # Python client and tooling (open)
-neura_adapters/            # ACT, SmolVLA, π0 adapters (open)
-neura_server/              # gateway, scheduler, workers, admission (proprietary)
-neura_agent/               # site agent (proprietary)
-neura_control/             # control plane API (proprietary, later)
-console/                   # web console, TypeScript (proprietary, later)
-api/                       # OpenAPI spec for the public management API
-sim/                       # simulated robots, network and GPU models; harness
-conformance/               # contract, fault and parity suites
-bench/                     # benchmark harness and reports
+proto/neura/v1/            # protobuf schema (open) (M1)
+api/openapi.yaml           # public management API, spec-first (M1)
+catalog/reason_codes.yaml  # shared reason-code catalog (M1)
+schemas/                   # generated JSON Schemas for contract documents (M1)
+packages/
+  neura-contracts/         # manifests, profiles, compatibility check, CLI (open) (M1)
+  neura-proto/             # generated protobuf/gRPC bindings, import `neura.v1` (open) (M1)
+  neura-control/           # control plane service (proprietary) (M1 skeleton, M3)
+  neura-agent/             # site agent (proprietary) (M1 skeleton, M4)
+  neura-runtime/           # robot runtime: merge, fencing, state machine (open) (M2)
+  neura-server/            # gateway, scheduler, workers, admission (proprietary) (M2)
+  neura-sim/               # simulated robots, network and GPU models (M2)
+  neura-adapters/          # ACT, SmolVLA, π0 adapters (open) (M6)
+  neura-sdk/               # Python client generated from the OpenAPI spec (open) (M3)
+console/                   # web console, TypeScript (proprietary) (M5)
+bench/                     # benchmark harness and reports (M6)
+examples/contracts/        # example contracts for an SO-101-class arm (M1)
+deploy/                    # Dockerfile and Compose dev stack (M1)
+tools/                     # generators and checks (M1)
 docs/                      # internal design (this document; never published)
-site/                      # public developer docs site source (§26)
+site/                      # public developer docs site source (§26) (M7)
 ```
+
+Generated files (protobuf bindings, reason-code module, JSON Schemas, example bindings) are committed; `make check-generated` fails CI if any is stale.
 
 ---
 
@@ -372,7 +396,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 
 | Milestone | Delivers | Done when |
 | --- | --- | --- |
-| **M1. Foundation** | Monorepo and tooling (uv, ruff, mypy strict, pytest, pnpm for the console), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library (§4), local dev stack in Docker Compose (Postgres, control plane, site agent, simulated robots) | `make dev` brings up the whole stack; schema, contract and compatibility tests pass in CI |
+| **M1. Foundation** ✅ | Monorepo and tooling (uv, ruff, mypy strict, pytest), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library with RFC 8785 digests and CLI (§4), control-plane and site-agent service skeletons, local dev stack in Docker Compose (Postgres, control plane, site agent). Console tooling (pnpm) moves to M5; simulated robots join the stack in M2 | `make dev` brings up the whole stack; `make smoke` verifies it end to end; schema, contract and compatibility tests pass in CI |
 | **M2. Data plane core** | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7) | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker |
 | **M3. Control plane** | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20) | API conformance tests against the OpenAPI spec; idempotency, concurrency and audit tests pass |
 | **M4. Site agent** | Enrollment with one-time tokens and on-host keys, preflight, outbound stream, signed manifest reconciliation, artifact verification, local boundaries, local site console API (§17, §19.5) | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage |

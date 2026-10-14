@@ -1,0 +1,65 @@
+# Local development stack: `make dev`. Not a production deployment.
+#
+# - postgres:       control-plane metadata store
+# - control-plane:  management API (cloud side)
+# - site-agent:     agent as it would run on a customer GPU server, dialing out to the control plane
+#
+# Simulated robots join the stack in milestone M2.
+name: neura-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: neura
+      POSTGRES_PASSWORD: neura
+      POSTGRES_DB: neura
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neura -d neura"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: neura-control
+      secrets: [ca_bundle]
+    image: neura-control:dev
+    environment:
+      NEURA_CONTROL_ENVIRONMENT: development
+      NEURA_CONTROL_DATABASE_URL: postgresql://neura:neura@postgres:5432/neura
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  site-agent:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: neura-agent
+      secrets: [ca_bundle]
+    image: neura-agent:dev
+    environment:
+      NEURA_AGENT_CONTROL_PLANE_URL: http://control-plane:8080
+      NEURA_AGENT_PROBE_INTERVAL_S: "2"
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+
+secrets:
+  # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.
+  ca_bundle:
+    file: ${NEURA_BUILD_CA_BUNDLE:-/dev/null}

@@ -1,0 +1,396 @@
+# Neura reason-code catalog: the single source of truth for every reason code used by
+# the data plane, site agent, control plane and console (design §20.5).
+#
+# Rules:
+#   - Codes are UPPER_SNAKE_CASE, stable forever once released. Never reuse or rename a code;
+#     deprecate it instead.
+#   - `area` groups codes by the component that emits them.
+#   - `severity`: info | warning | error | fatal. `fatal` latches a fault (design §7).
+#   - `retryable`: whether the same request may succeed if repeated unchanged.
+#   - `http_status`: only for codes returned by the management API.
+#
+# Generated code: `make gen` writes packages/neura-contracts/src/neura_contracts/reason_codes.py.
+# CI fails if the generated file is out of date.
+
+catalog_version: 1
+
+codes:
+  # ---------------------------------------------------------------------------
+  # Contracts and compatibility (design §4)
+  # ---------------------------------------------------------------------------
+  - code: CONTRACT_INVALID
+    area: contracts
+    severity: error
+    retryable: false
+    message: The document does not match its contract schema.
+  - code: CONTRACT_UNSUPPORTED_API_VERSION
+    area: contracts
+    severity: error
+    retryable: false
+    message: The document's api_version is not supported by this release.
+  - code: COMPAT_ARTIFACT_DIGEST_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: The execution profile is bound to a different model artifact.
+  - code: COMPAT_ROBOT_PROFILE_DIGEST_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: The execution profile is bound to a different robot profile.
+  - code: COMPAT_ACTION_FEATURE_MISSING
+    area: contracts
+    severity: error
+    retryable: false
+    message: The model outputs an action the robot's command interface does not accept.
+  - code: COMPAT_ACTION_FEATURE_UNUSED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The robot's command interface requires an action the model does not output.
+  - code: COMPAT_ACTION_ORDER_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: Action order differs between model and robot and no reorder transform is declared.
+  - code: COMPAT_UNIT_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: Units differ between model and robot and no unit conversion is declared.
+  - code: COMPAT_FRAME_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: Reference frames differ between model and robot.
+  - code: COMPAT_SEMANTICS_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: Action semantics differ between model and robot (for example absolute vs delta).
+  - code: COMPAT_STATE_FEATURE_MISSING
+    area: contracts
+    severity: error
+    retryable: false
+    message: The model requires a state input the robot does not provide.
+  - code: COMPAT_STATE_FEATURE_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: A state input differs in unit, frame or shape between model and robot.
+  - code: COMPAT_CAMERA_MISSING
+    area: contracts
+    severity: error
+    retryable: false
+    message: The model requires a camera the robot does not provide.
+  - code: COMPAT_CAMERA_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: A camera differs in resolution or color order between model and robot.
+  - code: COMPAT_IMAGE_ENCODING_UNSUPPORTED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The selected image encoding is not accepted by the model or not produced by the robot.
+  - code: COMPAT_CONTROL_PERIOD_MISMATCH
+    area: contracts
+    severity: error
+    retryable: false
+    message: Control periods differ between model, robot and execution profile.
+  - code: COMPAT_CHUNK_SETTINGS_INVALID
+    area: contracts
+    severity: error
+    retryable: false
+    message: Chunk settings in the execution profile are inconsistent with the model.
+  - code: COMPAT_MERGE_MODE_NOT_VALIDATED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The selected chunk merge mode is not validated for this model.
+  - code: COMPAT_FAULT_RESPONSE_NOT_VALIDATED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The selected starvation response is not validated for this robot.
+  - code: COMPAT_PRECISION_UNSUPPORTED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The selected device or precision is not supported by the model.
+  - code: COMPAT_STATEFUL_POLICY_UNSUPPORTED
+    area: contracts
+    severity: error
+    retryable: false
+    message: Stateful policies are not supported by this release.
+  - code: COMPAT_LANGUAGE_INPUT_UNSUPPORTED
+    area: contracts
+    severity: error
+    retryable: false
+    message: The model requires a language instruction the execution profile does not provide.
+  - code: COMPAT_TRANSFORM_INVALID
+    area: contracts
+    severity: error
+    retryable: false
+    message: A declared adapter transform does not apply to the model and robot.
+
+  # ---------------------------------------------------------------------------
+  # Protocol and gateway (design §6, §11)
+  # ---------------------------------------------------------------------------
+  - code: PROTOCOL_VERSION_MISMATCH
+    area: gateway
+    severity: error
+    retryable: false
+    message: The client and server protocol versions differ.
+  - code: PROTOCOL_MESSAGE_TOO_LARGE
+    area: gateway
+    severity: error
+    retryable: false
+    message: The message exceeds the configured maximum size.
+  - code: PROTOCOL_MESSAGE_INVALID
+    area: gateway
+    severity: error
+    retryable: false
+    message: The message failed schema, shape or finiteness validation.
+  - code: AUTH_DEVICE_UNKNOWN
+    area: gateway
+    severity: error
+    retryable: false
+    message: The device credential is not enrolled at this site.
+  - code: AUTH_DEVICE_REVOKED
+    area: gateway
+    severity: error
+    retryable: false
+    message: The device credential has been revoked.
+  - code: LEASE_BUSY
+    area: gateway
+    severity: warning
+    retryable: true
+    message: Another session holds the lease for this robot.
+  - code: LEASE_EXPIRED
+    area: gateway
+    severity: error
+    retryable: false
+    message: The session's lease expired; open a new session.
+  - code: LEASE_GENERATION_STALE
+    area: gateway
+    severity: error
+    retryable: false
+    message: The message carries an old lease generation.
+  - code: ADMISSION_CAPACITY_EXCEEDED
+    area: gateway
+    severity: warning
+    retryable: true
+    message: Admitting this session would break the timing of sessions already admitted.
+  - code: ADMISSION_MEMORY_EXCEEDED
+    area: gateway
+    severity: warning
+    retryable: true
+    message: Not enough GPU memory headroom to admit this session.
+  - code: DEPLOYMENT_NOT_ACTIVE
+    area: gateway
+    severity: error
+    retryable: false
+    message: The requested deployment revision is not active at this site.
+
+  # ---------------------------------------------------------------------------
+  # Scheduler and workers (design §9)
+  # ---------------------------------------------------------------------------
+  - code: REQUEST_EXPIRED
+    area: scheduler
+    severity: warning
+    retryable: false
+    message: The request's budget expired before it could be dispatched.
+  - code: REQUEST_SUPERSEDED
+    area: scheduler
+    severity: info
+    retryable: false
+    message: A newer request from the same session replaced this one.
+  - code: REQUEST_FENCED
+    area: scheduler
+    severity: info
+    retryable: false
+    message: The request belongs to an old task epoch or lease generation.
+  - code: WORKER_CRASHED
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy worker stopped while processing the request.
+  - code: WORKER_OUT_OF_MEMORY
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy worker ran out of GPU memory.
+  - code: WORKER_OUTPUT_INVALID
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy produced non-finite or wrongly shaped actions.
+
+  # ---------------------------------------------------------------------------
+  # Robot runtime (design §5, §7)
+  # ---------------------------------------------------------------------------
+  - code: CHUNK_LATE
+    area: runtime
+    severity: warning
+    retryable: false
+    message: Too few useful actions remained after trimming the late chunk.
+  - code: CHUNK_STALE_OBSERVATION
+    area: runtime
+    severity: warning
+    retryable: false
+    message: The chunk was computed from an observation older than the freshness budget.
+  - code: CHUNK_DUPLICATE
+    area: runtime
+    severity: info
+    retryable: false
+    message: The chunk was already received and was ignored.
+  - code: CHUNK_EPOCH_MISMATCH
+    area: runtime
+    severity: info
+    retryable: false
+    message: The chunk belongs to a different task epoch.
+  - code: CHUNK_REVISION_MISMATCH
+    area: runtime
+    severity: error
+    retryable: false
+    message: The chunk was computed by a revision that is not active on this robot.
+  - code: ACTION_OUT_OF_RANGE
+    area: runtime
+    severity: fatal
+    retryable: false
+    message: An action is outside the robot's declared valid range.
+  - code: BUFFER_STARVED
+    area: runtime
+    severity: warning
+    retryable: false
+    message: The action queue ran out; the approved starvation response is active.
+  - code: STARVATION_GRACE_EXHAUSTED
+    area: runtime
+    severity: fatal
+    retryable: false
+    message: No fresh actions arrived within the starvation grace period.
+  - code: CONTROLLER_COMMAND_FAILED
+    area: runtime
+    severity: fatal
+    retryable: false
+    message: The robot controller rejected or failed to apply a command.
+  - code: ACTUATOR_LOCK_LOST
+    area: runtime
+    severity: fatal
+    retryable: false
+    message: The runtime lost exclusive control of the robot controller.
+  - code: OPERATOR_TAKEOVER
+    area: runtime
+    severity: info
+    retryable: false
+    message: An operator took control; policy execution authority was revoked.
+
+  # ---------------------------------------------------------------------------
+  # Site agent (design §17)
+  # ---------------------------------------------------------------------------
+  - code: AGENT_CONTROL_PLANE_UNREACHABLE
+    area: agent
+    severity: warning
+    retryable: true
+    message: The site agent cannot reach the control plane; the site continues on its committed configuration.
+  - code: AGENT_AUTHORIZATION_EXPIRING
+    area: agent
+    severity: warning
+    retryable: false
+    message: The site's offline authorization will expire soon.
+  - code: AGENT_AUTHORIZATION_EXPIRED
+    area: agent
+    severity: error
+    retryable: false
+    message: The site's offline authorization expired; new activations are blocked.
+  - code: AGENT_PREFLIGHT_FAILED
+    area: agent
+    severity: error
+    retryable: true
+    message: A preflight check failed on this server.
+  - code: AGENT_MANIFEST_SIGNATURE_INVALID
+    area: agent
+    severity: error
+    retryable: false
+    message: A desired-state manifest has a missing or invalid signature.
+  - code: AGENT_ARTIFACT_DIGEST_MISMATCH
+    area: agent
+    severity: error
+    retryable: false
+    message: A downloaded artifact does not match its declared digest.
+  - code: AGENT_BOUNDARY_DENIED
+    area: agent
+    severity: error
+    retryable: false
+    message: The instruction is outside the boundaries configured on this server.
+
+  # ---------------------------------------------------------------------------
+  # Management API (design §20)
+  # ---------------------------------------------------------------------------
+  - code: API_UNAUTHENTICATED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 401
+    message: Authentication is required.
+  - code: API_FORBIDDEN
+    area: api
+    severity: error
+    retryable: false
+    http_status: 403
+    message: The caller does not have permission for this action.
+  - code: API_NOT_FOUND
+    area: api
+    severity: error
+    retryable: false
+    http_status: 404
+    message: The resource does not exist or is not visible to the caller.
+  - code: API_CONFLICT
+    area: api
+    severity: error
+    retryable: false
+    http_status: 409
+    message: The request conflicts with the current state of the resource.
+  - code: API_PRECONDITION_FAILED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 412
+    message: The resource changed since it was read (If-Match did not match).
+  - code: API_IDEMPOTENCY_KEY_REQUIRED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 428
+    message: This request requires an Idempotency-Key header.
+  - code: API_IDEMPOTENCY_KEY_REUSED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 422
+    message: The Idempotency-Key was already used with a different request body.
+  - code: API_VALIDATION_FAILED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 422
+    message: The request body failed validation.
+  - code: API_RATE_LIMITED
+    area: api
+    severity: warning
+    retryable: true
+    http_status: 429
+    message: Too many requests; retry after the indicated delay.
+  - code: API_INTERNAL_ERROR
+    area: api
+    severity: error
+    retryable: true
+    http_status: 500
+    message: An internal error occurred.
+  - code: API_UNAVAILABLE
+    area: api
+    severity: error
+    retryable: true
+    http_status: 503
+    message: The service is temporarily unavailable.

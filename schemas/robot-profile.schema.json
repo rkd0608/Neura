@@ -1,0 +1,356 @@
+{
+  "$defs": {
+    "ActionSemantics": {
+      "enum": [
+        "absolute_joint_position",
+        "delta_joint_position",
+        "joint_velocity",
+        "joint_torque",
+        "ee_pose_absolute",
+        "ee_pose_delta",
+        "gripper_position"
+      ],
+      "title": "ActionSemantics",
+      "type": "string"
+    },
+    "Camera": {
+      "additionalProperties": false,
+      "properties": {
+        "calibration_revision": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Calibration Revision",
+          "type": "string"
+        },
+        "color_order": {
+          "$ref": "#/$defs/ColorOrder"
+        },
+        "encodings": {
+          "items": {
+            "$ref": "#/$defs/ImageEncoding"
+          },
+          "minItems": 1,
+          "title": "Encodings",
+          "type": "array"
+        },
+        "height": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Height",
+          "type": "integer"
+        },
+        "role": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Role",
+          "type": "string"
+        },
+        "width": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "width",
+        "height",
+        "color_order",
+        "encodings",
+        "calibration_revision"
+      ],
+      "title": "Camera",
+      "type": "object"
+    },
+    "ColorOrder": {
+      "enum": [
+        "rgb",
+        "bgr"
+      ],
+      "title": "ColorOrder",
+      "type": "string"
+    },
+    "CommandFeature": {
+      "additionalProperties": false,
+      "description": "One element of the command vector the controller accepts, in order.",
+      "properties": {
+        "frame": {
+          "$ref": "#/$defs/Frame"
+        },
+        "max": {
+          "title": "Max",
+          "type": "number"
+        },
+        "max_rate_per_s": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Rate Per S"
+        },
+        "min": {
+          "title": "Min",
+          "type": "number"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "semantics": {
+          "$ref": "#/$defs/ActionSemantics"
+        },
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        }
+      },
+      "required": [
+        "name",
+        "unit",
+        "frame",
+        "semantics",
+        "min",
+        "max"
+      ],
+      "title": "CommandFeature",
+      "type": "object"
+    },
+    "Controller": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "revision"
+      ],
+      "title": "Controller",
+      "type": "object"
+    },
+    "FaultResponse": {
+      "description": "Local responses a robot integration may have validated (design §4.2, §7).",
+      "enum": [
+        "hold_position",
+        "controlled_stop",
+        "brake",
+        "customer_stop_path"
+      ],
+      "title": "FaultResponse",
+      "type": "string"
+    },
+    "Frame": {
+      "enum": [
+        "joint_space",
+        "robot_base",
+        "world",
+        "end_effector",
+        "camera"
+      ],
+      "title": "Frame",
+      "type": "string"
+    },
+    "ImageEncoding": {
+      "enum": [
+        "raw",
+        "jpeg",
+        "png"
+      ],
+      "title": "ImageEncoding",
+      "type": "string"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "labels": {
+          "patternProperties": {
+            "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "name": {
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "RobotProfileSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "cameras": {
+          "items": {
+            "$ref": "#/$defs/Camera"
+          },
+          "title": "Cameras",
+          "type": "array"
+        },
+        "command_interface": {
+          "items": {
+            "$ref": "#/$defs/CommandFeature"
+          },
+          "minItems": 1,
+          "title": "Command Interface",
+          "type": "array"
+        },
+        "control_period_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Control Period Us",
+          "type": "integer"
+        },
+        "controller": {
+          "$ref": "#/$defs/Controller"
+        },
+        "fault_responses": {
+          "description": "Local fault responses this integration has validated on hardware or in simulation. Only these may be selected by an execution profile.",
+          "items": {
+            "$ref": "#/$defs/FaultResponse"
+          },
+          "minItems": 1,
+          "title": "Fault Responses",
+          "type": "array"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "state_features": {
+          "items": {
+            "$ref": "#/$defs/StateFeature"
+          },
+          "title": "State Features",
+          "type": "array"
+        }
+      },
+      "required": [
+        "controller",
+        "control_period_us",
+        "command_interface",
+        "fault_responses"
+      ],
+      "title": "RobotProfileSpec",
+      "type": "object"
+    },
+    "StateFeature": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "$ref": "#/$defs/Frame"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        }
+      },
+      "required": [
+        "name",
+        "unit",
+        "frame"
+      ],
+      "title": "StateFeature",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "rad",
+        "deg",
+        "m",
+        "mm",
+        "rad_per_s",
+        "deg_per_s",
+        "m_per_s",
+        "newton",
+        "newton_meter",
+        "normalized",
+        "fraction",
+        "unitless"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "$id": "urn:neura:schema:neura.dev/v1alpha1:robot-profile",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "neura.dev/v1alpha1",
+      "default": "neura.dev/v1alpha1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "RobotProfile",
+      "default": "RobotProfile",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/RobotProfileSpec"
+    }
+  },
+  "required": [
+    "metadata",
+    "spec"
+  ],
+  "title": "RobotProfile",
+  "type": "object"
+}

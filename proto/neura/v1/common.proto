@@ -1,0 +1,90 @@
+// Shared message types for the Neura data plane and site protocols (design §11, §12).
+//
+// Compatibility rules for this package:
+//   - Field numbers are never reused. Removed fields are marked `reserved`.
+//   - Only additive changes inside neura.v1. Anything else is neura.v2.
+//   - Clients and servers require an exact PROTOCOL_VERSION match (see Envelope).
+syntax = "proto3";
+
+package neura.v1;
+
+// Current protocol version. Bumped on any change that alters behavior, even if additive.
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_1 = 1;
+}
+
+// Identity fields every data-plane message carries. A receiver drops any message whose
+// identity does not match its current authority (design §5.2, §6).
+message Envelope {
+  ProtocolVersion protocol_version = 1;
+  // Gateway-issued session identifier.
+  string session_id = 2;
+  // Monotonic lease generation for this robot, issued by the gateway (design §6.1).
+  uint64 lease_generation = 3;
+  // Task epoch, owned and advanced only by the robot runtime (design §6.2).
+  uint64 task_epoch = 4;
+  // Request sequence within the task epoch. Responses echo the request's sequence.
+  uint64 sequence = 5;
+  // Content digests of the active model artifact and execution profile.
+  string artifact_digest = 6;
+  string execution_profile_digest = 7;
+}
+
+enum Dtype {
+  DTYPE_UNSPECIFIED = 0;
+  DTYPE_FLOAT64 = 1;
+  DTYPE_FLOAT32 = 2;
+  DTYPE_FLOAT16 = 3;
+  DTYPE_BFLOAT16 = 4;
+  DTYPE_INT64 = 5;
+  DTYPE_INT32 = 6;
+  DTYPE_UINT8 = 7;
+  DTYPE_BOOL = 8;
+}
+
+// A dense tensor in row-major order, little-endian.
+message Tensor {
+  Dtype dtype = 1;
+  repeated uint32 shape = 2;
+  bytes data = 3;
+}
+
+enum ImageEncoding {
+  IMAGE_ENCODING_UNSPECIFIED = 0;
+  IMAGE_ENCODING_RAW = 1;
+  IMAGE_ENCODING_JPEG = 2;
+  IMAGE_ENCODING_PNG = 3;
+}
+
+enum ColorOrder {
+  COLOR_ORDER_UNSPECIFIED = 0;
+  COLOR_ORDER_RGB = 1;
+  COLOR_ORDER_BGR = 2;
+}
+
+message Image {
+  string camera_role = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  ColorOrder color_order = 4;
+  ImageEncoding encoding = 5;
+  // JPEG quality used, 1-100. Zero for lossless encodings.
+  uint32 quality = 6;
+  bytes data = 7;
+  // Capture time on the robot's monotonic clock, in microseconds. Only ever compared with
+  // other robot-clock values (design §8).
+  uint64 capture_time_us = 8;
+}
+
+// A reason attached to a rejection, fault or status. `code` is a value from the shared
+// reason-code catalog (catalog/reason_codes.yaml).
+message Reason {
+  string code = 1;
+  string message = 2;
+}
+
+// Integrity information for a payload: SHA-256 over the exact bytes it refers to.
+message PayloadDigest {
+  bytes sha256 = 1;
+}

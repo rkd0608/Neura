@@ -1,0 +1,559 @@
+{
+  "$defs": {
+    "AppendMerge": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "append",
+          "default": "append",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "AppendMerge",
+      "type": "object"
+    },
+    "Binding": {
+      "additionalProperties": false,
+      "properties": {
+        "model_artifact": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Model Artifact",
+          "type": "string"
+        },
+        "robot_profile": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Robot Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_artifact",
+        "robot_profile"
+      ],
+      "title": "Binding",
+      "type": "object"
+    },
+    "BlendMerge": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "blend",
+          "default": "blend",
+          "title": "Mode",
+          "type": "string"
+        },
+        "new_chunk_weights": {
+          "description": "Weight of the new chunk at each index of the overlap window; the old chunk gets 1 - weight. After the window the new chunk is used alone.",
+          "items": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "New Chunk Weights",
+          "type": "array"
+        },
+        "window_actions": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Window Actions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "window_actions",
+        "new_chunk_weights"
+      ],
+      "title": "BlendMerge",
+      "type": "object"
+    },
+    "CameraEncoding": {
+      "additionalProperties": false,
+      "properties": {
+        "camera_role": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Camera Role",
+          "type": "string"
+        },
+        "encoding": {
+          "$ref": "#/$defs/ImageEncoding"
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality"
+        }
+      },
+      "required": [
+        "camera_role",
+        "encoding"
+      ],
+      "title": "CameraEncoding",
+      "type": "object"
+    },
+    "ChunkSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "actions_per_chunk": {
+          "description": "Actions executed from each chunk; at most the model's chunk length.",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Actions Per Chunk",
+          "type": "integer"
+        },
+        "min_useful_actions": {
+          "description": "Reject a chunk if fewer actions than this remain after trimming (§5.2).",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Min Useful Actions",
+          "type": "integer"
+        },
+        "refill_threshold_actions": {
+          "description": "Request a new chunk when this many or fewer actions remain queued.",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Refill Threshold Actions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actions_per_chunk",
+        "refill_threshold_actions",
+        "min_useful_actions"
+      ],
+      "title": "ChunkSettings",
+      "type": "object"
+    },
+    "ConvertUnit": {
+      "additionalProperties": false,
+      "description": "Linear unit conversion of one action (model to robot) or state (robot to model) feature.",
+      "properties": {
+        "feature": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+          "title": "Feature",
+          "type": "string"
+        },
+        "from_unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "kind": {
+          "const": "convert_unit",
+          "default": "convert_unit",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "action",
+            "state"
+          ],
+          "title": "Target",
+          "type": "string"
+        },
+        "to_unit": {
+          "$ref": "#/$defs/Unit"
+        }
+      },
+      "required": [
+        "target",
+        "feature",
+        "from_unit",
+        "to_unit"
+      ],
+      "title": "ConvertUnit",
+      "type": "object"
+    },
+    "DeviceKind": {
+      "enum": [
+        "cuda",
+        "cpu"
+      ],
+      "title": "DeviceKind",
+      "type": "string"
+    },
+    "ExecutionProfileSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/Binding"
+        },
+        "chunk": {
+          "$ref": "#/$defs/ChunkSettings"
+        },
+        "control_period_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Control Period Us",
+          "type": "integer"
+        },
+        "freshness": {
+          "$ref": "#/$defs/FreshnessBudget"
+        },
+        "image_encodings": {
+          "items": {
+            "$ref": "#/$defs/CameraEncoding"
+          },
+          "title": "Image Encodings",
+          "type": "array"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LanguageSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "merge": {
+          "discriminator": {
+            "mapping": {
+              "append": "#/$defs/AppendMerge",
+              "blend": "#/$defs/BlendMerge",
+              "replace": "#/$defs/ReplaceMerge",
+              "rtc": "#/$defs/RtcMerge"
+            },
+            "propertyName": "mode"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReplaceMerge"
+            },
+            {
+              "$ref": "#/$defs/AppendMerge"
+            },
+            {
+              "$ref": "#/$defs/BlendMerge"
+            },
+            {
+              "$ref": "#/$defs/RtcMerge"
+            }
+          ],
+          "title": "Merge"
+        },
+        "runtime": {
+          "$ref": "#/$defs/RuntimeSelection"
+        },
+        "starvation": {
+          "$ref": "#/$defs/StarvationPolicy"
+        },
+        "transforms": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "convert_unit": "#/$defs/ConvertUnit",
+                "reorder_actions": "#/$defs/ReorderActions"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ReorderActions"
+              },
+              {
+                "$ref": "#/$defs/ConvertUnit"
+              }
+            ]
+          },
+          "title": "Transforms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "binding",
+        "control_period_us",
+        "chunk",
+        "merge",
+        "freshness",
+        "starvation",
+        "runtime"
+      ],
+      "title": "ExecutionProfileSpec",
+      "type": "object"
+    },
+    "FaultResponse": {
+      "description": "Local responses a robot integration may have validated (design §4.2, §7).",
+      "enum": [
+        "hold_position",
+        "controlled_stop",
+        "brake",
+        "customer_stop_path"
+      ],
+      "title": "FaultResponse",
+      "type": "string"
+    },
+    "FreshnessBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_observation_age_at_acceptance_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Max Observation Age At Acceptance Us",
+          "type": "integer"
+        },
+        "max_observation_age_at_dispatch_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Max Observation Age At Dispatch Us",
+          "type": "integer"
+        },
+        "request_timeout_us": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Request Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_observation_age_at_dispatch_us",
+        "max_observation_age_at_acceptance_us",
+        "request_timeout_us"
+      ],
+      "title": "FreshnessBudget",
+      "type": "object"
+    },
+    "ImageEncoding": {
+      "enum": [
+        "raw",
+        "jpeg",
+        "png"
+      ],
+      "title": "ImageEncoding",
+      "type": "string"
+    },
+    "LanguageSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "max_length_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Max Length Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_length_bytes"
+      ],
+      "title": "LanguageSettings",
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "labels": {
+          "patternProperties": {
+            "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "name": {
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "Precision": {
+      "enum": [
+        "fp32",
+        "fp16",
+        "bf16",
+        "fp8",
+        "int8"
+      ],
+      "title": "Precision",
+      "type": "string"
+    },
+    "ReorderActions": {
+      "additionalProperties": false,
+      "description": "Robot command index ``i`` receives the model action named ``order[i]``.",
+      "properties": {
+        "kind": {
+          "const": "reorder_actions",
+          "default": "reorder_actions",
+          "title": "Kind",
+          "type": "string"
+        },
+        "order": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Order",
+          "type": "array"
+        }
+      },
+      "required": [
+        "order"
+      ],
+      "title": "ReorderActions",
+      "type": "object"
+    },
+    "ReplaceMerge": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "replace",
+          "default": "replace",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "ReplaceMerge",
+      "type": "object"
+    },
+    "RtcMerge": {
+      "additionalProperties": false,
+      "properties": {
+        "max_conditioned_delay_actions": {
+          "description": "Largest inference delay, in actions, the model was conditioned on.",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Max Conditioned Delay Actions",
+          "type": "integer"
+        },
+        "mode": {
+          "const": "rtc",
+          "default": "rtc",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "max_conditioned_delay_actions"
+      ],
+      "title": "RtcMerge",
+      "type": "object"
+    },
+    "RuntimeSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "$ref": "#/$defs/DeviceKind"
+        },
+        "precision": {
+          "$ref": "#/$defs/Precision"
+        }
+      },
+      "required": [
+        "device",
+        "precision"
+      ],
+      "title": "RuntimeSelection",
+      "type": "object"
+    },
+    "StarvationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "grace_us": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Grace Us",
+          "type": "integer"
+        },
+        "require_new_epoch_on_resume": {
+          "default": true,
+          "title": "Require New Epoch On Resume",
+          "type": "boolean"
+        },
+        "response": {
+          "$ref": "#/$defs/FaultResponse"
+        }
+      },
+      "required": [
+        "response",
+        "grace_us"
+      ],
+      "title": "StarvationPolicy",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "rad",
+        "deg",
+        "m",
+        "mm",
+        "rad_per_s",
+        "deg_per_s",
+        "m_per_s",
+        "newton",
+        "newton_meter",
+        "normalized",
+        "fraction",
+        "unitless"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "$id": "urn:neura:schema:neura.dev/v1alpha1:execution-profile",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "neura.dev/v1alpha1",
+      "default": "neura.dev/v1alpha1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ExecutionProfile",
+      "default": "ExecutionProfile",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/ExecutionProfileSpec"
+    }
+  },
+  "required": [
+    "metadata",
+    "spec"
+  ],
+  "title": "ExecutionProfile",
+  "type": "object"
+}

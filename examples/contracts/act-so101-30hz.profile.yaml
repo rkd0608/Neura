@@ -1,0 +1,35 @@
+# Illustrative execution profile. Numeric settings are example inputs, not approved values.
+api_version: neura.dev/v1alpha1
+kind: ExecutionProfile
+metadata:
+  name: act-so101-30hz
+  version: example-1
+  description: ACT on SO-101 at 30 Hz, replace merge.
+  labels:
+    example-artifact-file: act-so101.artifact.yaml
+    example-robot-file: so101.robot.yaml
+spec:
+  binding:
+    model_artifact: sha256:0c5334ec75e9e9f272dfa7637ac29fdf223589fe07742490ffb87810eab0fa49
+    robot_profile: sha256:9773103c27df9adea5402a2ed2eeeebe68e76bce54285f1d7aac4dea78f4b375
+  control_period_us: 33333
+  chunk:
+    actions_per_chunk: 50
+    refill_threshold_actions: 20
+    min_useful_actions: 10
+  merge:
+    mode: replace
+  freshness:
+    max_observation_age_at_dispatch_us: 100000
+    max_observation_age_at_acceptance_us: 150000
+    request_timeout_us: 200000
+  starvation:
+    response: hold_position
+    grace_us: 1000000
+    require_new_epoch_on_resume: true
+  runtime:
+    device: cuda
+    precision: bf16
+  image_encodings:
+    - {camera_role: front, encoding: raw}
+    - {camera_role: wrist, encoding: raw}

@@ -324,7 +324,8 @@ api/                       # OpenAPI spec for the public management API
 sim/                       # simulated robots, network and GPU models; harness
 conformance/               # contract, fault and parity suites
 bench/                     # benchmark harness and reports
-docs/
+docs/                      # internal design (this document; never published)
+site/                      # public developer docs site source (§26)
 ```
 
 ---
@@ -698,7 +699,84 @@ If the answers are no, the strategy changes before more is built.
 
 ---
 
-## 26. Remaining open items (these need real customer workloads)
+## 26. Developer documentation site
+
+### 26.1 Purpose
+
+A small public developer docs site for NucleiLabs, starting with Neura, so engineers can **understand, evaluate and eventually integrate** the product. At this stage its most important job is honesty: it must never present this design as working software.
+
+### 26.2 Status labels
+
+Every page, and every feature or combination mentioned on a page, carries exactly one label. The label is shown as a banner and stored in the page's front matter, so the build can check it.
+
+| Label | Meaning | Allowed wording |
+| --- | --- | --- |
+| **Proposed** | Designed, not implemented | "Neura is designed to…", "the proposed interface is…" |
+| **Experimental** | Implemented and testable, not qualified; may change without notice | "You can try…", "known limitations:…" |
+| **Supported** | Passed the conformance, parity and fault suites for a named combination (§2.3), with linked evidence | "Neura supports…" |
+| **Deprecated** | Still works, scheduled for removal, with a date | "Will be removed in…" |
+
+Rules:
+
+- "Supported" is the only label allowed to say "supports". A Proposed page uses future or conditional wording.
+- Illustrative numbers (§8, §21) appear only marked as illustrative, never as performance claims or commitments.
+- Every API and code sample states its label. Proposed samples are clearly marked as sketches that do not run.
+
+### 26.3 Initial pages (all Proposed at launch, except Development status)
+
+| Page | What it explains | Source in this document |
+| --- | --- | --- |
+| **What is Neura?** | The problem (repeat infrastructure work per robot program), the intended customer (robot suppliers and integrators with several manipulation workcells and site GPU servers), and the deployment model (customer-owned site compute, cloud management off the action path) | Blueprint §1, §5; §1, §22 here |
+| **Architecture** | What runs on the robot (runtime, integration adapter), the GPU server (site agent, gateway, scheduler, workers, local console) and the NucleiLabs cloud (control plane, console). What keeps working when the cloud is down | §3, §8, §13, §17.3, §19.5 |
+| **Core concepts** | Model artifacts, robot profiles, execution profiles, compute pools, deployments and revisions, sessions, leases and task epochs, action chunks, the cursor and merge modes | §4, §5, §6, §9 |
+| **Privacy and access** | Data classes and where they live, what leaves the site, the outbound ledger, customer-managed keys, roles and permissions, who can deploy vs who can approve motion, update authority and local boundaries | §17.4, §18, §19.2, §20.7 |
+| **Compatibility** | Two clearly separated tables: **Supported** combinations (empty until the first one passes qualification, and says so) and **Candidates under evaluation** (ACT, SmolVLA, π0-class; ALOHA sim, LIBERO, SO-101 class) | §2 |
+| **Development status** | What exists today, what is in progress, what is under investigation, and what is out of scope, mapped to the build sequence | §16, §27 |
+
+Content that stays internal and is never published: customer targets, pricing, defensibility and positioning (§24), validation questions (§25), and internal SLO targets (§21) until they become contractual SLAs.
+
+### 26.4 Pages added as implementation progresses
+
+| Page | Added when |
+| --- | --- |
+| Quickstart | A path works end to end in simulation; its commands run in CI |
+| Installation (site agent, robot runtime) | The installer exists and has been run on a clean machine from the docs alone |
+| Troubleshooting | From real failures: preflight failures, reason codes, common faults |
+| Reason code reference | Generated from the shared reason-code catalog (§20.5) |
+| SDK reference | Generated from the Python SDK |
+| API reference | Generated from the OpenAPI spec (§20.1) |
+| Protocol reference | Generated from the protobuf schema (§11) |
+| Conformance suite | The suites can be run by a third party |
+| Benchmarks | Reports exist that can be reproduced (§10) |
+
+### 26.5 Docs as part of the codebase
+
+- **Source lives in this repository** under `site/`, so code and instructions change in the same pull request and are reviewed together. A change that alters behavior, an interface or a support claim without updating docs fails review.
+- **Generated, not hand-written, where facts come from code:** API, SDK, protocol and reason-code references are generated from their sources. The Compatibility "Supported" table is generated from a data file written by qualification runs, so nobody can add a supported combination by hand.
+- **Benchmarks are reproducible:** each benchmark page states the commit, artifact digests, hardware, workload and the command to rerun it, and includes the losing cases (§10).
+
+### 26.6 Tooling
+
+- A **static site**: Markdown sources, built to plain HTML, no server and no database.
+- Recommended generator: **Docusaurus**, for built-in docs versioning (needed once there are releases), Mermaid diagram support (the diagrams in this document can be reused) and MDX for the status banner component. Astro Starlight is an equally valid choice if a lighter build is preferred; decide once and do not migrate without reason.
+- Hosting on a static host (GitHub Pages or Cloudflare Pages) with a **preview build for every pull request**. Domain to be decided.
+- Search built into the static build; no third-party tracking scripts.
+
+### 26.7 CI checks for the docs
+
+- The site builds without warnings.
+- No broken internal or external links.
+- Every page has a valid status label in its front matter.
+- Wording lint: pages labeled Proposed or Experimental cannot contain unqualified claims such as "supports", "guarantees" or "production-ready".
+- Once a quickstart exists, its commands are executed in CI against the simulator.
+
+### 26.8 Versioning
+
+Until the first release, the site shows a single "next" version with a site-wide banner: *Neura is in design and early development. Nothing described here is a released product.* From the first release, docs are versioned per release, and "next" remains the in-development version.
+
+---
+
+## 27. Remaining open items (these need real customer workloads)
 
 - Customer-specific timing envelope, controller interface and validated local fault responses.
 - Pre-registered trial sizes and non-inferiority margins for a pilot.

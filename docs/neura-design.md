@@ -364,6 +364,31 @@ site/                      # public developer docs site source (§26)
 
 Steps 1–3 need no GPU or robot and set the safety guarantees everything else relies on.
 
+### 16.1 Pilot-first delivery plan
+
+Decision (October 14, 2026): fund Neura from paid customer work, reinvesting revenue. Each phase ends with something **sellable**, so revenue can start before the full platform exists. The steps above are regrouped into four phases.
+
+| Phase | What we sell | What we build | Steps |
+| --- | --- | --- | --- |
+| **P1. Capacity Assessment** | A paid, fixed-scope engagement: "we profile your policy on your GPU server and tell you how many robots it can serve, at what cost per robot-hour, shared vs dedicated" | `neura profile`: a CLI that loads a LeRobot-format checkpoint, runs synthetic observations of the declared shapes on the customer's GPU, and produces a polished report covering the four sharing cases (§9.5) | 0 |
+| **P2. Live simulation demo** | Sales demo and design-partner sign-ups | Contracts, robot runtime, simulator with fault injection, gateway, scheduler, workers; N simulated robots served from one GPU; local site console | 1–5 |
+| **P3. Pilot Edition** | A paid pilot on the customer's robots and server | Installer and site agent, signed artifacts, release and rollback at task boundaries, adapters for the customer's policy and arm, a generated pilot report; physical validation on an SO-101-class arm first | 6–8, single site |
+| **P4. Platform** | Annual agreements, more sites | Cloud control plane, web console, SSO, multi-site, docs site beyond the initial pages | 9, §19–§21 in full |
+
+Why P1 comes first: it needs only the customer's GPU and checkpoint, never touches their robots, carries far less trust risk than the action path, tests the primary bet on their real workload, and proves a budget owner exists (§25.2). A completed assessment is the natural lead-in to a P3 pilot.
+
+**Pilot Edition scope.** In: one site, one server, the customer's policy (ACT- or SmolVLA-class first), their arm through a validated adapter, shared serving with admission control, the full fault suite, release and rollback, local site console, Prometheus metrics and OpenTelemetry traces with ready-made Grafana dashboards, and a pilot report against the agreed value equation (§22). Out: the cloud control plane, web console, SSO, multi-site, Kubernetes, and compliance certification. The site is designed to run without the cloud (§13), so leaving it out is a scope cut, not a design change.
+
+**What makes it look good** (built into P1 and P2, not added later):
+
+- The Capacity Assessment report: robots per GPU, cost per robot-hour, latency curves, and the cases where sharing loses, each from a reproducible run.
+- The local site console: live robot tiles with buffer level, observation age and deadline status, plus a **GPU savings panel** showing robots served per GPU against the dedicated baseline.
+- A recorded demo: eight simulated robots on one GPU, a worker killed and network delay injected on screen, every robot reaching a safe state, then recovering.
+
+**The moat built during the pilot phases**: every assessment adds to the performance knowledge base (§24.3, with consent); every pilot adds a qualified adapter and conformance evidence to the integration library (§24.1); the open robot runtime and contract start the ecosystem (§24.4).
+
+**Low-capital rules**: rent GPUs only for runs; use the customer's hardware for anything customer-specific; buy no hardware before P3 except one or two SO-101-class arms; build nothing from P4 until pilot revenue or a design partner requires it.
+
 ---
 
 ## 17. Connecting customer GPU servers

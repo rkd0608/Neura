@@ -345,7 +345,75 @@ Steps 1–3 need no GPU or robot and set the safety guarantees everything else r
 
 ---
 
-## 17. Remaining open items (these need real customer workloads)
+## 17. Connecting customer GPU servers
+
+### 17.1 Requirements on the customer server
+
+Linux x86-64 or ARM64, a supported NVIDIA driver, the NVIDIA container toolkit, a container runtime, local disk for artifacts and buffered telemetry, and a LAN path to the robots. No Kubernetes, no inbound internet port, no VPN.
+
+### 17.2 Enrollment flow
+
+1. In the console, the customer creates a site and generates a **one-time enrollment token** (short-lived, bound to one organization, project and site).
+2. On the server they run one installer command (package or container). It installs the **site agent** only.
+3. The agent runs **preflight checks** and shows the results locally before anything else: driver and CUDA versions, GPU models and memory, MIG/MPS state, other GPU processes, disk, robot-network reachability, clock sanity. Failures name the fix.
+4. The agent generates its key pair **on the server** (in the TPM when one is available), sends a certificate signing request with the token, and receives a site certificate. The private key never leaves the machine. The token cannot be reused.
+5. The agent reports the server's observed capabilities. The customer chooses which GPUs Neura may use; others stay untouched, so Neura can coexist with the customer's own jobs.
+
+### 17.3 Ongoing connection
+
+- **Outbound only.** The agent dials the control plane over TLS 443 (proxy-aware) and holds a long-lived stream for desired state and acknowledgements. The cloud never connects in, so customers do not open firewall ports.
+- **Pull, verify, then run.** The agent pulls runtime images and weights from the customer's own registry or object store (preferred) or Neura's, verifies digests and signatures, and only then starts workers. A manifest with a missing or wrong signature is rejected.
+- **The site acts on its own.** If the connection drops, the site keeps operating on its committed configuration until its offline authorization expires (§13). Nothing on the action path waits on the cloud.
+- **Robots enroll locally.** The agent runs a site-local certificate authority; robot devices get per-device certificates for mTLS to the gateway. Robot traffic never leaves the LAN.
+- **Agent upgrades** are signed, staged, health-checked and automatically rolled back if the new agent does not report healthy. Upgrades never happen during an active task epoch.
+
+### 17.4 Customer-controlled boundaries
+
+Configured on the server itself, not in the cloud, so a compromised or mistaken control plane cannot widen them:
+
+- Which GPUs, disk paths and networks Neura may use.
+- Whether remote administration is allowed at all, and which operations (deploy, rollback, collect diagnostics).
+- Physical activation always needs local approval (§6, §13).
+- A local audit log of every instruction received from the cloud and what the agent did with it.
+- Stopping the agent stops Neura's management access completely.
+
+### 17.5 Other connection modes (later, on demand)
+
+- **Air-gapped:** signed offline bundles (manifest plus images) imported from an internal registry or removable media; telemetry exported to files.
+- **Kubernetes:** an operator and Helm chart for customers who already run clusters, with the same agent semantics.
+- **Customer cloud account:** the same agent in the customer's VPC on their GPU instances.
+
+---
+
+## 18. Data privacy
+
+### 18.1 Data classes and where they live by default
+
+| Class | Examples | Default location | Leaves the site? |
+| --- | --- | --- | --- |
+| Payload | Camera images, robot state, actions, language instructions | Site memory only; optional recordings in the customer's store | **Never**, unless the customer opts in per deployment |
+| Model | Weights, normalization statistics, adapter code | Customer registry or site cache | Only if the customer chooses Neura's registry, then encrypted with a customer-managed key |
+| Operational metadata | Digests, ids, state transitions, reason codes, timings | Site store | Yes, under a published schema (§18.2) |
+| Aggregate metrics | Latency percentiles, deadline misses, utilization | Site; exportable | Yes, or only to the customer's own Prometheus/OTel |
+
+### 18.2 Technical controls
+
+- **Telemetry schema allowlist.** The agent only sends fields defined in a published, versioned schema. No free text, no payload fields, no file contents. A local **outbound ledger** shows exactly what was sent, so customers can verify instead of trusting.
+- **Customer-routed telemetry.** Metrics and traces can go only to the customer's own systems, with Neura receiving nothing beyond health and version status.
+- **Customer-managed keys.** If weights are stored with Neura, they are encrypted with the customer's KMS key and decrypted only on the site agent. Neura staff cannot read them. Revoking the key revokes access.
+- **mTLS everywhere**; encrypted local storage recommended and checked in preflight.
+- **No standing remote access.** Support uses break-glass sessions that the customer approves, are time-boxed and are fully audited. No permanent remote shell.
+- **Tenancy.** Each customer's site is dedicated. The control plane isolates organizations at the data layer; a dedicated or self-hosted control plane is offered for customers who require it.
+- **Supply chain.** Signed images, SBOMs and an open robot runtime (§14), so customers can inspect what runs on their robots and servers.
+- **No training on customer data.** Stated in the contract, and also structurally true, because payloads do not reach Neura by default.
+
+### 18.3 Compliance path (not yet claimed)
+
+Data processing agreement from the first pilot; SOC 2 Type II when the control plane holds production customers; ISO 27001 if customers require it.
+
+---
+
+## 19. Remaining open items (these need real customer workloads)
 
 - Customer-specific timing envelope, controller interface and validated local fault responses.
 - Pre-registered trial sizes and non-inferiority margins for a pilot.

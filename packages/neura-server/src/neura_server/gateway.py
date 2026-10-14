@@ -55,6 +55,10 @@ class Session:
     task_epoch: int = 0
     rtt_p99_us: int = 0
     rtt_recent_us: int = 0
+    # Robot-reported, for status only.
+    robot_state: str = ""
+    fault_reason: str = ""
+    dispatched_actions: int = 0
     observations: int = 0
     chunks: int = 0
     rejections: Counter[str] = field(default_factory=Counter)
@@ -80,20 +84,51 @@ class GatewayCore:
         max_message_bytes: int = 16 * 1024 * 1024,
         default_rtt_us: int = 20_000,
     ) -> None:
-        self._deployments_by_robot: dict[str, Deployment] = {}
-        for deployment in deployments:
-            if deployment.group_key not in groups:
-                raise ValueError(f"no batch group for {deployment.group_key}")
-            for robot in deployment.robots:
-                if robot in self._deployments_by_robot:
-                    raise ValueError(f"robot {robot} is in more than one deployment")
-                self._deployments_by_robot[robot] = deployment
         self.groups = groups
+        self._deployments_by_robot = self._index(deployments)
         self.leases = leases
         self.max_message_bytes = max_message_bytes
         self.default_rtt_us = default_rtt_us
         self.sessions: dict[str, Session] = {}
         self.counters: Counter[str] = Counter()
+
+    def _index(self, deployments: list[Deployment]) -> dict[str, dict[str, Deployment]]:
+        """robot -> revision -> deployment. During an activation a robot is allowed two
+        revisions (current and next) so it can switch at its own task boundary (design §16)."""
+        index: dict[str, dict[str, Deployment]] = {}
+        for deployment in deployments:
+            if deployment.group_key not in self.groups:
+                raise ValueError(f"no batch group for {deployment.group_key}")
+            for robot in deployment.robots:
+                revisions = index.setdefault(robot, {})
+                if deployment.revision_id in revisions:
+                    raise ValueError(f"robot {robot} has revision {deployment.revision_id} twice")
+                revisions[deployment.revision_id] = deployment
+        return index
+
+    def allowed_revisions(self, robot_id: str) -> list[str]:
+        return sorted(self._deployments_by_robot.get(robot_id, {}))
+
+    def replace_deployments(
+        self, deployments: list[Deployment], new_groups: dict[str, BatchGroup] | None = None
+    ) -> list[str]:
+        """Apply a new set of deployments without a restart. Sessions whose robot is no longer
+        allowed its revision are closed (their queued work cancelled, their lease released).
+        Returns the closed session ids."""
+        for key, group in (new_groups or {}).items():
+            self.groups.setdefault(key, group)
+        index = self._index(deployments)
+        closed = []
+        for session_id, session in list(self.sessions.items()):
+            robot = session.lease.robot_id
+            if session.deployment.revision_id not in index.get(robot, {}):
+                self._drop_session(session_id, ReasonCode.DEPLOYMENT_NOT_ACTIVE)
+                self.leases.release(session_id)
+                closed.append(session_id)
+            else:
+                session.deployment = index[robot][session.deployment.revision_id]
+        self._deployments_by_robot = index
+        return closed
 
     # --- sessions -----------------------------------------------------------------------------
 
@@ -108,19 +143,24 @@ class GatewayCore:
             return reject(ReasonCode.PROTOCOL_VERSION_MISMATCH)
         if request.robot_id and request.robot_id != robot_id:
             return reject(ReasonCode.AUTH_DEVICE_UNKNOWN, "robot_id differs from the credential")
-        deployment = self._deployments_by_robot.get(robot_id)
-        if deployment is None:
+        revisions = self._deployments_by_robot.get(robot_id)
+        if not revisions:
             return reject(ReasonCode.DEPLOYMENT_NOT_ACTIVE, "no deployment includes this robot")
+        deployment = revisions.get(request.revision_id)
+        if deployment is None:
+            return reject(
+                ReasonCode.DEPLOYMENT_NOT_ACTIVE,
+                f"revision {request.revision_id} is not active here; active: {sorted(revisions)}",
+            )
         binding = deployment.binding
         if (
-            request.revision_id != deployment.revision_id
-            or request.artifact_digest != binding.artifact_digest
+            request.artifact_digest != binding.artifact_digest
             or request.execution_profile_digest != binding.execution_profile_digest
             or request.robot_profile_digest != binding.robot_profile_digest
         ):
             return reject(
                 ReasonCode.DEPLOYMENT_NOT_ACTIVE,
-                f"active revision is {deployment.revision_id} with different contract digests",
+                f"revision {deployment.revision_id} is active here with different contract digests",
             )
 
         granted = self.leases.acquire(robot_id, now_us)
@@ -162,6 +202,9 @@ class GatewayCore:
         self.leases.renew(request.session_id, request.lease_generation, now_us)
         session.rtt_p99_us = min(int(request.rtt_p99_us), MAX_REPORTED_RTT_US)
         session.rtt_recent_us = min(int(request.rtt_recent_us), MAX_REPORTED_RTT_US)
+        session.robot_state = request.runtime_state[:32]
+        session.fault_reason = request.fault_reason[:64]
+        session.dispatched_actions = int(request.dispatched_actions)
         return dataplane_pb2.HeartbeatResponse(
             ack=dataplane_pb2.HeartbeatAck(
                 robot_send_time_us=request.robot_send_time_us,
@@ -369,6 +412,9 @@ class GatewayCore:
                     "task_epoch": s.task_epoch,
                     "rtt_p99_us": s.rtt_p99_us,
                     "rtt_recent_us": s.rtt_recent_us,
+                    "robot_state": s.robot_state,
+                    "fault_reason": s.fault_reason,
+                    "dispatched_actions": s.dispatched_actions,
                     "observations": s.observations,
                     "chunks": s.chunks,
                     "rejections": dict(s.rejections),

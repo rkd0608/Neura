@@ -10,8 +10,62 @@ package neura.v1;
 import "neura/v1/common.proto";
 
 service SiteControl {
-  // Long-lived bidirectional stream opened by the site agent.
+  // One-time enrollment of a server with a single-use enrollment token. The agent generates its
+  // key pair on the server; only the public key is sent (design §17.2).
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
+  // Long-lived bidirectional stream opened by the site agent. Authenticated with a short-lived
+  // token the agent signs with its enrolled key ("authorization: Bearer <JWT>", EdDSA).
   rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+}
+
+message EnrollRequest {
+  ProtocolVersion protocol_version = 1;
+  string enrollment_token = 2;
+  // Raw 32-byte Ed25519 public key.
+  bytes public_key = 3;
+  string agent_version = 4;
+  ServerFacts facts = 5;
+}
+
+message EnrollResponse {
+  oneof result {
+    Enrolled enrolled = 1;
+    Reason rejected = 2;
+  }
+}
+
+message Enrolled {
+  string server_id = 1;
+  string site_id = 2;
+  string project_id = 3;
+  // Ed25519 key the control plane signs desired state with. The agent pins it at enrollment.
+  bytes manifest_public_key = 4;
+  string manifest_key_id = 5;
+}
+
+// What the agent observed about its server (design §17.2 preflight).
+message ServerFacts {
+  string hostname = 1;
+  string driver_version = 2;
+  string cuda_version = 3;
+  repeated GpuInfo gpus = 4;
+  repeated PreflightResult preflight = 5;
+}
+
+message GpuInfo {
+  uint32 index = 1;
+  string uuid = 2;
+  string model = 3;
+  uint64 memory_mib = 4;
+  bool mig_enabled = 5;
+}
+
+message PreflightResult {
+  string name = 1;
+  bool passed = 2;
+  string reason = 3;
+  string detail = 4;
+  string fix = 5;
 }
 
 message AgentMessage {
@@ -20,14 +74,39 @@ message AgentMessage {
     Acknowledgement ack = 2;
     SiteStatus status = 3;
     TelemetryBatch telemetry = 4;
+    OperationReport operation = 5;
+    ServerFacts facts = 6;
   }
+}
+
+// Progress of the operation a command belongs to. Only the agent moves operations forward.
+message OperationReport {
+  string command_id = 1;
+  string operation_id = 2;
+  // Running, Succeeded, Failed or Cancelled.
+  string state = 3;
+  Reason reason = 4;
+  string message = 5;
+  // Kind-specific result as canonical JSON (for example approved_by, revision_id, robot_ids).
+  bytes result_json = 6;
 }
 
 message ControlPlaneMessage {
   oneof body {
     DesiredState desired_state = 1;
     Command command = 2;
+    ContactProof contact = 3;
   }
+}
+
+// Proof that the control plane is in contact with this site: the manifest key's signature over
+// CONTACT_PROOF_CONTEXT || site_id || 0x00 || nonce, where nonce came from the agent's SiteStatus.
+// Only a verified proof renews offline authorization, so neither a replayed message nor a
+// stream that stays open without the control plane behind it can extend it, and no clocks are
+// compared across machines.
+message ContactProof {
+  bytes nonce = 1;
+  Signature signature = 2;
 }
 
 message AgentHello {
@@ -61,7 +140,15 @@ message Command {
     RequestActivation request_activation = 3;
     Rollback rollback = 4;
     CollectDiagnostics collect_diagnostics = 5;
+    CancelOperation cancel = 6;
   }
+  // The operation this command belongs to; the agent reports progress against it.
+  string operation_id = 7;
+}
+
+// Stop work for an operation that has not finished (for example a pending activation approval).
+message CancelOperation {
+  string operation_id = 1;
 }
 
 message PrepareRevision {
@@ -97,6 +184,37 @@ message SiteStatus {
   // Agent monotonic time; the control plane records its own receive time separately.
   uint64 agent_time_us = 1;
   repeated ComponentStatus components = 2;
+  repeated RobotSessionStatus sessions = 3;
+  repeated FaultReport faults = 4;
+  // Seconds of offline authorization left, from the agent's last successful contact.
+  uint64 offline_authorization_remaining_s = 5;
+  // Fresh random bytes; the control plane answers with a ContactProof over them.
+  bytes contact_nonce = 6;
+}
+
+message RobotSessionStatus {
+  string session_id = 1;
+  // The robot's name at the site (unique within the project).
+  string robot_name = 2;
+  string revision_id = 3;
+  uint64 lease_generation = 4;
+  uint64 task_epoch = 5;
+  string state = 6;
+  Reason reason = 7;
+  map<string, double> metrics = 8;
+}
+
+message FaultReport {
+  // Stable id assigned by the site, so repeated reports of one fault are deduplicated.
+  string fault_key = 1;
+  string robot_name = 2;
+  string session_id = 3;
+  string revision_id = 4;
+  Reason reason = 5;
+  bool latched = 6;
+  string local_response = 7;
+  // Wall-clock UTC microseconds since the epoch, for display only.
+  uint64 occurred_at_unix_us = 8;
 }
 
 message ComponentStatus {

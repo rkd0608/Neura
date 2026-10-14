@@ -359,11 +359,41 @@ codes:
     severity: error
     retryable: false
     message: A downloaded artifact does not match its declared digest.
+  - code: AGENT_ENROLLMENT_INVALID
+    area: agent
+    severity: error
+    retryable: false
+    message: The enrollment token is unknown, already used or expired.
+  - code: AGENT_UNAUTHENTICATED
+    area: agent
+    severity: error
+    retryable: false
+    message: The agent's credential is invalid or its server is no longer enrolled.
+  - code: AGENT_GENERATION_STALE
+    area: agent
+    severity: warning
+    retryable: false
+    message: The desired state is older than the one the site already committed.
+  - code: AGENT_ACTIVATION_REFUSED
+    area: agent
+    severity: info
+    retryable: false
+    message: The site operator refused the activation.
+  - code: AGENT_ACTIVATION_TIMED_OUT
+    area: agent
+    severity: warning
+    retryable: false
+    message: Robots did not switch to the approved revision within the activation window.
   - code: AGENT_BOUNDARY_DENIED
     area: agent
     severity: error
     retryable: false
     message: The instruction is outside the boundaries configured on this server.
+  - code: AGENT_OPERATION_INTERRUPTED
+    area: agent
+    severity: warning
+    retryable: true
+    message: The site agent restarted while the operation was running; run it again.
 
   # ---------------------------------------------------------------------------
   # Management API (design §20)

@@ -99,6 +99,9 @@ class Site(Resource, Base):
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     offline_authorization_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    # Desired-state manifest bookkeeping: the generation increments when the content digest changes.
+    manifest_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    manifest_digest: Mapped[str | None] = mapped_column(String(71))
 
 
 class EnrollmentToken(Base):
@@ -127,6 +130,9 @@ class Server(Resource, Base):
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     allocated_gpu_indexes: Mapped[list[Any]] = mapped_column(nullable=False, default=list)
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    # Raw Ed25519 public key (hex) generated on the server at enrollment; the agent proves
+    # possession of the private key on every connection.
+    agent_public_key: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class ContractDocument(Base):
@@ -285,7 +291,12 @@ class RobotSession(Base):
 
 class Fault(Base):
     __tablename__ = "faults"
+    __table_args__ = (
+        UniqueConstraint("project_id", "site_fault_key", name="uq_faults_project_site_fault_key"),
+    )
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    # Key the site assigned, so repeated reports of one fault are recorded once.
+    site_fault_key: Mapped[str | None] = mapped_column(String(128))
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )

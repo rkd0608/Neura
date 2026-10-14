@@ -140,6 +140,10 @@ class SessionClient:
             robot_send_time_us=now_us,
             rtt_p99_us=self.rtt.p99_us(),
             rtt_recent_us=self.rtt.recent_us(),
+            runtime_state=self.runtime.state.value,
+            fault_reason=self.runtime.fault.reason.value if self.runtime.fault else "",
+            dispatched_actions=self.runtime.dispatched,
+            task_epoch=self.runtime.task_epoch,
         )
 
     def drain(self) -> list[Outbound]:

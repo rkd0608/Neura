@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -10,6 +11,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from neura_contracts import REASON_CODES, ReasonCode
+
+log = logging.getLogger("neura.control")
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 # A URN rather than a URL: the docs domain is not decided yet (design §26.6).
@@ -94,4 +97,11 @@ async def handle_validation_error(request: Request, exc: Exception) -> JSONRespo
 
 async def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
     # Never leak internal details; the request id in logs ties the response to the cause.
+    log.error(
+        "unhandled error on %s %s (request %s)",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "-"),
+        exc_info=exc,
+    )
     return problem_response(ReasonCode.API_INTERNAL_ERROR, instance=request.url.path)

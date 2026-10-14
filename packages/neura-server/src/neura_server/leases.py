@@ -7,7 +7,6 @@ from an older lease can always be recognized and refused.
 
 from __future__ import annotations
 
-import secrets
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from neura_contracts import ReasonCode
+from neura_contracts.identifiers import ulid
 
 
 class GenerationStore(Protocol):
@@ -101,7 +101,7 @@ class LeaseTable:
         generation = self._store.next_generation(robot_id)
         lease = Lease(
             robot_id=robot_id,
-            session_id=f"ses_{secrets.token_hex(12)}",
+            session_id=f"ses_{ulid()}",
             generation=generation,
             expires_at_us=now_us + self.ttl_us,
         )

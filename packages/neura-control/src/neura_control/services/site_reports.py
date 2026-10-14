@@ -6,7 +6,7 @@ never do: a successful request is intent, and only a site report turns it into o
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -185,6 +185,61 @@ async def report_site(
     }
     _touch(site)
     await _emit(session, site.project_id, site)
+
+
+async def report_site_ack(
+    session: AsyncSession, site_id: str, *, generation: int, accepted: bool, reason: str | None
+) -> None:
+    """The agent's verdict on a desired-state generation: committed, or refused and why."""
+    site = await session.get(Site, site_id, with_for_update=True)
+    if site is None:
+        return
+    site.observed = {
+        **site.observed,
+        "committed_generation": generation,
+        "manifest_accepted": accepted,
+        "manifest_reason": reason,
+        "observed_at": iso(utcnow()),
+    }
+    _touch(site)
+    await _emit(session, site.project_id, site)
+
+
+# A connected site reports status every few seconds (agent default 2 s, at most 60 s). A site whose
+# last report is older than this is shown disconnected even if no stream end was recorded, e.g.
+# after the control-plane process serving its stream crashed.
+SITE_LIVENESS_S = 90.0
+
+
+async def report_site_heartbeat(
+    session: AsyncSession, site_id: str, *, offline_authorization_remaining_s: int
+) -> None:
+    """Periodic site status. Refreshes ``observed_at`` (from which reads derive liveness) on every
+    report, but changes the version and emits an event only when a fact changed, so a status every
+    few seconds does not flood the event stream."""
+    site = await session.get(Site, site_id, with_for_update=True)
+    if site is None:
+        return
+    now = utcnow()
+    previous = site.observed.get("offline_authorization_expires_at")
+    expires_at: str | None = None
+    if site.observed.get("committed_generation"):  # nothing is authorized before a commit
+        # The agent counts down from its last contact; the cloud records the instant. While
+        # connected the expiry slides forward; small slides are the same fact as before.
+        remaining = max(0, offline_authorization_remaining_s)
+        expires = now + timedelta(seconds=remaining)
+        jitter = timedelta(seconds=max(60.0, remaining / 20))
+        same = previous is not None and abs(datetime.fromisoformat(previous) - expires) <= jitter
+        expires_at = previous if same else iso(expires)
+    changed = expires_at != previous
+    site.observed = {
+        **site.observed,
+        "offline_authorization_expires_at": expires_at,
+        "observed_at": iso(now),
+    }
+    if changed:
+        _touch(site)
+        await _emit(session, site.project_id, site)
 
 
 async def report_server(session: AsyncSession, server_id: str, observed: dict[str, Any]) -> None:

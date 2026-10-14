@@ -64,7 +64,8 @@ HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
 CMD ["neura-agent"]
 
 FROM runtime AS neura-gateway
-ENV NEURA_GATEWAY_CONFIG=/srv/neura/deploy/dev/site.yaml
+# Standalone gateway (without a site agent): mount a configuration at this path.
+ENV NEURA_GATEWAY_CONFIG=/etc/neura/site.yaml
 EXPOSE 50051 8091
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2); sys.exit(0)"]

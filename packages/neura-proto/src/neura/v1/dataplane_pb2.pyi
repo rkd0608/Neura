@@ -45,18 +45,26 @@ class SessionAccepted(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., lease_ttl_us: _Optional[int] = ..., max_message_bytes: _Optional[int] = ...) -> None: ...
 
 class HeartbeatRequest(_message.Message):
-    __slots__ = ("session_id", "lease_generation", "robot_send_time_us", "rtt_p99_us", "rtt_recent_us")
+    __slots__ = ("session_id", "lease_generation", "robot_send_time_us", "rtt_p99_us", "rtt_recent_us", "runtime_state", "fault_reason", "dispatched_actions", "task_epoch")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ROBOT_SEND_TIME_US_FIELD_NUMBER: _ClassVar[int]
     RTT_P99_US_FIELD_NUMBER: _ClassVar[int]
     RTT_RECENT_US_FIELD_NUMBER: _ClassVar[int]
+    RUNTIME_STATE_FIELD_NUMBER: _ClassVar[int]
+    FAULT_REASON_FIELD_NUMBER: _ClassVar[int]
+    DISPATCHED_ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    TASK_EPOCH_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     lease_generation: int
     robot_send_time_us: int
     rtt_p99_us: int
     rtt_recent_us: int
-    def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., robot_send_time_us: _Optional[int] = ..., rtt_p99_us: _Optional[int] = ..., rtt_recent_us: _Optional[int] = ...) -> None: ...
+    runtime_state: str
+    fault_reason: str
+    dispatched_actions: int
+    task_epoch: int
+    def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., robot_send_time_us: _Optional[int] = ..., rtt_p99_us: _Optional[int] = ..., rtt_recent_us: _Optional[int] = ..., runtime_state: _Optional[str] = ..., fault_reason: _Optional[str] = ..., dispatched_actions: _Optional[int] = ..., task_epoch: _Optional[int] = ...) -> None: ...
 
 class HeartbeatResponse(_message.Message):
     __slots__ = ("ack", "rejected")

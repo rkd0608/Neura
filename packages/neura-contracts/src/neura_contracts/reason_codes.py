@@ -80,7 +80,13 @@ class ReasonCode(StrEnum):
     AGENT_PREFLIGHT_FAILED = "AGENT_PREFLIGHT_FAILED"
     AGENT_MANIFEST_SIGNATURE_INVALID = "AGENT_MANIFEST_SIGNATURE_INVALID"
     AGENT_ARTIFACT_DIGEST_MISMATCH = "AGENT_ARTIFACT_DIGEST_MISMATCH"
+    AGENT_ENROLLMENT_INVALID = "AGENT_ENROLLMENT_INVALID"
+    AGENT_UNAUTHENTICATED = "AGENT_UNAUTHENTICATED"
+    AGENT_GENERATION_STALE = "AGENT_GENERATION_STALE"
+    AGENT_ACTIVATION_REFUSED = "AGENT_ACTIVATION_REFUSED"
+    AGENT_ACTIVATION_TIMED_OUT = "AGENT_ACTIVATION_TIMED_OUT"
     AGENT_BOUNDARY_DENIED = "AGENT_BOUNDARY_DENIED"
+    AGENT_OPERATION_INTERRUPTED = "AGENT_OPERATION_INTERRUPTED"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
     API_FORBIDDEN = "API_FORBIDDEN"
     API_NOT_FOUND = "API_NOT_FOUND"
@@ -562,12 +568,54 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='A downloaded artifact does not match its declared digest.',
     ),
+    ReasonCode.AGENT_ENROLLMENT_INVALID: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ENROLLMENT_INVALID,
+        area="agent",
+        severity="error",
+        retryable=False,
+        message='The enrollment token is unknown, already used or expired.',
+    ),
+    ReasonCode.AGENT_UNAUTHENTICATED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_UNAUTHENTICATED,
+        area="agent",
+        severity="error",
+        retryable=False,
+        message="The agent's credential is invalid or its server is no longer enrolled.",
+    ),
+    ReasonCode.AGENT_GENERATION_STALE: ReasonCodeInfo(
+        code=ReasonCode.AGENT_GENERATION_STALE,
+        area="agent",
+        severity="warning",
+        retryable=False,
+        message='The desired state is older than the one the site already committed.',
+    ),
+    ReasonCode.AGENT_ACTIVATION_REFUSED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ACTIVATION_REFUSED,
+        area="agent",
+        severity="info",
+        retryable=False,
+        message='The site operator refused the activation.',
+    ),
+    ReasonCode.AGENT_ACTIVATION_TIMED_OUT: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ACTIVATION_TIMED_OUT,
+        area="agent",
+        severity="warning",
+        retryable=False,
+        message='Robots did not switch to the approved revision within the activation window.',
+    ),
     ReasonCode.AGENT_BOUNDARY_DENIED: ReasonCodeInfo(
         code=ReasonCode.AGENT_BOUNDARY_DENIED,
         area="agent",
         severity="error",
         retryable=False,
         message='The instruction is outside the boundaries configured on this server.',
+    ),
+    ReasonCode.AGENT_OPERATION_INTERRUPTED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_OPERATION_INTERRUPTED,
+        area="agent",
+        severity="warning",
+        retryable=True,
+        message='The site agent restarted while the operation was running; run it again.',
     ),
     ReasonCode.API_UNAUTHENTICATED: ReasonCodeInfo(
         code=ReasonCode.API_UNAUTHENTICATED,

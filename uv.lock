@@ -1019,20 +1019,30 @@ version = "0.1.0.dev0"
 source = { editable = "packages/neura-agent" }
 dependencies = [
     { name = "fastapi" },
+    { name = "grpcio" },
     { name = "httpx" },
     { name = "neura-contracts" },
     { name = "neura-proto" },
+    { name = "neura-runtime" },
+    { name = "neura-server" },
     { name = "pydantic-settings" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "pyyaml" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.120,<1" },
+    { name = "grpcio", specifier = ">=1.84,<2" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "neura-contracts", editable = "packages/neura-contracts" },
     { name = "neura-proto", editable = "packages/neura-proto" },
+    { name = "neura-runtime", editable = "packages/neura-runtime" },
+    { name = "neura-server", editable = "packages/neura-server" },
     { name = "pydantic-settings", specifier = ">=2.10" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38" },
 ]
 
@@ -1149,6 +1159,7 @@ version = "0.1.0.dev0"
 source = { editable = "packages/neura-sim" }
 dependencies = [
     { name = "grpcio" },
+    { name = "httpx" },
     { name = "neura-contracts" },
     { name = "neura-proto" },
     { name = "neura-runtime" },
@@ -1159,6 +1170,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.84,<2" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "neura-contracts", editable = "packages/neura-contracts" },
     { name = "neura-proto", editable = "packages/neura-proto" },
     { name = "neura-runtime", editable = "packages/neura-runtime" },

@@ -35,6 +35,11 @@ class SiteControlStub:
         Args:
             channel: A grpc.Channel.
         """
+        self.Enroll = channel.unary_unary(
+                '/neura.v1.SiteControl/Enroll',
+                request_serializer=neura_dot_v1_dot_site__pb2.EnrollRequest.SerializeToString,
+                response_deserializer=neura_dot_v1_dot_site__pb2.EnrollResponse.FromString,
+                _registered_method=True)
         self.Connect = channel.stream_stream(
                 '/neura.v1.SiteControl/Connect',
                 request_serializer=neura_dot_v1_dot_site__pb2.AgentMessage.SerializeToString,
@@ -45,8 +50,17 @@ class SiteControlStub:
 class SiteControlServicer:
     """Missing associated documentation comment in .proto file."""
 
+    def Enroll(self, request, context):
+        """One-time enrollment of a server with a single-use enrollment token. The agent generates its
+        key pair on the server; only the public key is sent (design §17.2).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Connect(self, request_iterator, context):
-        """Long-lived bidirectional stream opened by the site agent.
+        """Long-lived bidirectional stream opened by the site agent. Authenticated with a short-lived
+        token the agent signs with its enrolled key ("authorization: Bearer <JWT>", EdDSA).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -55,6 +69,11 @@ class SiteControlServicer:
 
 def add_SiteControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'Enroll': grpc.unary_unary_rpc_method_handler(
+                    servicer.Enroll,
+                    request_deserializer=neura_dot_v1_dot_site__pb2.EnrollRequest.FromString,
+                    response_serializer=neura_dot_v1_dot_site__pb2.EnrollResponse.SerializeToString,
+            ),
             'Connect': grpc.stream_stream_rpc_method_handler(
                     servicer.Connect,
                     request_deserializer=neura_dot_v1_dot_site__pb2.AgentMessage.FromString,
@@ -70,6 +89,33 @@ def add_SiteControlServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class SiteControl:
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Enroll(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/neura.v1.SiteControl/Enroll',
+            neura_dot_v1_dot_site__pb2.EnrollRequest.SerializeToString,
+            neura_dot_v1_dot_site__pb2.EnrollResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def Connect(request_iterator,

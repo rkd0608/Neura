@@ -72,8 +72,8 @@ class GatewayConfig(_Model):
     lease_store: Path | None = None  # None: in memory (development only)
     max_message_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
     default_rtt_ms: float = Field(default=20, gt=0)
-    devices: list[DeviceConfig] = Field(min_length=1)
-    deployments: list[DeploymentConfig] = Field(min_length=1)
+    devices: list[DeviceConfig] = Field(default_factory=list)
+    deployments: list[DeploymentConfig] = Field(default_factory=list)
     serving: ServingConfig = Field(default_factory=ServingConfig)
 
     @classmethod

@@ -82,35 +82,14 @@ class GatewayServer:
     ) -> None:
         self.config = config
         self.devices = DeviceRegistry(config.devices)
-        serving = config.serving
-        deployments = []
-        groups: dict[str, BatchGroup] = {}
-        backends: dict[str, PolicyBackend] = {}
-        for item in config.deployments:
-            deployment = Deployment(item.revision_id, load_binding(item), frozenset(item.robots))
-            deployments.append(deployment)
-            if deployment.group_key not in groups:
-                profile = LatencyProfile(serving.profile_points())
-                groups[deployment.group_key] = BatchGroup(
-                    deployment.group_key,
-                    Scheduler(profile, policy=serving.policy, max_batch=serving.max_batch),
-                    AdmissionController(
-                        profile,
-                        max_batch=serving.max_batch,
-                        reserve_fraction=serving.reserve_fraction,
-                        memory_available_mib=serving.memory_available_mib,
-                    ),
-                )
-                backend: PolicyBackend = MockPolicy(deployment.binding)
-                if serving.simulate_latency:
-                    backend = SimulatedLatency(backend, profile)
-                backends[deployment.group_key] = backend
+        deployments, groups, backends = self._build(config, set())
+        # A store the server opens itself is closed by stop(); a caller's store stays the caller's.
+        self._owned_store: SqliteGenerationStore | None = None
         if generation_store is None:
-            generation_store = (
-                SqliteGenerationStore(config.lease_store)
-                if config.lease_store
-                else MemoryGenerationStore()
-            )
+            if config.lease_store:
+                generation_store = self._owned_store = SqliteGenerationStore(config.lease_store)
+            else:
+                generation_store = MemoryGenerationStore()
         self.core = GatewayCore(
             deployments=deployments,
             groups=groups,
@@ -125,6 +104,64 @@ class GatewayServer:
         self._status_server: uvicorn.Server | None = None
         self.bound_port: int | None = None
         self.started_at = time.time()
+
+    @staticmethod
+    def _build(
+        config: GatewayConfig, existing: set[str]
+    ) -> tuple[list[Deployment], dict[str, BatchGroup], dict[str, PolicyBackend]]:
+        """Deployments from config, plus batch groups and backends for group keys not yet known."""
+        serving = config.serving
+        deployments = []
+        groups: dict[str, BatchGroup] = {}
+        backends: dict[str, PolicyBackend] = {}
+        for item in config.deployments:
+            deployment = Deployment(item.revision_id, load_binding(item), frozenset(item.robots))
+            deployments.append(deployment)
+            key = deployment.group_key
+            if key in existing or key in groups:
+                continue
+            profile = LatencyProfile(serving.profile_points())
+            groups[key] = BatchGroup(
+                key,
+                Scheduler(profile, policy=serving.policy, max_batch=serving.max_batch),
+                AdmissionController(
+                    profile,
+                    max_batch=serving.max_batch,
+                    reserve_fraction=serving.reserve_fraction,
+                    memory_available_mib=serving.memory_available_mib,
+                ),
+            )
+            backend: PolicyBackend = MockPolicy(deployment.binding)
+            if serving.simulate_latency:
+                backend = SimulatedLatency(backend, profile)
+            backends[key] = backend
+        return deployments, groups, backends
+
+    def reload(self, config: GatewayConfig) -> list[str]:
+        """Apply a new configuration in place (devices and deployments). Serving settings and
+        listen addresses need a restart. Returns the ids of sessions that were closed."""
+        deployments, groups, backends = self._build(config, set(self.core.groups))
+        self.devices = DeviceRegistry(config.devices)
+        closed = self.core.replace_deployments(deployments, groups)
+        for key, backend in backends.items():
+            group = _Group(key, backend)
+            self._groups[key] = group
+            if self._server is not None:
+                self._tasks.append(
+                    asyncio.create_task(self._dispatch(group), name=f"dispatch-{key[:16]}")
+                )
+        for session_id in closed:
+            queue = self._streams.pop(session_id, None)
+            if queue is not None:
+                with contextlib.suppress(asyncio.QueueFull):
+                    queue.put_nowait(_closed_message(session_id))
+        self.config = config
+        log.info(
+            "configuration reloaded: %d deployments, %d sessions closed",
+            len(deployments),
+            len(closed),
+        )
+        return closed
 
     # --- lifecycle ----------------------------------------------------------------------------
 
@@ -160,6 +197,9 @@ class GatewayServer:
                 await task
         if self._server is not None:
             await self._server.stop(grace=0.5)
+        if self._owned_store is not None:
+            self._owned_store.close()
+            self._owned_store = None
 
     async def serve_forever(self) -> None:
         await self.start()
@@ -246,6 +286,17 @@ class GatewayServer:
             return self.status()
 
         return app
+
+
+def _closed_message(session_id: str) -> dataplane_pb2.GatewayMessage:
+    from neura.v1 import common_pb2
+
+    return dataplane_pb2.GatewayMessage(
+        rejected=dataplane_pb2.RequestRejected(
+            envelope=common_pb2.Envelope(session_id=session_id),
+            reason=common_pb2.Reason(code="LEASE_EXPIRED", message="revision no longer active"),
+        )
+    )
 
 
 class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]

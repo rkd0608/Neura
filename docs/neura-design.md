@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core) and M3 (control plane) implemented, M4 onward not yet built · October 14, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane) and M4 (site agent) implemented, M5 onward not yet built · October 14, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -370,7 +370,7 @@ packages/
   neura-contracts/         # manifests, profiles, compatibility check, CLI (open) (M1)
   neura-proto/             # generated protobuf/gRPC bindings, import `neura.v1` (open) (M1)
   neura-control/           # control plane service (proprietary) (M1 skeleton, M3)
-  neura-agent/             # site agent (proprietary) (M1 skeleton, M4)
+  neura-agent/             # site agent and local site API (proprietary) (M1 skeleton, M4)
   neura-runtime/           # robot runtime, session client, gRPC client (open) (M2)
   neura-server/            # gateway, leases, scheduler, admission, workers (proprietary) (M2)
   neura-sim/               # simulated arms and networks, deterministic site simulator (M2)
@@ -417,7 +417,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M1. Foundation** ✅ | Monorepo and tooling (uv, ruff, mypy strict, pytest), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library with RFC 8785 digests and CLI (§4), control-plane and site-agent service skeletons, local dev stack in Docker Compose (Postgres, control plane, site agent). Console tooling (pnpm) moves to M5; simulated robots join the stack in M2 | `make dev` brings up the whole stack; `make smoke` verifies it end to end; schema, contract and compatibility tests pass in CI |
 | **M2. Data plane core** ✅ | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7). Sans-IO cores shared by a deterministic simulator (every node on its own clock) and the real gRPC adapters; gateway and simulated robots in the dev stack | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker, in simulation and over gRPC |
 | **M3. Control plane** ✅ | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20). Alembic migrations; transactional idempotency keys; `If-Match` concurrency; audit and change events in the same transaction as each change; site-report service that alone writes observed state (used by the agent in M4); `GET /v1/me`; bootstrap CLI and development bootstrap | Every response in the test suite is validated against the OpenAPI spec; every spec operation is implemented; idempotency (including concurrent retries), concurrency, roles, OIDC and audit tests pass; the dev stack onboards a customer through the API |
-| **M4. Site agent** | Enrollment with one-time tokens and on-host keys, preflight, outbound stream, signed manifest reconciliation, artifact verification, local boundaries, local site console API (§17, §19.5) | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage |
+| **M4. Site agent** ✅ | Enrollment with one-time tokens and on-host keys, preflight, outbound stream (TLS), signed manifest reconciliation, contract verification at the site, local boundaries, at-most-once commands, local approval, task-boundary revision switches, signed contact proofs for offline authorization, supervised data plane, local site API and CLI (§17, §19.5); implementation notes in §17.6 | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage and reconnects by itself (`make smoke` runs the whole pilot on the Compose stack) |
 | **M5. Web console** | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19) | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests |
 | **M6. Models and GPU sharing** | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10) | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner |
 | **M7. Production hardening** | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations |
@@ -458,6 +458,77 @@ Configured on the server itself, not in the cloud, so a compromised or mistaken 
 - Physical activation always needs local approval (§6, §13).
 - A local audit log of every instruction received from the cloud and what the agent did with it.
 - Stopping the agent stops Neura's management access completely.
+
+### 17.6 Implementation notes (M4)
+
+What M4 built, and where it deliberately differs from the plan above.
+
+**Identity and transport**
+
+- The agent generates an Ed25519 key on the server and sends only the raw public key with the one-time token; the token is single use and expires. Certificates, a site CA and mTLS for robots are M7: until then each stream is authenticated with a short-lived EdDSA JWT (at most 5 minutes) that the agent signs with its key and the control plane verifies against the enrolled public key. Deleting a server ends its stream and invalidates its credential.
+- The agent uses TLS to the control plane by default (system roots or a configured CA bundle); plaintext must be enabled explicitly and is for development only. The control plane terminates TLS itself or declares that a load balancer does; staging and production refuse to start otherwise.
+
+**Desired state**
+
+- A site's manifest is canonical JSON (RFC 8785) holding its robots, its deployments and every live revision with the full contract documents, so the site can operate and verify without the cloud. The control plane signs it with Ed25519 and the agent checks it against the key it pinned at enrollment. The agent rejects:
+  - an unknown key or a bad signature;
+  - a manifest for another site;
+  - an older generation.
+- The generation increments exactly when the content digest changes.
+- A revision that robots are running stays in the manifest whatever its phase (for example after a failed re-prepare). Only an activation changes what robots run.
+
+**Commands and operations**
+
+- Commands live in an outbox table and are delivered on the stream. The agent records each command id durably before acting and executes it at most once. A redelivery is acknowledged again together with its last report.
+- Operation reports are persisted and resent after a reconnect; the control plane ignores ones it has already applied.
+- An operation the agent was running when it restarted is reported `AGENT_OPERATION_INTERRUPTED` rather than resumed.
+- Prepare verifies at the site, from the documents the site itself received:
+  - each document's kind and digest;
+  - the revision digest;
+  - the compatibility check.
+
+  Pulling and verifying weights and images arrives with real model workers (M6).
+- Every command is checked against the server's local boundaries (`NEURA_AGENT_ALLOWED_OPERATIONS`, `NEURA_AGENT_ALLOWED_GPU_INDEXES`). An instruction outside them fails with `AGENT_BOUNDARY_DENIED`, and every instruction and decision goes to the local audit log.
+
+**Activation**
+
+1. An activation request reaches the site and waits for local approval. The cloud cannot approve.
+2. On approval, each robot's assignment becomes `{current, next}`, and the gateway serves both revisions for that robot.
+3. Each robot asks the local site API which revision to run and switches at its own task boundary: it finishes the task, closes its session, verifies the new contracts and opens a session for the new revision.
+4. The activation succeeds when every robot runs the new revision. The old revision is then removed and its remaining sessions closed.
+
+A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robots not switching within the activation window (`AGENT_ACTIVATION_TIMED_OUT`, 10 minutes by default) reverts the assignment.
+
+**Offline authorization**
+
+- Offline authorization renews only on verified contact:
+  - a newer signed generation, which can be committed once and so cannot be replayed;
+  - a **contact proof**: the agent sends a random nonce with each status report, and the control plane returns the manifest key's signature over `CONTACT_PROOF_CONTEXT ‖ site_id ‖ 0x00 ‖ nonce`.
+
+  Neither a replayed message nor a stream left open without the control plane behind it can extend authorization, and no clocks are compared across machines.
+- When authorization runs out, the agent stops the data plane and refuses activations until contact returns. It is measured on the server's wall clock so that it survives restarts. A server clock moved backwards extends it; bounding that with monotonic time across restarts is M7 hardening.
+
+**Data plane and local API**
+
+- The agent turns committed state into the gateway configuration and writes it only when it changed. The gateway runs as a supervised subprocess (restarted with backoff) and reloads that configuration on `SIGHUP` without a restart.
+- The local site API (§19.5) and the `neura-agent` CLI provide:
+  - status;
+  - approvals, with approve and refuse;
+  - robot credentials;
+  - robot assignments;
+  - the audit log.
+- Mutations require the local operator credential; only its SHA-256 is configured on the server, and without it local approvals are disabled. Robots authenticate with device tokens.
+
+**Observed state in the control plane**
+
+- A site's `connected` is derived from the age of its last report (90 s), so a control-plane process that crashes while serving a stream cannot leave a site shown connected.
+- Periodic status refreshes `observed_at` but changes the resource version and emits an event only when a fact changes.
+- Every database operation in the site endpoint runs shielded from RPC cancellation, and shutdown waits for streams and their writes before closing the database. A transaction abandoned midway would leak its connection.
+
+**Known limits, scheduled**
+
+- Robot device tokens rather than per-device certificates, and one stream per server (M7).
+- The `connected` stream count is per process; with several control-plane replicas, liveness relies on report age.
 
 ### 17.5 Other connection modes (later, on demand)
 

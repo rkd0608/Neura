@@ -1,0 +1,735 @@
+"""The site agent's decisions (design §13, §16, §17).
+
+Transport-free: the connection module delivers desired state and commands and sends what this class
+puts in ``outbox``; the local API calls ``approve`` and ``refuse``. Every instruction from the cloud
+is checked against local boundaries, recorded in the local audit log, and executed at most once.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import secrets
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from neura.v1 import common_pb2, site_pb2
+from neura_agent.gateway import (
+    GatewayRunner,
+    build_gateway_config,
+    revision_documents,
+    write_gateway_config,
+)
+from neura_agent.identity import Identity
+from neura_agent.settings import AgentSettings
+from neura_agent.state import Activation, AgentState, Assignment, AuditLog, StateStore
+from neura_contracts import (
+    ContractError,
+    ExecutionProfile,
+    ModelArtifact,
+    ReasonCode,
+    RobotProfile,
+    canonical_json,
+    content_digest,
+    parse_document,
+)
+from neura_contracts.site_protocol import (
+    CONTACT_NONCE_BYTES,
+    MANIFEST_API_VERSION,
+    contact_proof_payload,
+)
+from neura_runtime.binding import ExecutionBinding, IncompatibleBindingError
+
+log = logging.getLogger("neura.agent")
+OUTBOX_LIMIT = 1000
+# Nonces awaiting a contact proof; older ones are forgotten (a proof for them no longer counts).
+OUTSTANDING_NONCES = 8
+# Contact time is kept in memory on every proof but written to disk at most this often.
+CONTACT_PERSIST_INTERVAL_S = 60.0
+
+
+class LocalActionError(Exception):
+    """A local API request cannot be carried out. ``code`` explains why."""
+
+    def __init__(self, code: ReasonCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _reason(code: ReasonCode | None, message: str = "") -> common_pb2.Reason:
+    return common_pb2.Reason(code=code.value if code else "", message=message)
+
+
+class AgentCore:
+    def __init__(
+        self,
+        settings: AgentSettings,
+        identity: Identity,
+        gateway: GatewayRunner,
+        *,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self.settings = settings
+        self.identity = identity
+        self.gateway = gateway
+        self._clock = clock
+        self.store = StateStore(settings.state_dir / "state.json")
+        self.audit = AuditLog(settings.state_dir / "audit.jsonl")
+        self.gateway_dir = settings.state_dir / "gateway"
+        self.gateway_config_path: Path = self.gateway_dir / "site.yaml"
+        self.state: AgentState = self.store.load()
+        self.outbox: asyncio.Queue[site_pb2.AgentMessage] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
+        self._manifest_key = Ed25519PublicKey.from_public_bytes(
+            bytes.fromhex(identity.manifest_public_key_hex)
+        )
+        self.gateway_suspended = False
+        self._nonces: list[bytes] = []
+        self._contact_persisted_at: float | None = None
+
+    # --- helpers ------------------------------------------------------------------------------
+
+    def _save(self) -> None:
+        self.store.save(self.state)
+
+    def _send(self, message: site_pb2.AgentMessage) -> None:
+        if self.outbox.full():
+            self.outbox.get_nowait()  # drop the oldest; operation reports are also persisted
+        self.outbox.put_nowait(message)
+
+    def manifest(self) -> dict[str, Any]:
+        return self.state.manifest() or {"robots": [], "deployments": []}
+
+    def robot_names(self) -> dict[str, str]:
+        """control-plane robot id -> site robot name."""
+        return {r["id"]: r["name"] for r in self.manifest().get("robots", [])}
+
+    def note_contact(self) -> None:
+        now = self._clock()
+        self.state.last_contact_unix = now
+        if (
+            self._contact_persisted_at is None
+            or now - self._contact_persisted_at >= CONTACT_PERSIST_INTERVAL_S
+        ):
+            self._contact_persisted_at = now
+            self._save()
+
+    def contact_nonce(self) -> bytes:
+        """A fresh challenge for the control plane to sign (sent with each status report)."""
+        nonce = secrets.token_bytes(CONTACT_NONCE_BYTES)
+        self._nonces = [*self._nonces, nonce][-OUTSTANDING_NONCES:]
+        return nonce
+
+    def on_contact_proof(self, proof: site_pb2.ContactProof) -> bool:
+        """Renew offline authorization if the proof signs a nonce this agent issued."""
+        if (
+            proof.nonce not in self._nonces
+            or proof.signature.key_id != self.identity.manifest_key_id
+        ):
+            return False
+        try:
+            self._manifest_key.verify(
+                proof.signature.value, contact_proof_payload(self.identity.site_id, proof.nonce)
+            )
+        except InvalidSignature:
+            log.warning("contact proof with an invalid signature ignored")
+            return False
+        self._nonces.remove(proof.nonce)
+        self.note_contact()
+        return True
+
+    def offline_remaining_s(self) -> float | None:
+        manifest = self.state.manifest()
+        if manifest is None or self.state.last_contact_unix is None:
+            return None
+        allowed = float(manifest.get("offline_authorization_hours", 0)) * 3600
+        return max(0.0, allowed - (self._clock() - self.state.last_contact_unix))
+
+    def authorization_expired(self) -> bool:
+        remaining = self.offline_remaining_s()
+        return remaining is not None and remaining <= 0
+
+    def _report(
+        self,
+        command_id: str,
+        operation_id: str,
+        state: str,
+        *,
+        reason: ReasonCode | None = None,
+        message: str = "",
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        report = {
+            "command_id": command_id,
+            "operation_id": operation_id,
+            "state": state,
+            "reason": reason.value if reason else "",
+            "message": message,
+            "result": result or {},
+            "at": self._clock(),
+        }
+        self.state.reports[command_id] = report
+        cutoff = self._clock() - 86_400
+        self.state.reports = {k: v for k, v in self.state.reports.items() if v["at"] >= cutoff}
+        self._save()
+        self.audit.write("operation_report", **{k: v for k, v in report.items() if k != "at"})
+        self._send(self.report_message(report))
+
+    @staticmethod
+    def report_message(report: dict[str, Any]) -> site_pb2.AgentMessage:
+        reason = ReasonCode(report["reason"]) if report["reason"] else None
+        return site_pb2.AgentMessage(
+            operation=site_pb2.OperationReport(
+                command_id=report["command_id"],
+                operation_id=report["operation_id"],
+                state=report["state"],
+                reason=_reason(reason),
+                message=report["message"],
+                result_json=canonical_json(report["result"]) if report["result"] else b"",
+            )
+        )
+
+    def pending_reports(self) -> list[site_pb2.AgentMessage]:
+        """Reports to resend after a reconnect; the control plane ignores ones it has applied."""
+        return [
+            self.report_message(r)
+            for r in sorted(self.state.reports.values(), key=lambda r: r["at"])
+        ]
+
+    def recover(self) -> None:
+        """After a restart: fail operations that were running when the agent stopped. Commands run
+        at most once, so an interrupted one is reported rather than resumed; activations awaiting
+        approval or a task boundary are durable and carry on."""
+        for command_id, report in sorted(self.state.reports.items(), key=lambda i: i[1]["at"]):
+            if report["state"] == "Running" and command_id not in self.state.activations:
+                self._report(
+                    command_id,
+                    report["operation_id"],
+                    "Failed",
+                    reason=ReasonCode.AGENT_OPERATION_INTERRUPTED,
+                    message="the site agent restarted while this operation was running",
+                )
+
+    # --- desired state ------------------------------------------------------------------------
+
+    async def on_desired_state(self, desired: site_pb2.DesiredState) -> site_pb2.AgentMessage:
+        def ack(
+            accepted: bool, code: ReasonCode | None = None, message: str = ""
+        ) -> site_pb2.AgentMessage:
+            self.audit.write(
+                "desired_state",
+                generation=int(desired.generation),
+                accepted=accepted,
+                reason=code.value if code else None,
+                detail=message,
+            )
+            return site_pb2.AgentMessage(
+                ack=site_pb2.Acknowledgement(
+                    desired_state_generation=desired.generation,
+                    accepted=accepted,
+                    reason=_reason(code, message),
+                )
+            )
+
+        if desired.signature.key_id != self.identity.manifest_key_id:
+            return ack(False, ReasonCode.AGENT_MANIFEST_SIGNATURE_INVALID, "unknown signing key")
+        try:
+            self._manifest_key.verify(desired.signature.value, desired.manifest)
+        except InvalidSignature:
+            return ack(
+                False, ReasonCode.AGENT_MANIFEST_SIGNATURE_INVALID, "signature does not verify"
+            )
+        try:
+            manifest = json.loads(desired.manifest)
+        except ValueError:
+            return ack(False, ReasonCode.PROTOCOL_MESSAGE_INVALID, "manifest is not JSON")
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("api_version") != MANIFEST_API_VERSION
+            or manifest.get("site_id") != self.identity.site_id
+            or manifest.get("generation") != desired.generation
+        ):
+            return ack(False, ReasonCode.PROTOCOL_MESSAGE_INVALID, "manifest is not for this site")
+        if desired.generation < self.state.manifest_generation:
+            return ack(
+                False,
+                ReasonCode.AGENT_GENERATION_STALE,
+                f"committed {self.state.manifest_generation}",
+            )
+        if (
+            desired.generation == self.state.manifest_generation
+            and self.state.manifest_payload is not None
+        ):
+            return ack(True)
+
+        self.state.manifest_payload = desired.manifest.decode("utf-8")
+        self.state.manifest_signature = desired.signature.value.hex()
+        self.state.manifest_generation = int(desired.generation)
+        self._prune_to_manifest(manifest)
+        # A newer signed generation proves contact as well; it can be committed only once, so a
+        # replay of it extends nothing.
+        self.note_contact()
+        self._save()
+        await self.reconcile()
+        return ack(True)
+
+    def _prune_to_manifest(self, manifest: dict[str, Any]) -> None:
+        names = {r["name"] for r in manifest.get("robots", [])}
+        live = {
+            rev["id"] for d in manifest.get("deployments", []) for rev in d.get("revisions", [])
+        }
+        self.state.prepared = {k: v for k, v in self.state.prepared.items() if k in live}
+        for name in list(self.state.assignments):
+            assignment = self.state.assignments[name]
+            if name not in names:
+                del self.state.assignments[name]
+                continue
+            if assignment.current not in live:
+                assignment.current = None
+            if assignment.next not in live:
+                assignment.next = None
+
+    async def reconcile(self) -> None:
+        """Bring the gateway in line with committed state (start, reload or keep it suspended)."""
+        if self.state.manifest_payload is None:
+            return
+        config = build_gateway_config(self.state, self.settings, self.gateway_dir)
+        changed = write_gateway_config(config, self.gateway_config_path)
+        if self.gateway_suspended:
+            return
+        if not self.gateway.running:
+            await self.gateway.start(self.gateway_config_path)
+        elif changed:
+            await self.gateway.reload()
+
+    # --- commands -----------------------------------------------------------------------------
+
+    async def on_command(self, command: site_pb2.Command) -> None:
+        command_id = command.command_id
+        kind = command.WhichOneof("kind") or ""
+        ack = site_pb2.AgentMessage(
+            ack=site_pb2.Acknowledgement(command_id=command_id, accepted=True)
+        )
+        if command_id in self.state.executed:
+            self._send(ack)  # a redelivery: acknowledge again, never execute twice
+            if command_id in self.state.reports:
+                self._send(self.report_message(self.state.reports[command_id]))
+            return
+        self.state.mark_executed(command_id)
+        self._save()
+        self.audit.write(
+            "command", command_id=command_id, kind=kind, operation_id=command.operation_id
+        )
+        self._send(ack)
+        operation_id = command.operation_id
+        name = {
+            "prepare": "prepare",
+            "request_activation": "request_activation",
+            "rollback": "rollback",
+            "collect_diagnostics": "collect_diagnostics",
+            "cancel": "cancel",
+        }.get(kind)
+        if name is None or name not in self.settings.allowed_operations:
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.AGENT_BOUNDARY_DENIED,
+                message=f"{kind or 'unknown'} is not allowed by this site's boundaries",
+            )
+            return
+        if kind == "prepare":
+            await self._prepare(command_id, operation_id, command.prepare.revision_id)
+        elif kind == "request_activation":
+            self._request_activation(
+                command_id,
+                operation_id,
+                "request_activation",
+                command.request_activation.revision_id,
+                list(command.request_activation.robot_ids),
+            )
+        elif kind == "rollback":
+            self._request_activation(
+                command_id,
+                operation_id,
+                "rollback",
+                command.rollback.to_revision_id,
+                list(command.rollback.robot_ids),
+            )
+        elif kind == "cancel":
+            await self._cancel(command.cancel.operation_id)
+        elif kind == "collect_diagnostics":
+            self._report(command_id, operation_id, "Succeeded", result=self.diagnostics())
+
+    async def _prepare(self, command_id: str, operation_id: str, revision_id: str) -> None:
+        self._report(command_id, operation_id, "Running", message="verifying contracts")
+        manifest = self.manifest()
+        revision = next(
+            (
+                r
+                for d in manifest.get("deployments", [])
+                for r in d.get("revisions", [])
+                if r["id"] == revision_id
+            ),
+            None,
+        )
+        if revision is None:
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.DEPLOYMENT_NOT_ACTIVE,
+                message="the revision is not in this site's committed desired state",
+            )
+            return
+        parsed = {}
+        for role, kind in (
+            ("model_artifact", ModelArtifact),
+            ("robot_profile", RobotProfile),
+            ("execution_profile", ExecutionProfile),
+        ):
+            entry = revision["documents"][role]
+            try:
+                document = parse_document(entry["document"])
+            except ContractError as exc:
+                self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
+                return
+            if not isinstance(document, kind) or document.digest() != entry["digest"]:
+                self._report(
+                    command_id,
+                    operation_id,
+                    "Failed",
+                    reason=ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                    message=f"{role} does not match its declared digest",
+                )
+                return
+            parsed[role] = document
+        expected_digest = content_digest(
+            {
+                "model_artifact": revision["documents"]["model_artifact"]["digest"],
+                "robot_profile": revision["documents"]["robot_profile"]["digest"],
+                "execution_profile": revision["documents"]["execution_profile"]["digest"],
+            }
+        )
+        if expected_digest != revision["revision_digest"]:
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                message="revision digest does not match its documents",
+            )
+            return
+        artifact, robot, profile = (
+            parsed["model_artifact"],
+            parsed["robot_profile"],
+            parsed["execution_profile"],
+        )
+        assert isinstance(artifact, ModelArtifact)  # checked against each role's kind above
+        assert isinstance(robot, RobotProfile)
+        assert isinstance(profile, ExecutionProfile)
+        try:
+            ExecutionBinding(artifact, robot, profile)
+        except IncompatibleBindingError as exc:
+            first = exc.report.issues[0]
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=first.code,
+                message=f"incompatible at this site: {first.message}",
+            )
+            return
+        # Weights and runtime images are pulled and verified here once real model workers exist
+        # (M6); the mock backend needs only the contracts.
+        self.state.prepared[revision_id] = revision["revision_digest"]
+        self._save()
+        await self.reconcile()
+        self._report(
+            command_id,
+            operation_id,
+            "Succeeded",
+            result={"revision_digest": revision["revision_digest"]},
+        )
+
+    def _request_activation(
+        self, command_id: str, operation_id: str, kind: str, revision_id: str, robot_ids: list[str]
+    ) -> None:
+        if self.authorization_expired():
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.AGENT_AUTHORIZATION_EXPIRED,
+                message="offline authorization expired; reconnect the site first",
+            )
+            return
+        if revision_id not in self.state.prepared:
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.DEPLOYMENT_NOT_ACTIVE,
+                message="the revision is not prepared at this site",
+            )
+            return
+        names = self.robot_names()
+        unknown = [r for r in robot_ids if r not in names]
+        if unknown or not robot_ids:
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.PROTOCOL_MESSAGE_INVALID,
+                message=f"robots {unknown} are not at this site",
+            )
+            return
+        self.state.activations[command_id] = Activation(
+            command_id=command_id,
+            operation_id=operation_id,
+            kind=kind,
+            revision_id=revision_id,
+            robot_names=[names[r] for r in robot_ids],
+            requested_at=self._clock(),
+        )
+        self._save()
+        self._report(
+            command_id, operation_id, "Running", message="awaiting local approval at the site"
+        )
+
+    async def _cancel(self, operation_id: str) -> None:
+        for command_id, activation in list(self.state.activations.items()):
+            if activation.operation_id == operation_id:
+                self._revert(activation)
+                del self.state.activations[command_id]
+                self._save()
+                await self.reconcile()
+                self._report(
+                    command_id,
+                    operation_id,
+                    "Cancelled",
+                    message="cancelled from the control plane",
+                )
+
+    def _revert(self, activation: Activation) -> None:
+        for name in activation.robot_names:
+            assignment = self.state.assignments.get(name)
+            if assignment is not None and assignment.next == activation.revision_id:
+                assignment.next = None
+
+    # --- local approval -----------------------------------------------------------------------
+
+    def pending_approvals(self) -> list[Activation]:
+        return sorted(self.state.activations.values(), key=lambda a: a.requested_at)
+
+    async def approve(self, command_id: str, operator: str) -> Activation:
+        activation = self.state.activations.get(command_id)
+        if activation is None:
+            raise LocalActionError(ReasonCode.API_NOT_FOUND, "no such pending activation")
+        if activation.approved_by is not None:
+            return activation
+        if self.authorization_expired():
+            raise LocalActionError(
+                ReasonCode.AGENT_AUTHORIZATION_EXPIRED, "offline authorization expired"
+            )
+        activation.approved_by = operator
+        activation.approved_at = self._clock()
+        for name in activation.robot_names:
+            assignment = self.state.assignments.setdefault(name, Assignment())
+            if assignment.current != activation.revision_id:
+                assignment.next = activation.revision_id
+        self._save()
+        self.audit.write(
+            "approval", command_id=command_id, operator=operator, revision_id=activation.revision_id
+        )
+        await self.reconcile()
+        self._report(
+            command_id,
+            activation.operation_id,
+            "Running",
+            message=f"approved by {operator}; robots switch at their next task boundary",
+        )
+        await self.watch_activations({})
+        return activation
+
+    async def refuse(self, command_id: str, operator: str, note: str = "") -> None:
+        activation = self.state.activations.pop(command_id, None)
+        if activation is None:
+            raise LocalActionError(ReasonCode.API_NOT_FOUND, "no such pending activation")
+        self._revert(activation)
+        self._save()
+        await self.reconcile()
+        self.audit.write("refusal", command_id=command_id, operator=operator, note=note)
+        self._report(
+            command_id,
+            activation.operation_id,
+            "Failed",
+            reason=ReasonCode.AGENT_ACTIVATION_REFUSED,
+            message=f"refused by {operator}" + (f": {note}" if note else ""),
+            result={"refused": True, "refused_by": operator},
+        )
+
+    async def watch_activations(self, gateway_status: dict[str, Any] | None) -> None:
+        """Complete approved activations once every robot runs the new revision; time out others."""
+        running = {
+            s["robot_id"]: s["revision_id"] for s in (gateway_status or {}).get("sessions", [])
+        }
+        ids = {name: rid for rid, name in self.robot_names().items()}
+        for command_id, activation in list(self.state.activations.items()):
+            if activation.approved_at is None:
+                continue
+            done = [
+                n
+                for n in activation.robot_names
+                if running.get(n) == activation.revision_id
+                or (
+                    self.state.assignments.get(n, Assignment()).current == activation.revision_id
+                    and self.state.assignments[n].next is None
+                )
+            ]
+            if len(done) == len(activation.robot_names):
+                for name in activation.robot_names:
+                    assignment = self.state.assignments.setdefault(name, Assignment())
+                    assignment.current, assignment.next = activation.revision_id, None
+                del self.state.activations[command_id]
+                self._save()
+                await self.reconcile()
+                self._report(
+                    command_id,
+                    activation.operation_id,
+                    "Succeeded",
+                    result={
+                        "approved_by": activation.approved_by,
+                        "revision_id": activation.revision_id,
+                        "robot_ids": [ids[n] for n in activation.robot_names if n in ids],
+                    },
+                )
+            elif self._clock() - activation.approved_at > self.settings.activation_timeout_s:
+                self._revert(activation)
+                del self.state.activations[command_id]
+                self._save()
+                await self.reconcile()
+                missing = sorted(set(activation.robot_names) - set(done))
+                self._report(
+                    command_id,
+                    activation.operation_id,
+                    "Failed",
+                    reason=ReasonCode.AGENT_ACTIVATION_TIMED_OUT,
+                    message=f"robots {missing} did not switch in time",
+                )
+
+    # --- periodic work ------------------------------------------------------------------------
+
+    async def enforce_authorization(self) -> None:
+        """Stop serving when offline authorization runs out; resume when contact returns."""
+        if self.authorization_expired():
+            if not self.gateway_suspended:
+                log.error("offline authorization expired: stopping the data plane")
+                self.audit.write("authorization_expired")
+                self.gateway_suspended = True
+                await self.gateway.stop()
+        elif self.gateway_suspended:
+            self.gateway_suspended = False
+            self.audit.write("authorization_restored")
+            await self.reconcile()
+
+    def status_message(self, gateway_status: dict[str, Any] | None) -> site_pb2.AgentMessage:
+        sessions = []
+        faults = []
+        for s in (gateway_status or {}).get("sessions", []):
+            sessions.append(
+                site_pb2.RobotSessionStatus(
+                    session_id=s["session_id"],
+                    robot_name=s["robot_id"],
+                    revision_id=s["revision_id"],
+                    lease_generation=int(s["lease_generation"]),
+                    task_epoch=int(s["task_epoch"]),
+                    state=s.get("robot_state") or "Ready",
+                    reason=common_pb2.Reason(code=s.get("fault_reason", "")),
+                    metrics={
+                        "chunks": float(s.get("chunks", 0)),
+                        "observations": float(s.get("observations", 0)),
+                        "rtt_p99_us": float(s.get("rtt_p99_us", 0)),
+                        "dispatched_actions": float(s.get("dispatched_actions", 0)),
+                    },
+                )
+            )
+            if s.get("fault_reason"):
+                faults.append(
+                    site_pb2.FaultReport(
+                        fault_key=f"{s['session_id']}:{s['task_epoch']}:{s['fault_reason']}",
+                        robot_name=s["robot_id"],
+                        session_id=s["session_id"],
+                        revision_id=s["revision_id"],
+                        reason=common_pb2.Reason(code=s["fault_reason"]),
+                        latched=True,
+                        occurred_at_unix_us=int(self._clock() * 1e6),
+                    )
+                )
+        remaining = self.offline_remaining_s()
+        return site_pb2.AgentMessage(
+            status=site_pb2.SiteStatus(
+                agent_time_us=time.monotonic_ns() // 1000,
+                sessions=sessions,
+                faults=faults,
+                offline_authorization_remaining_s=int(remaining or 0),
+                contact_nonce=self.contact_nonce(),
+            )
+        )
+
+    def telemetry_message(
+        self, gateway_status: dict[str, Any] | None, sequence: int
+    ) -> site_pb2.AgentMessage:
+        points = []
+        for group in (gateway_status or {}).get("groups", {}).values():
+            dispatched = max(1, int(group.get("dispatched_requests", 0)))
+            points.append(
+                site_pb2.MetricPoint(
+                    name="deadline_miss_rate",
+                    value=float(group.get("deadline_misses", 0)) / dispatched,
+                    agent_time_us=time.monotonic_ns() // 1000,
+                )
+            )
+        sessions = len((gateway_status or {}).get("sessions", []))
+        gpus = len(self.settings.allowed_gpu_indexes or []) or 1
+        points.append(
+            site_pb2.MetricPoint(
+                name="robots_per_gpu",
+                value=sessions / gpus,
+                agent_time_us=time.monotonic_ns() // 1000,
+            )
+        )
+        return site_pb2.AgentMessage(
+            telemetry=site_pb2.TelemetryBatch(schema_version="1", sequence=sequence, metrics=points)
+        )
+
+    def diagnostics(self) -> dict[str, Any]:
+        return {
+            "manifest_generation": self.state.manifest_generation,
+            "prepared": sorted(self.state.prepared),
+            "assignments": {
+                k: {"current": v.current, "next": v.next} for k, v in self.state.assignments.items()
+            },
+            "pending_activations": [a.command_id for a in self.pending_approvals()],
+            "gateway_running": self.gateway.running,
+            "gateway_suspended": self.gateway_suspended,
+        }
+
+    def assignment_for(self, robot_name: str) -> dict[str, Any] | None:
+        """What a robot should run: its next revision during a switch, else its current one."""
+        assignment = self.state.assignments.get(robot_name)
+        revision_id = assignment.preferred() if assignment else None
+        if revision_id is None:
+            return None
+        documents = revision_documents(self.manifest(), revision_id)
+        if documents is None:
+            return None
+        return {
+            "revision_id": revision_id,
+            "documents": {role: entry["document"] for role, entry in documents.items()},
+        }

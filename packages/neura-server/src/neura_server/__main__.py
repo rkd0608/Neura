@@ -1,4 +1,4 @@
-"""Entry point: ``neura-gateway --config site.yaml``."""
+"""Entry point: ``neura-gateway --config site.yaml``. SIGHUP reloads devices and deployments."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 from pathlib import Path
 
 from neura_server.config import GatewayConfig
@@ -27,8 +28,22 @@ def main() -> None:
         level=args.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
     server = GatewayServer(GatewayConfig.load(args.config))
+
+    async def run() -> None:
+        loop = asyncio.get_running_loop()
+
+        def reload() -> None:
+            try:
+                server.reload(GatewayConfig.load(args.config))
+            except Exception:
+                logging.getLogger("neura.gateway").exception("reload failed; keeping old config")
+
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(signal.SIGHUP, reload)
+        await server.serve_forever()
+
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(server.serve_forever())
+        asyncio.run(run())
 
 
 if __name__ == "__main__":

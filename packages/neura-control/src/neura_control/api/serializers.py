@@ -7,6 +7,7 @@ from typing import Any
 
 from neura_control.clock import iso, utcnow
 from neura_control.db import models
+from neura_control.services.site_reports import SITE_LIVENESS_S
 
 
 def metadata(
@@ -17,8 +18,11 @@ def metadata(
         "version": str(row.version),
         "created_at": iso(row.created_at),
         "updated_at": iso(row.updated_at),
-        "created_by": row.created_by,
     }
+    # Observed records (sessions, faults) are written by the site, not created by a principal.
+    created_by = getattr(row, "created_by", None)
+    if created_by is not None:
+        data["created_by"] = created_by
     if project_id is not None:
         data["project_id"] = project_id
     if organization_id is not None:
@@ -59,9 +63,15 @@ def project(row: models.Project) -> dict[str, Any]:
 
 def site(row: models.Site) -> dict[str, Any]:
     status = observed_status(row.observed)
+    age = status.get("data_age_seconds")
+    connected = (
+        bool(row.observed.get("connected", False)) and age is not None and age <= SITE_LIVENESS_S
+    )
+    if row.observed.get("connected") and not connected:
+        status["phase"] = "Offline"
     status.update(
         agent_version=row.observed.get("agent_version"),
-        connected=bool(row.observed.get("connected", False)),
+        connected=connected,
         offline_authorization_expires_at=row.observed.get("offline_authorization_expires_at"),
     )
     return {

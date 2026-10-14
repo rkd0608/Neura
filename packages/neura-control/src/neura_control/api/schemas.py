@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from neura_control.ids import ULID_PATTERN
+from neura_contracts.identifiers import ULID_PATTERN
 
 
 class Strict(BaseModel):

@@ -36,6 +36,7 @@ from neura_control.clock import utcnow
 from neura_control.database import database_reachable
 from neura_control.db.engine import create_engine, session_factory
 from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey
+from neura_control.grpc_site import start_agent_server
 from neura_control.problems import (
     ProblemError,
     handle_http_exception,
@@ -45,6 +46,7 @@ from neura_control.problems import (
     problem_response,
 )
 from neura_control.security.oidc import OidcVerifier
+from neura_control.security.signing import ManifestSigner
 from neura_control.services import bootstrap
 from neura_control.settings import ControlPlaneSettings
 
@@ -84,10 +86,14 @@ class RateLimiter:
         return None
 
 
-async def _prune(app: FastAPI, settings: ControlPlaneSettings) -> None:
-    """Drop events past retention, old idempotency records and expired enrollment tokens."""
+async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event) -> None:
+    """Drop events past retention, old idempotency records and expired enrollment tokens.
+    Stopped with ``stop`` rather than cancelled, so a transaction in progress completes."""
     while True:
-        await asyncio.sleep(60)
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=60)
+        if stop.is_set():
+            return
         with contextlib.suppress(Exception):
             async with app.state.sessions.begin() as session:
                 now = utcnow()
@@ -168,13 +174,23 @@ def create_app(
             app.state.oidc = None
         if settings.dev_bootstrap_token:
             await _dev_bootstrap(app, settings)
-        pruner = asyncio.create_task(_prune(app, settings))
+        signer = ManifestSigner(settings.manifest_signing_key)
+        app.state.signer = signer
+        agent_server = None
+        if settings.agent_grpc_listen:
+            agent_server, app.state.site_control, app.state.agent_port = await start_agent_server(
+                app.state.sessions, signer, settings
+            )
+        stop_pruning = asyncio.Event()
+        pruner = asyncio.create_task(_prune(app, settings, stop_pruning))
         try:
             yield
         finally:
-            pruner.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await pruner
+            if agent_server is not None:
+                await agent_server.stop(grace=1.0)
+                await app.state.site_control.close()
+            stop_pruning.set()
+            await pruner
             await engine.dispose()
 
     app = FastAPI(

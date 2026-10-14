@@ -183,6 +183,7 @@ def settings(clean_database: str) -> ControlPlaneSettings:
         events_poll_interval_s=0.05,
         events_keepalive_s=0.2,
         events_max_stream_s=0.5,
+        agent_grpc_listen=None,
     )
 
 

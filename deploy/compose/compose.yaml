@@ -2,9 +2,14 @@
 #
 # - postgres:       control-plane metadata store
 # - control-plane:  management API (cloud side)
-# - site-agent:     agent as it would run on a customer GPU server, dialing out to the control plane
-# - gateway:        site data plane (gateway, scheduler, mock policy worker) on that server
-# - sim-robots:     four simulated arms running the real robot runtime against the gateway
+# - site-agent:     agent as it would run on a customer GPU server: dials out to the control plane,
+#                   supervises the site data plane (gateway, scheduler, mock policy worker) and
+#                   serves the local site API
+# - sim-robots:     four simulated arms running the real robot runtime; each asks the agent which
+#                   revision to run and switches revisions at a task boundary
+#
+# Nothing is configured by hand: `make smoke` onboards a customer through the API, enrolls the
+# agent, prepares and activates a revision, approves it locally and checks the robots run it.
 name: neura-dev
 
 services:
@@ -39,8 +44,14 @@ services:
       # DEVELOPMENT ONLY: a public admin token for the local stack. Generate another with
       # `uv run neura-control dev-token`. Refused outside the development environment.
       NEURA_CONTROL_DEV_BOOTSTRAP_TOKEN: ntk_tok_01M4Y8WAYQCVACJ83FY3EZEDKR_F_4TsgyKux5toXDLnOLpsAvLyWNlDAHK0WMN6dUBIXw
+      # DEVELOPMENT ONLY: a public manifest signing seed. Generate a real one per environment and
+      # keep it in a secret store; sites pin its public key at enrollment.
+      NEURA_CONTROL_MANIFEST_SIGNING_KEY: YuKYhVBPES3lvjs-KJFKdi1VMCeKSHS7O877vb76GQA
+      NEURA_CONTROL_AGENT_GRPC_LISTEN: 0.0.0.0:8081
+      NEURA_CONTROL_AGENT_ENDPOINT: control-plane:8081
     ports:
       - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,28 +64,27 @@ services:
       secrets: [ca_bundle]
     image: neura-agent:dev
     environment:
+      NEURA_AGENT_STATE_DIR: /var/lib/neura/agent
       NEURA_AGENT_CONTROL_PLANE_URL: http://control-plane:8080
       NEURA_AGENT_PROBE_INTERVAL_S: "2"
+      # DEVELOPMENT ONLY: plaintext to the control plane inside the Compose network.
+      NEURA_AGENT_CONTROL_PLANE_INSECURE: "true"
+      NEURA_AGENT_GATEWAY_LISTEN: 0.0.0.0:50051
+      NEURA_AGENT_GATEWAY_STATUS_LISTEN: 0.0.0.0:8091
+      # DEVELOPMENT ONLY: public credentials. The operator token is
+      # "ntop_dev_operator_public_token"; robots use "dev-token-<name>". Real sites issue robot
+      # credentials with `neura-agent robot-token` and keep the operator credential private.
+      NEURA_AGENT_OPERATOR_TOKEN_SHA256: dfa754c6a45087ebcbff56b78b5367a540aa5a1235fda92aea2d96768fde6a04
+      NEURA_AGENT_DEV_ROBOT_TOKENS: '{"robot-0": "dev-token-robot-0", "robot-1": "dev-token-robot-1", "robot-2": "dev-token-robot-2", "robot-3": "dev-token-robot-3"}'
+    volumes:
+      - agent-state:/var/lib/neura
     ports:
       - "127.0.0.1:8090:8090"
+      - "127.0.0.1:50051:50051"
+      - "127.0.0.1:8091:8091"
     depends_on:
       control-plane:
         condition: service_healthy
-
-  gateway:
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
-      target: neura-gateway
-      secrets: [ca_bundle]
-    image: neura-gateway:dev
-    volumes:
-      - ../dev:/srv/neura/deploy/dev:ro
-      - ../../examples:/srv/neura/examples:ro
-      - gateway-state:/var/lib/neura
-    ports:
-      - "127.0.0.1:50051:50051"
-      - "127.0.0.1:8091:8091"
 
   sim-robots:
     build:
@@ -84,21 +94,17 @@ services:
       secrets: [ca_bundle]
     image: neura-sim-robots:dev
     environment:
-      NEURA_SIM_GATEWAY: gateway:50051
+      NEURA_SIM_GATEWAY: site-agent:50051
+      NEURA_SIM_AGENT_URL: http://site-agent:8090
       NEURA_SIM_ROBOTS: "4"
-      NEURA_SIM_REVISION: rev_dev
-      NEURA_SIM_ARTIFACT: examples/contracts/act-so101.artifact.yaml
-      NEURA_SIM_ROBOT_PROFILE: examples/contracts/so101.robot.yaml
-      NEURA_SIM_EXECUTION_PROFILE: examples/contracts/act-so101-30hz.profile.yaml
-    volumes:
-      - ../../examples:/srv/neura/examples:ro
+      NEURA_SIM_TASK_SECONDS: "4"
     depends_on:
-      gateway:
+      site-agent:
         condition: service_healthy
 
 volumes:
   postgres-data:
-  gateway-state:
+  agent-state:
 
 secrets:
   # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.

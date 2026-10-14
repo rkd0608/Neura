@@ -58,6 +58,12 @@ message HeartbeatRequest {
   // Median of the robot's most recent round-trip times. Tracks the current link quickly; used
   // for per-request timing, while rtt_p99_us is used for capacity planning.
   uint64 rtt_recent_us = 5;
+  // The robot runtime's own view, for status reporting only: Ready, Armed, Running, Waiting,
+  // Faulted. The gateway never makes decisions from it.
+  string runtime_state = 6;
+  string fault_reason = 7;
+  uint64 dispatched_actions = 8;
+  uint64 task_epoch = 9;
 }
 
 message HeartbeatResponse {

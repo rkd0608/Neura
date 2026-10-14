@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from neura.v1 import common_pb2, dataplane_pb2
+from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.runtime import RobotRuntime, RuntimeState, SendObservation
 from neura_runtime.session import Outbound, SessionClient, SessionConfig
@@ -42,9 +43,11 @@ def make_core(binding: ExecutionBinding, robots: list[str], **kwargs: Any) -> Ga
 
 
 class Robot:
-    def __init__(self, binding: ExecutionBinding, name: str) -> None:
+    def __init__(self, binding: ExecutionBinding, name: str, revision_id: str = "rev_1") -> None:
         self.runtime = RobotRuntime(binding, FakeController(), FakeSensors(binding))
-        self.client = SessionClient(self.runtime, SessionConfig(robot_id=name, revision_id="rev_1"))
+        self.client = SessionClient(
+            self.runtime, SessionConfig(robot_id=name, revision_id=revision_id)
+        )
         self.name = name
         self.now = R0
 
@@ -273,3 +276,38 @@ def test_mock_policy_outputs_are_in_range(make_binding: Any, model: str) -> None
     robot = binding.action_transform.to_robot(out.astype(np.float64))
     assert binding.action_transform.out_of_range(robot) == []
     assert isinstance(Outbound("stream", dataplane_pb2.RobotMessage()), Outbound)
+
+
+def test_a_robot_may_run_either_revision_during_a_switch(make_binding: Any) -> None:
+    binding = make_binding()
+    core = make_core(binding, ["r1", "r2"])
+    group = next(iter(core.groups.values()))
+    both = [
+        Deployment("rev_1", binding, frozenset({"r1", "r2"})),
+        Deployment("rev_2", binding, frozenset({"r1", "r2"})),
+    ]
+    assert core.replace_deployments(both) == []
+    assert core.allowed_revisions("r1") == ["rev_1", "rev_2"]
+
+    old = Robot(binding, "r1", "rev_1")
+    new = Robot(binding, "r2", "rev_2")
+    assert old.open(core, GW0).WhichOneof("result") == "accepted"
+    assert new.open(core, GW0).WhichOneof("result") == "accepted"
+    assert group is next(iter(core.groups.values()))  # same model and profile: one batch group
+
+    # The switch completes: only rev_2 stays. The rev_1 session is closed, rev_2 keeps running.
+    closed = core.replace_deployments([Deployment("rev_2", binding, frozenset({"r1", "r2"}))])
+    assert len(closed) == 1
+    assert [s.deployment.revision_id for s in core.sessions.values()] == ["rev_2"]
+    again = Robot(binding, "r1", "rev_1").open(core, GW0 + 1 * MS)
+    assert again.WhichOneof("result") == "rejected"
+    assert again.rejected.code == ReasonCode.DEPLOYMENT_NOT_ACTIVE.value
+    assert Robot(binding, "r1", "rev_2").open(core, GW0 + 2 * MS).WhichOneof("result") == "accepted"
+
+
+def test_replacing_deployments_without_a_batch_group_is_refused(make_binding: Any) -> None:
+    binding = make_binding("smolvla")
+    core = make_core(make_binding(), ["r1"])
+    with pytest.raises(ValueError, match="no batch group"):
+        core.replace_deployments([Deployment("rev_x", binding, frozenset({"r1"}))])
+    assert core.allowed_revisions("r1") == ["rev_1"]  # unchanged

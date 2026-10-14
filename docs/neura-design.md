@@ -256,6 +256,23 @@ Session placement is sticky for the lifetime of a task epoch. Rebalancing and fa
 
 Larger installations can adopt Ray Serve / KubeRay underneath the worker layer if it wins on measurement; Neura's gateway, scheduler semantics and robot runtime stay the same above it.
 
+### 9.5 Sharing when robots run different fine-tunes
+
+GPU sharing is Neura's primary bet (§25), and the biggest technical threat to it is that customers often fine-tune a separate checkpoint per cell, task or site. Plain batching (§9.1) then gives nothing, because each robot is its own batch group. Neura needs a sharing strategy for each case, and the sharing economics benchmark (§16, step 0) measures all of them:
+
+| Case | Sharing mechanism | Expected benefit (to be measured) |
+| --- | --- | --- |
+| Same weights on several robots | Batching in one forward pass | Highest |
+| Shared base model with per-robot adapters (e.g. LoRA) | Multi-adapter batching: one base forward pass with per-request adapter weights, as in multi-LoRA LLM serving | High, if customers fine-tune with adapters |
+| Different full fine-tunes of the same architecture | Co-location: several workers on one GPU, time-multiplexed, limited by memory and contention | Moderate; mostly fills idle GPU time between requests |
+| Different architectures | Co-location only | Lowest; sometimes negative |
+
+Product consequences:
+
+- Capacity estimates (§23) always state which case applies.
+- Where adapter-based fine-tuning would let a customer share GPUs, Neura says so and quantifies it. It never requires it.
+- Multi-adapter batching is built only if the benchmark shows it pays for its complexity, and only for adapters whose outputs match unbatched execution within the declared parity tolerance (§2.3).
+
 ---
 
 ## 10. Closing the benchmark-baseline gap
@@ -334,6 +351,7 @@ site/                      # public developer docs site source (§26)
 
 | Step | Delivers | Exit criterion |
 | --- | --- | --- |
+| 0 | **Sharing economics benchmark** (runs alongside steps 1–3; needs one GPU, no robot): SmolVLA and π0-class models with synthetic observations; latency and memory vs batch size; robots per GPU at illustrative timing envelopes (§8); the four sharing cases in §9.5; dedicated baseline (§10) | A report stating robots per GPU shared vs dedicated for each case, and the GPU cost per robot-hour. This is the first evidence for or against the primary bet (§25) |
 | 1 | Schema, contracts, compatibility checks | Contract test suite passes, including rejection cases |
 | 2 | Robot runtime: cursor, merge modes, fences, state machine | Property-based tests prove the invariants in §5–§7 under random interleavings |
 | 3 | Simulated harness: virtual robots, simulated network with delay/loss/partition, mock worker with profiled latency | Full fault suite runs in CI without a GPU |
@@ -632,13 +650,13 @@ A robot company running learned policies today rebuilds the same infrastructure 
 
 | Value | What changes for the customer | How we measure it in a pilot |
 | --- | --- | --- |
+| **Lower compute per robot** (primary bet) | Several robots share a GPU safely, so the customer buys fewer GPUs as the fleet grows | GPU-hours per robot-hour vs the dedicated baseline (§10), including reserve capacity |
 | **Engineering time not spent** | Their autonomy team stops building and maintaining serving and release tooling per robot program | Engineer-hours on deployment and infrastructure before vs during pilot; tickets and incidents owned |
 | **Faster, safer model releases** | New policy versions go from "custom rollout" to staged, evidence-backed activation with rollback | Time from trained checkpoint to running on robots; failed or reverted releases |
 | **Fewer stalls and incidents** | Starvation, stale actions and faults are handled consistently and are visible | Starvation events and deadline misses per robot-hour; intervention rate |
-| **Lower compute per robot** (only where measured) | Several robots share a GPU when the workload allows it | GPU-hours per robot-hour vs the dedicated baseline (§10), including reserve capacity |
 | **Evidence for their own customers** | Deployment, version and fault records they can show to end customers and auditors | Records produced; customer feedback |
 
-Engineering time and release safety are the most reliable value; compute savings depend on the workload and must never be the only claim. Some workloads will not benefit from sharing; we say so and still deliver the operational value, or we decline the deal.
+**Compute savings from safe GPU sharing are the lead value proposition** (decision in §25). The other values are what make sharing safe to adopt and what keep customers once they do. The savings claim is made per workload, only from measurement against the dedicated baseline, and it states which sharing case applies (§9.5). Where a workload does not benefit, we say so before the pilot rather than discovering it during one.
 
 Value equation for each pilot, agreed before it starts:
 
@@ -688,14 +706,29 @@ Not moats: the scheduling algorithm, the transport, the console. Those are table
 
 ---
 
-## 25. What to validate first with customers
+## 25. Bets and what must be validated
 
-1. Do target customers rank infrastructure engineering time and release safety as a real problem with a budget?
-2. Will they run a policy outside their present runtime?
-3. Which measure would they sign a pilot against?
-4. Does the second customer actually reuse the first customer's adapters?
+Decision (October 14, 2026): NucleiLabs bets on **safe GPU sharing across robots, proven per workload, as Neura's lead value**, together with the operational value in §22.
 
-If the answers are no, the strategy changes before more is built.
+### 25.1 Accepted bets
+
+Taken deliberately. Evidence is gathered while building; the build does not wait for it.
+
+| Bet | What would show it is wrong |
+| --- | --- |
+| Sharing GPUs across robots saves meaningful money on real workloads | Step 0 (§16) shows little or no robots-per-GPU gain for SmolVLA- and π0-class models at realistic timing, in all four cases of §9.5 |
+| Target customers (smaller suppliers and integrators) feel the infrastructure pain | Discovery conversations consistently describe it as solved or minor |
+| They will let a vendor onto the action path, on their own servers | Prospects refuse remote execution of their policy under any terms |
+| Neura's releases and fault handling beat what they built in-house | Pilot measures (§22) show no improvement |
+| Adapters and integrations transfer from one customer to the next | The second installation needs mostly custom work |
+
+### 25.2 Must be validated before selling a pilot
+
+| Hypothesis | Why it is not a bet | Confirmed only when |
+| --- | --- | --- |
+| **A budget owner exists and would pay** | Without it there is no business, however good the technology is | A named person with budget authority agrees a paid pilot, a letter of intent, or a funded scoping engagement |
+
+Validation runs alongside the build, starting now: conversations with the target profile (§5 of the blueprint), each recorded with who owns the budget, what the problem costs them today, how they would buy (pilot, annual agreement, integration fee), and the next step they agreed to. Interest without a costly next step does not count.
 
 ---
 
@@ -733,7 +766,7 @@ Rules:
 | **Compatibility** | Two clearly separated tables: **Supported** combinations (empty until the first one passes qualification, and says so) and **Candidates under evaluation** (ACT, SmolVLA, π0-class; ALOHA sim, LIBERO, SO-101 class) | §2 |
 | **Development status** | What exists today, what is in progress, what is under investigation, and what is out of scope, mapped to the build sequence | §16, §27 |
 
-Content that stays internal and is never published: customer targets, pricing, defensibility and positioning (§24), validation questions (§25), and internal SLO targets (§21) until they become contractual SLAs.
+Content that stays internal and is never published: customer targets, pricing, defensibility and positioning (§24), bets and validation (§25), and internal SLO targets (§21) until they become contractual SLAs.
 
 ### 26.4 Pages added as implementation progresses
 

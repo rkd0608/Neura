@@ -1,0 +1,53 @@
+"""Fixtures shared by every package's tests: the example contracts as live objects."""
+
+from __future__ import annotations
+
+import copy
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+EXAMPLES = Path(__file__).resolve().parent / "examples" / "contracts"
+
+
+def example_data(name: str) -> dict[str, Any]:
+    data = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+BindingFactory = Callable[..., Any]
+
+
+@pytest.fixture
+def make_binding() -> BindingFactory:
+    """Build an ExecutionBinding from the ACT (default) or SmolVLA example, with optional edits.
+
+    ``edit(artifact, robot, profile)`` mutates the raw dicts before parsing; the profile is
+    rebound to the edited documents' digests.
+    """
+    from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
+    from neura_runtime.binding import ExecutionBinding
+
+    def factory(
+        model: str = "act",
+        edit: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], object] | None = None,
+    ) -> ExecutionBinding:
+        artifact = copy.deepcopy(example_data(f"{model}-so101.artifact.yaml"))
+        robot = copy.deepcopy(example_data("so101.robot.yaml"))
+        profile = copy.deepcopy(example_data(f"{model}-so101-30hz.profile.yaml"))
+        if edit is not None:
+            edit(artifact, robot, profile)
+        a = parse_document(artifact)
+        r = parse_document(robot)
+        assert isinstance(a, ModelArtifact)
+        assert isinstance(r, RobotProfile)
+        profile["spec"]["binding"] = {"model_artifact": a.digest(), "robot_profile": r.digest()}
+        p = parse_document(profile)
+        assert isinstance(p, ExecutionProfile)
+        return ExecutionBinding(a, r, p)
+
+    return factory

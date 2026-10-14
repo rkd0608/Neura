@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation) implemented, M2 onward not yet built · October 14, 2026
+Status: design in effect; M1 (foundation) and M2 (data plane core) implemented, M3 onward not yet built · October 14, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -231,6 +231,11 @@ Machines never subtract each other's timestamps.
 
 Refill rule: the robot requests a new chunk when `queued_actions × control_period ≤ p99(round trip) + p99(scheduler wait at admitted load) + margin`. If the admitted load cannot keep this inequality, the session must be **rejected at admission** rather than accepted and starved later.
 
+Two RTT figures, both measured on the robot clock over a sliding time window (10 s by default) and sent with every heartbeat (§11):
+
+- **p99 RTT** for capacity planning (admission), so planning stays conservative while a recent spike is in the window.
+- **Recent RTT** (median of the last five samples) for per-request bounds at the gateway, so serving recovers as soon as the link does. *Implementation finding (M2):* using a long-window p99 for per-request bounds made a robot unservable for about a minute after a single 0.7 s delay spike, because every request was judged too old on arrival. The robot's own acceptance check remains the authority on freshness.
+
 *Illustrative* simulation envelope to start with: 30 Hz and 50 Hz control; chunks of 50 (SmolVLA) and 100 (ACT); LAN RTT p99 of 2–10 ms; inference p50 of 10–150 ms depending on model and batch size. Real values come from profiling.
 
 ---
@@ -255,6 +260,19 @@ FIFO and round robin ship as baseline schedulers selectable by config, so every 
 ### 9.3 Admission control
 
 A session is admitted to a group only if the profiled latency at the resulting concurrency still satisfies every admitted session's refill inequality (§8), with configured reserve capacity and memory headroom. Admission is where overload is refused. There are no growing queues.
+
+The implemented check (M2) models the worst case: every session requests at once, one non-preemptible batch is already running, and sessions are served in deadline order in batches of at most `max_batch`. For each session it requires:
+
+1. wait before dispatch + uplink ≤ the profile's maximum observation age at dispatch;
+2. completion + link ≤ the maximum observation age at acceptance;
+3. completion + link ≤ the starvation budget;
+
+plus average utilization ≤ `1 − reserve` and memory headroom.
+
+*Implementation finding (M2), important for the GPU-sharing bet (§25):* with the example's illustrative 100 ms dispatch-freshness limit and 45 ms batches, condition 1 caps one worker at about one batch of sessions (8), well below its throughput limit. Starvation budgets were never the binding constraint. Synchronized requests are realistic: robots that start together stay in phase. Two levers can raise safe capacity, and both belong in the M6 benchmarks:
+
+- **request phasing:** spreading sessions' refill times so bursts do not align;
+- **workload-specific freshness limits:** qualified per execution profile.
 
 ### 9.4 Scale axes
 
@@ -353,9 +371,9 @@ packages/
   neura-proto/             # generated protobuf/gRPC bindings, import `neura.v1` (open) (M1)
   neura-control/           # control plane service (proprietary) (M1 skeleton, M3)
   neura-agent/             # site agent (proprietary) (M1 skeleton, M4)
-  neura-runtime/           # robot runtime: merge, fencing, state machine (open) (M2)
-  neura-server/            # gateway, scheduler, workers, admission (proprietary) (M2)
-  neura-sim/               # simulated robots, network and GPU models (M2)
+  neura-runtime/           # robot runtime, session client, gRPC client (open) (M2)
+  neura-server/            # gateway, leases, scheduler, admission, workers (proprietary) (M2)
+  neura-sim/               # simulated arms and networks, deterministic site simulator (M2)
   neura-adapters/          # ACT, SmolVLA, π0 adapters (open) (M6)
   neura-sdk/               # Python client generated from the OpenAPI spec (open) (M3)
 console/                   # web console, TypeScript (proprietary) (M5)
@@ -397,7 +415,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | Milestone | Delivers | Done when |
 | --- | --- | --- |
 | **M1. Foundation** ✅ | Monorepo and tooling (uv, ruff, mypy strict, pytest), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library with RFC 8785 digests and CLI (§4), control-plane and site-agent service skeletons, local dev stack in Docker Compose (Postgres, control plane, site agent). Console tooling (pnpm) moves to M5; simulated robots join the stack in M2 | `make dev` brings up the whole stack; `make smoke` verifies it end to end; schema, contract and compatibility tests pass in CI |
-| **M2. Data plane core** | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7) | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker |
+| **M2. Data plane core** ✅ | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7). Sans-IO cores shared by a deterministic simulator (every node on its own clock) and the real gRPC adapters; gateway and simulated robots in the dev stack | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker, in simulation and over gRPC |
 | **M3. Control plane** | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20) | API conformance tests against the OpenAPI spec; idempotency, concurrency and audit tests pass |
 | **M4. Site agent** | Enrollment with one-time tokens and on-host keys, preflight, outbound stream, signed manifest reconciliation, artifact verification, local boundaries, local site console API (§17, §19.5) | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage |
 | **M5. Web console** | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19) | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests |

@@ -3,8 +3,8 @@
 # - postgres:       control-plane metadata store
 # - control-plane:  management API (cloud side)
 # - site-agent:     agent as it would run on a customer GPU server, dialing out to the control plane
-#
-# Simulated robots join the stack in milestone M2.
+# - gateway:        site data plane (gateway, scheduler, mock policy worker) on that server
+# - sim-robots:     four simulated arms running the real robot runtime against the gateway
 name: neura-dev
 
 services:
@@ -56,8 +56,44 @@ services:
       control-plane:
         condition: service_healthy
 
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: neura-gateway
+      secrets: [ca_bundle]
+    image: neura-gateway:dev
+    volumes:
+      - ../dev:/srv/neura/deploy/dev:ro
+      - ../../examples:/srv/neura/examples:ro
+      - gateway-state:/var/lib/neura
+    ports:
+      - "127.0.0.1:50051:50051"
+      - "127.0.0.1:8091:8091"
+
+  sim-robots:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: neura-sim-robots
+      secrets: [ca_bundle]
+    image: neura-sim-robots:dev
+    environment:
+      NEURA_SIM_GATEWAY: gateway:50051
+      NEURA_SIM_ROBOTS: "4"
+      NEURA_SIM_REVISION: rev_dev
+      NEURA_SIM_ARTIFACT: examples/contracts/act-so101.artifact.yaml
+      NEURA_SIM_ROBOT_PROFILE: examples/contracts/so101.robot.yaml
+      NEURA_SIM_EXECUTION_PROFILE: examples/contracts/act-so101-30hz.profile.yaml
+    volumes:
+      - ../../examples:/srv/neura/examples:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+
 volumes:
   postgres-data:
+  gateway-state:
 
 secrets:
   # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.

@@ -192,6 +192,16 @@ codes:
     severity: error
     retryable: false
     message: The requested deployment revision is not active at this site.
+  - code: SESSION_UNKNOWN
+    area: gateway
+    severity: error
+    retryable: false
+    message: The session does not exist or has been closed.
+  - code: SESSION_EPOCH_STALE
+    area: gateway
+    severity: info
+    retryable: false
+    message: The message carries a task epoch older than one the robot already announced.
 
   # ---------------------------------------------------------------------------
   # Scheduler and workers (design §9)
@@ -221,6 +231,11 @@ codes:
     severity: error
     retryable: false
     message: The policy worker ran out of GPU memory.
+  - code: WORKER_UNAVAILABLE
+    area: worker
+    severity: warning
+    retryable: true
+    message: No policy worker is available for this deployment.
   - code: WORKER_OUTPUT_INVALID
     area: worker
     severity: error
@@ -250,6 +265,31 @@ codes:
     severity: info
     retryable: false
     message: The chunk belongs to a different task epoch.
+  - code: CHUNK_NOT_CONTIGUOUS
+    area: runtime
+    severity: error
+    retryable: false
+    message: The chunk would leave a gap between queued actions and its first action.
+  - code: CHUNK_INTEGRITY_FAILED
+    area: runtime
+    severity: error
+    retryable: false
+    message: The chunk's payload digest, dtype or shape does not match its declaration.
+  - code: CHUNK_UNEXPECTED
+    area: runtime
+    severity: info
+    retryable: false
+    message: The chunk answers a request that is no longer outstanding.
+  - code: REQUEST_TIMED_OUT
+    area: runtime
+    severity: warning
+    retryable: true
+    message: No response arrived within the request timeout; the request was abandoned.
+  - code: OBSERVATION_INCOMPLETE
+    area: runtime
+    severity: warning
+    retryable: true
+    message: A required sensor input was missing or too old, so no observation was sent.
   - code: CHUNK_REVISION_MISMATCH
     area: runtime
     severity: error

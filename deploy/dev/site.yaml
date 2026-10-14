@@ -1,0 +1,31 @@
+# Development site configuration for the local Compose stack (`make dev`).
+# DEVELOPMENT ONLY: the device tokens are public ("dev-token-<robot_id>"). Real sites enroll
+# devices with per-device credentials (milestone M4/M7).
+listen: 0.0.0.0:50051
+status_listen: 0.0.0.0:8091
+lease_ttl_ms: 2000
+lease_store: /var/lib/neura/leases.db
+devices:
+  - robot_id: robot-0
+    token_sha256: ce1f175f45a76404bf4ac423f1d39fc52ba3f6372f64a9b72b3173ccd76dc406
+  - robot_id: robot-1
+    token_sha256: 55ea906da05a8a0c013b10dc59dca788b43238d24da78b58103d982ccaf5126b
+  - robot_id: robot-2
+    token_sha256: e3558090eea3cecac83ec5d11ff28e4d2826e0d7ef4ec0c0421372852f83b4ec
+  - robot_id: robot-3
+    token_sha256: 8ac2624dbd772e6776461468d6a473a1eebf62aa95b310dda10f26f51c9fea06
+deployments:
+  - revision_id: rev_dev
+    artifact: ../../examples/contracts/act-so101.artifact.yaml
+    robot_profile: ../../examples/contracts/so101.robot.yaml
+    execution_profile: ../../examples/contracts/act-so101-30hz.profile.yaml
+    robots: [robot-0, robot-1, robot-2, robot-3]
+serving:
+  backend: mock
+  simulate_latency: true
+  policy: deadline_fairness
+  max_batch: 8
+  reserve_fraction: 0.2
+  profile:
+    - {batch_size: 1, p50_ms: 18, p99_ms: 25, memory_mib: 900}
+    - {batch_size: 8, p50_ms: 32, p99_ms: 45, memory_mib: 1400}

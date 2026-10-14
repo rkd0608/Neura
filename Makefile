@@ -51,10 +51,11 @@ test: ## Run the test suite
 check: lint typecheck check-generated test ## Everything CI runs, except the dev-stack smoke test
 
 .PHONY: dev
-dev: ## Start the local stack (Postgres, control plane, site agent)
+dev: ## Start the local stack (Postgres, control plane, agent, gateway, simulated robots)
 	$(COMPOSE) up --build --detach --wait
 	@echo "control plane: http://127.0.0.1:8080/v1/meta"
 	@echo "site agent:    http://127.0.0.1:8090/v1/local/status"
+	@echo "data plane:    http://127.0.0.1:8091/v1/local/dataplane"
 
 .PHONY: dev-down
 dev-down: ## Stop the local stack and delete its data

@@ -45,14 +45,18 @@ class SessionAccepted(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., lease_ttl_us: _Optional[int] = ..., max_message_bytes: _Optional[int] = ...) -> None: ...
 
 class HeartbeatRequest(_message.Message):
-    __slots__ = ("session_id", "lease_generation", "robot_send_time_us")
+    __slots__ = ("session_id", "lease_generation", "robot_send_time_us", "rtt_p99_us", "rtt_recent_us")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ROBOT_SEND_TIME_US_FIELD_NUMBER: _ClassVar[int]
+    RTT_P99_US_FIELD_NUMBER: _ClassVar[int]
+    RTT_RECENT_US_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     lease_generation: int
     robot_send_time_us: int
-    def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., robot_send_time_us: _Optional[int] = ...) -> None: ...
+    rtt_p99_us: int
+    rtt_recent_us: int
+    def __init__(self, session_id: _Optional[str] = ..., lease_generation: _Optional[int] = ..., robot_send_time_us: _Optional[int] = ..., rtt_p99_us: _Optional[int] = ..., rtt_recent_us: _Optional[int] = ...) -> None: ...
 
 class HeartbeatResponse(_message.Message):
     __slots__ = ("ack", "rejected")
@@ -131,7 +135,7 @@ class GatewayMessage(_message.Message):
     def __init__(self, action_chunk: _Optional[_Union[ActionChunk, _Mapping]] = ..., rejected: _Optional[_Union[RequestRejected, _Mapping]] = ...) -> None: ...
 
 class Observation(_message.Message):
-    __slots__ = ("envelope", "obs_cursor", "queued_actions", "budget_us", "capture_time_us", "state", "images", "instruction", "frozen_prefix")
+    __slots__ = ("envelope", "anchor_index", "queued_actions", "budget_us", "capture_time_us", "state", "images", "instruction", "frozen_prefix")
     class StateEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -140,7 +144,7 @@ class Observation(_message.Message):
         value: _common_pb2.Tensor
         def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ...) -> None: ...
     ENVELOPE_FIELD_NUMBER: _ClassVar[int]
-    OBS_CURSOR_FIELD_NUMBER: _ClassVar[int]
+    ANCHOR_INDEX_FIELD_NUMBER: _ClassVar[int]
     QUEUED_ACTIONS_FIELD_NUMBER: _ClassVar[int]
     BUDGET_US_FIELD_NUMBER: _ClassVar[int]
     CAPTURE_TIME_US_FIELD_NUMBER: _ClassVar[int]
@@ -149,7 +153,7 @@ class Observation(_message.Message):
     INSTRUCTION_FIELD_NUMBER: _ClassVar[int]
     FROZEN_PREFIX_FIELD_NUMBER: _ClassVar[int]
     envelope: _common_pb2.Envelope
-    obs_cursor: int
+    anchor_index: int
     queued_actions: int
     budget_us: int
     capture_time_us: int
@@ -157,7 +161,7 @@ class Observation(_message.Message):
     images: _containers.RepeatedCompositeFieldContainer[_common_pb2.Image]
     instruction: str
     frozen_prefix: _common_pb2.Tensor
-    def __init__(self, envelope: _Optional[_Union[_common_pb2.Envelope, _Mapping]] = ..., obs_cursor: _Optional[int] = ..., queued_actions: _Optional[int] = ..., budget_us: _Optional[int] = ..., capture_time_us: _Optional[int] = ..., state: _Optional[_Mapping[str, _common_pb2.Tensor]] = ..., images: _Optional[_Iterable[_Union[_common_pb2.Image, _Mapping]]] = ..., instruction: _Optional[str] = ..., frozen_prefix: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ...) -> None: ...
+    def __init__(self, envelope: _Optional[_Union[_common_pb2.Envelope, _Mapping]] = ..., anchor_index: _Optional[int] = ..., queued_actions: _Optional[int] = ..., budget_us: _Optional[int] = ..., capture_time_us: _Optional[int] = ..., state: _Optional[_Mapping[str, _common_pb2.Tensor]] = ..., images: _Optional[_Iterable[_Union[_common_pb2.Image, _Mapping]]] = ..., instruction: _Optional[str] = ..., frozen_prefix: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ...) -> None: ...
 
 class ActionChunk(_message.Message):
     __slots__ = ("envelope", "start_index", "actions", "actions_digest", "trace_id")

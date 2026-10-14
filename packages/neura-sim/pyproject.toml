@@ -1,0 +1,21 @@
+[project]
+name = "neura-sim"
+version = "0.1.0.dev0"
+description = "Neura simulation: simulated arms, sensors, networks and a deterministic site simulator."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-proto",
+    "neura-runtime",
+    "neura-server",
+    "numpy>=2.2",
+    "grpcio>=1.84,<2",
+]
+
+[project.scripts]
+neura-sim-robots = "neura_sim.grpc_robots:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

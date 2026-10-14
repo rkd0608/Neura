@@ -26,6 +26,9 @@ COPY packages/neura-contracts/pyproject.toml packages/neura-contracts/README.md 
 COPY packages/neura-proto/pyproject.toml packages/neura-proto/README.md packages/neura-proto/
 COPY packages/neura-control/pyproject.toml packages/neura-control/README.md packages/neura-control/
 COPY packages/neura-agent/pyproject.toml packages/neura-agent/README.md packages/neura-agent/
+COPY packages/neura-runtime/pyproject.toml packages/neura-runtime/README.md packages/neura-runtime/
+COPY packages/neura-server/pyproject.toml packages/neura-server/README.md packages/neura-server/
+COPY packages/neura-sim/pyproject.toml packages/neura-sim/README.md packages/neura-sim/
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-install-workspace
@@ -35,7 +38,8 @@ RUN --mount=type=secret,id=ca_bundle,required=false \
     uv sync --frozen --no-dev --all-packages --no-editable
 
 FROM ${PYTHON_IMAGE} AS runtime
-RUN useradd --uid 10001 --user-group --no-create-home --home-dir /app --shell /usr/sbin/nologin neura
+RUN useradd --uid 10001 --user-group --no-create-home --home-dir /app --shell /usr/sbin/nologin neura \
+    && mkdir -p /var/lib/neura && chown neura:neura /var/lib/neura
 COPY --from=build /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -58,3 +62,14 @@ EXPOSE 8090
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2); sys.exit(0)"]
 CMD ["neura-agent"]
+
+FROM runtime AS neura-gateway
+ENV NEURA_GATEWAY_CONFIG=/srv/neura/deploy/dev/site.yaml
+EXPOSE 50051 8091
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+    CMD ["python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2); sys.exit(0)"]
+CMD ["neura-gateway"]
+
+FROM runtime AS neura-sim-robots
+WORKDIR /srv/neura
+CMD ["neura-sim-robots"]

@@ -26,7 +26,7 @@ _sym_db = _symbol_database.Default()
 from neura.v1 import common_pb2 as neura_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18neura/v1/dataplane.proto\x12\x08neura.v1\x1a\x15neura/v1/common.proto\"\xc9\x01\n\x12OpenSessionRequest\x12\x33\n\x10protocol_version\x18\x01 \x01(\x0e\x32\x19.neura.v1.ProtocolVersion\x12\x10\n\x08robot_id\x18\x02 \x01(\t\x12\x13\n\x0brevision_id\x18\x03 \x01(\t\x12\x17\n\x0f\x61rtifact_digest\x18\x04 \x01(\t\x12 \n\x18\x65xecution_profile_digest\x18\x05 \x01(\t\x12\x1c\n\x14robot_profile_digest\x18\x06 \x01(\t\"t\n\x13OpenSessionResponse\x12-\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x0b\x32\x19.neura.v1.SessionAcceptedH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\"p\n\x0fSessionAccepted\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10lease_generation\x18\x02 \x01(\x04\x12\x14\n\x0clease_ttl_us\x18\x03 \x01(\x04\x12\x19\n\x11max_message_bytes\x18\x04 \x01(\r\"\\\n\x10HeartbeatRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10lease_generation\x18\x02 \x01(\x04\x12\x1a\n\x12robot_send_time_us\x18\x03 \x01(\x04\"j\n\x11HeartbeatResponse\x12%\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x16.neura.v1.HeartbeatAckH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\"F\n\x0cHeartbeatAck\x12\x1a\n\x12robot_send_time_us\x18\x01 \x01(\x04\x12\x1a\n\x12lease_remaining_us\x18\x02 \x01(\x04\"\xc2\x01\n\x0e\x43ontrolRequest\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x31\n\x0e\x65poch_advanced\x18\x02 \x01(\x0b\x32\x17.neura.v1.EpochAdvancedH\x00\x12*\n\ninvalidate\x18\x03 \x01(\x0b\x32\x14.neura.v1.InvalidateH\x00\x12 \n\x05\x63lose\x18\x04 \x01(\x0b\x32\x0f.neura.v1.CloseH\x00\x42\t\n\x07\x63ommand\"H\n\rEpochAdvanced\x12\x16\n\x0eprevious_epoch\x18\x01 \x01(\x04\x12\x1f\n\x05\x63\x61use\x18\x02 \x01(\x0b\x32\x10.neura.v1.Reason\"-\n\nInvalidate\x12\x1f\n\x05\x63\x61use\x18\x01 \x01(\x0b\x32\x10.neura.v1.Reason\"(\n\x05\x43lose\x12\x1f\n\x05\x63\x61use\x18\x01 \x01(\x0b\x32\x10.neura.v1.Reason\"f\n\x0f\x43ontrolResponse\x12#\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x14.neura.v1.ControlAckH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\" \n\nControlAck\x12\x12\n\ntask_epoch\x18\x01 \x01(\x04\"D\n\x0cRobotMessage\x12,\n\x0bobservation\x18\x01 \x01(\x0b\x32\x15.neura.v1.ObservationH\x00\x42\x06\n\x04\x62ody\"v\n\x0eGatewayMessage\x12-\n\x0c\x61\x63tion_chunk\x18\x01 \x01(\x0b\x32\x15.neura.v1.ActionChunkH\x00\x12-\n\x08rejected\x18\x02 \x01(\x0b\x32\x19.neura.v1.RequestRejectedH\x00\x42\x06\n\x04\x62ody\"\xdb\x02\n\x0bObservation\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x12\n\nobs_cursor\x18\x02 \x01(\x04\x12\x16\n\x0equeued_actions\x18\x03 \x01(\r\x12\x11\n\tbudget_us\x18\x04 \x01(\x04\x12\x17\n\x0f\x63\x61pture_time_us\x18\x05 \x01(\x04\x12/\n\x05state\x18\x06 \x03(\x0b\x32 .neura.v1.Observation.StateEntry\x12\x1f\n\x06images\x18\x07 \x03(\x0b\x32\x0f.neura.v1.Image\x12\x13\n\x0binstruction\x18\x08 \x01(\t\x12\'\n\rfrozen_prefix\x18\t \x01(\x0b\x32\x10.neura.v1.Tensor\x1a>\n\nStateEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x1f\n\x05value\x18\x02 \x01(\x0b\x32\x10.neura.v1.Tensor:\x02\x38\x01\"\xae\x01\n\x0b\x41\x63tionChunk\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x13\n\x0bstart_index\x18\x02 \x01(\x04\x12!\n\x07\x61\x63tions\x18\x03 \x01(\x0b\x32\x10.neura.v1.Tensor\x12/\n\x0e\x61\x63tions_digest\x18\x04 \x01(\x0b\x32\x17.neura.v1.PayloadDigest\x12\x10\n\x08trace_id\x18\x05 \x01(\t\"Y\n\x0fRequestRejected\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12 \n\x06reason\x18\x02 \x01(\x0b\x32\x10.neura.v1.Reason2\xa0\x02\n\x0cRobotGateway\x12J\n\x0bOpenSession\x12\x1c.neura.v1.OpenSessionRequest\x1a\x1d.neura.v1.OpenSessionResponse\x12\x44\n\tHeartbeat\x12\x1a.neura.v1.HeartbeatRequest\x1a\x1b.neura.v1.HeartbeatResponse\x12>\n\x07\x43ontrol\x12\x18.neura.v1.ControlRequest\x1a\x19.neura.v1.ControlResponse\x12>\n\x06Stream\x12\x16.neura.v1.RobotMessage\x1a\x18.neura.v1.GatewayMessage(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18neura/v1/dataplane.proto\x12\x08neura.v1\x1a\x15neura/v1/common.proto\"\xc9\x01\n\x12OpenSessionRequest\x12\x33\n\x10protocol_version\x18\x01 \x01(\x0e\x32\x19.neura.v1.ProtocolVersion\x12\x10\n\x08robot_id\x18\x02 \x01(\t\x12\x13\n\x0brevision_id\x18\x03 \x01(\t\x12\x17\n\x0f\x61rtifact_digest\x18\x04 \x01(\t\x12 \n\x18\x65xecution_profile_digest\x18\x05 \x01(\t\x12\x1c\n\x14robot_profile_digest\x18\x06 \x01(\t\"t\n\x13OpenSessionResponse\x12-\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x0b\x32\x19.neura.v1.SessionAcceptedH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\"p\n\x0fSessionAccepted\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10lease_generation\x18\x02 \x01(\x04\x12\x14\n\x0clease_ttl_us\x18\x03 \x01(\x04\x12\x19\n\x11max_message_bytes\x18\x04 \x01(\r\"\x87\x01\n\x10HeartbeatRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10lease_generation\x18\x02 \x01(\x04\x12\x1a\n\x12robot_send_time_us\x18\x03 \x01(\x04\x12\x12\n\nrtt_p99_us\x18\x04 \x01(\x04\x12\x15\n\rrtt_recent_us\x18\x05 \x01(\x04\"j\n\x11HeartbeatResponse\x12%\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x16.neura.v1.HeartbeatAckH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\"F\n\x0cHeartbeatAck\x12\x1a\n\x12robot_send_time_us\x18\x01 \x01(\x04\x12\x1a\n\x12lease_remaining_us\x18\x02 \x01(\x04\"\xc2\x01\n\x0e\x43ontrolRequest\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x31\n\x0e\x65poch_advanced\x18\x02 \x01(\x0b\x32\x17.neura.v1.EpochAdvancedH\x00\x12*\n\ninvalidate\x18\x03 \x01(\x0b\x32\x14.neura.v1.InvalidateH\x00\x12 \n\x05\x63lose\x18\x04 \x01(\x0b\x32\x0f.neura.v1.CloseH\x00\x42\t\n\x07\x63ommand\"H\n\rEpochAdvanced\x12\x16\n\x0eprevious_epoch\x18\x01 \x01(\x04\x12\x1f\n\x05\x63\x61use\x18\x02 \x01(\x0b\x32\x10.neura.v1.Reason\"-\n\nInvalidate\x12\x1f\n\x05\x63\x61use\x18\x01 \x01(\x0b\x32\x10.neura.v1.Reason\"(\n\x05\x43lose\x12\x1f\n\x05\x63\x61use\x18\x01 \x01(\x0b\x32\x10.neura.v1.Reason\"f\n\x0f\x43ontrolResponse\x12#\n\x03\x61\x63k\x18\x01 \x01(\x0b\x32\x14.neura.v1.ControlAckH\x00\x12$\n\x08rejected\x18\x02 \x01(\x0b\x32\x10.neura.v1.ReasonH\x00\x42\x08\n\x06result\" \n\nControlAck\x12\x12\n\ntask_epoch\x18\x01 \x01(\x04\"D\n\x0cRobotMessage\x12,\n\x0bobservation\x18\x01 \x01(\x0b\x32\x15.neura.v1.ObservationH\x00\x42\x06\n\x04\x62ody\"v\n\x0eGatewayMessage\x12-\n\x0c\x61\x63tion_chunk\x18\x01 \x01(\x0b\x32\x15.neura.v1.ActionChunkH\x00\x12-\n\x08rejected\x18\x02 \x01(\x0b\x32\x19.neura.v1.RequestRejectedH\x00\x42\x06\n\x04\x62ody\"\xdd\x02\n\x0bObservation\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x14\n\x0c\x61nchor_index\x18\x02 \x01(\x04\x12\x16\n\x0equeued_actions\x18\x03 \x01(\r\x12\x11\n\tbudget_us\x18\x04 \x01(\x04\x12\x17\n\x0f\x63\x61pture_time_us\x18\x05 \x01(\x04\x12/\n\x05state\x18\x06 \x03(\x0b\x32 .neura.v1.Observation.StateEntry\x12\x1f\n\x06images\x18\x07 \x03(\x0b\x32\x0f.neura.v1.Image\x12\x13\n\x0binstruction\x18\x08 \x01(\t\x12\'\n\rfrozen_prefix\x18\t \x01(\x0b\x32\x10.neura.v1.Tensor\x1a>\n\nStateEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x1f\n\x05value\x18\x02 \x01(\x0b\x32\x10.neura.v1.Tensor:\x02\x38\x01\"\xae\x01\n\x0b\x41\x63tionChunk\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12\x13\n\x0bstart_index\x18\x02 \x01(\x04\x12!\n\x07\x61\x63tions\x18\x03 \x01(\x0b\x32\x10.neura.v1.Tensor\x12/\n\x0e\x61\x63tions_digest\x18\x04 \x01(\x0b\x32\x17.neura.v1.PayloadDigest\x12\x10\n\x08trace_id\x18\x05 \x01(\t\"Y\n\x0fRequestRejected\x12$\n\x08\x65nvelope\x18\x01 \x01(\x0b\x32\x12.neura.v1.Envelope\x12 \n\x06reason\x18\x02 \x01(\x0b\x32\x10.neura.v1.Reason2\xa0\x02\n\x0cRobotGateway\x12J\n\x0bOpenSession\x12\x1c.neura.v1.OpenSessionRequest\x1a\x1d.neura.v1.OpenSessionResponse\x12\x44\n\tHeartbeat\x12\x1a.neura.v1.HeartbeatRequest\x1a\x1b.neura.v1.HeartbeatResponse\x12>\n\x07\x43ontrol\x12\x18.neura.v1.ControlRequest\x1a\x19.neura.v1.ControlResponse\x12>\n\x06Stream\x12\x16.neura.v1.RobotMessage\x1a\x18.neura.v1.GatewayMessage(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,36 +41,36 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_OPENSESSIONRESPONSE']._serialized_end=381
   _globals['_SESSIONACCEPTED']._serialized_start=383
   _globals['_SESSIONACCEPTED']._serialized_end=495
-  _globals['_HEARTBEATREQUEST']._serialized_start=497
-  _globals['_HEARTBEATREQUEST']._serialized_end=589
-  _globals['_HEARTBEATRESPONSE']._serialized_start=591
-  _globals['_HEARTBEATRESPONSE']._serialized_end=697
-  _globals['_HEARTBEATACK']._serialized_start=699
-  _globals['_HEARTBEATACK']._serialized_end=769
-  _globals['_CONTROLREQUEST']._serialized_start=772
-  _globals['_CONTROLREQUEST']._serialized_end=966
-  _globals['_EPOCHADVANCED']._serialized_start=968
-  _globals['_EPOCHADVANCED']._serialized_end=1040
-  _globals['_INVALIDATE']._serialized_start=1042
-  _globals['_INVALIDATE']._serialized_end=1087
-  _globals['_CLOSE']._serialized_start=1089
-  _globals['_CLOSE']._serialized_end=1129
-  _globals['_CONTROLRESPONSE']._serialized_start=1131
-  _globals['_CONTROLRESPONSE']._serialized_end=1233
-  _globals['_CONTROLACK']._serialized_start=1235
-  _globals['_CONTROLACK']._serialized_end=1267
-  _globals['_ROBOTMESSAGE']._serialized_start=1269
-  _globals['_ROBOTMESSAGE']._serialized_end=1337
-  _globals['_GATEWAYMESSAGE']._serialized_start=1339
-  _globals['_GATEWAYMESSAGE']._serialized_end=1457
-  _globals['_OBSERVATION']._serialized_start=1460
-  _globals['_OBSERVATION']._serialized_end=1807
-  _globals['_OBSERVATION_STATEENTRY']._serialized_start=1745
-  _globals['_OBSERVATION_STATEENTRY']._serialized_end=1807
-  _globals['_ACTIONCHUNK']._serialized_start=1810
-  _globals['_ACTIONCHUNK']._serialized_end=1984
-  _globals['_REQUESTREJECTED']._serialized_start=1986
-  _globals['_REQUESTREJECTED']._serialized_end=2075
-  _globals['_ROBOTGATEWAY']._serialized_start=2078
-  _globals['_ROBOTGATEWAY']._serialized_end=2366
+  _globals['_HEARTBEATREQUEST']._serialized_start=498
+  _globals['_HEARTBEATREQUEST']._serialized_end=633
+  _globals['_HEARTBEATRESPONSE']._serialized_start=635
+  _globals['_HEARTBEATRESPONSE']._serialized_end=741
+  _globals['_HEARTBEATACK']._serialized_start=743
+  _globals['_HEARTBEATACK']._serialized_end=813
+  _globals['_CONTROLREQUEST']._serialized_start=816
+  _globals['_CONTROLREQUEST']._serialized_end=1010
+  _globals['_EPOCHADVANCED']._serialized_start=1012
+  _globals['_EPOCHADVANCED']._serialized_end=1084
+  _globals['_INVALIDATE']._serialized_start=1086
+  _globals['_INVALIDATE']._serialized_end=1131
+  _globals['_CLOSE']._serialized_start=1133
+  _globals['_CLOSE']._serialized_end=1173
+  _globals['_CONTROLRESPONSE']._serialized_start=1175
+  _globals['_CONTROLRESPONSE']._serialized_end=1277
+  _globals['_CONTROLACK']._serialized_start=1279
+  _globals['_CONTROLACK']._serialized_end=1311
+  _globals['_ROBOTMESSAGE']._serialized_start=1313
+  _globals['_ROBOTMESSAGE']._serialized_end=1381
+  _globals['_GATEWAYMESSAGE']._serialized_start=1383
+  _globals['_GATEWAYMESSAGE']._serialized_end=1501
+  _globals['_OBSERVATION']._serialized_start=1504
+  _globals['_OBSERVATION']._serialized_end=1853
+  _globals['_OBSERVATION_STATEENTRY']._serialized_start=1791
+  _globals['_OBSERVATION_STATEENTRY']._serialized_end=1853
+  _globals['_ACTIONCHUNK']._serialized_start=1856
+  _globals['_ACTIONCHUNK']._serialized_end=2030
+  _globals['_REQUESTREJECTED']._serialized_start=2032
+  _globals['_REQUESTREJECTED']._serialized_end=2121
+  _globals['_ROBOTGATEWAY']._serialized_start=2124
+  _globals['_ROBOTGATEWAY']._serialized_end=2412
 # @@protoc_insertion_point(module_scope)

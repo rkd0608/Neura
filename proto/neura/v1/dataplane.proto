@@ -52,6 +52,12 @@ message HeartbeatRequest {
   // Robot monotonic time when sent; echoed back so the robot can measure round-trip time on
   // its own clock.
   uint64 robot_send_time_us = 3;
+  // The robot's current p99 round-trip time to the gateway, measured on its own clock. A
+  // duration, so it is meaningful on the gateway even though the clocks differ (design §8).
+  uint64 rtt_p99_us = 4;
+  // Median of the robot's most recent round-trip times. Tracks the current link quickly; used
+  // for per-request timing, while rtt_p99_us is used for capacity planning.
+  uint64 rtt_recent_us = 5;
 }
 
 message HeartbeatResponse {
@@ -118,8 +124,10 @@ message GatewayMessage {
 // One observation, sent when the robot's queued actions fall to the refill threshold (§8).
 message Observation {
   Envelope envelope = 1;
-  // Action cursor at capture time: index of the next action to dispatch (§5.1).
-  uint64 obs_cursor = 2;
+  // Anchor index: the first action index the resulting chunk covers (§5.1). For replace,
+  // blend and rtc merges it is the action cursor at capture; for append it is the index just
+  // after the last queued action.
+  uint64 anchor_index = 2;
   // Actions still queued at send time.
   uint32 queued_actions = 3;
   // Relative budget: microseconds until the robot's queue starves, minus its margin (§8).
@@ -131,14 +139,15 @@ message Observation {
   repeated Image images = 7;
   // Language instruction, if the model is language conditioned.
   string instruction = 8;
-  // For rtc merge mode: the frozen prefix of actions the robot will execute regardless (§5.3).
+  // For rtc merge mode: the frozen prefix of actions the robot will execute regardless (§5.3),
+  // shape [k, action_dim] in the model's action order and units.
   Tensor frozen_prefix = 9;
 }
 
 message ActionChunk {
   // Echoes the request's identity exactly.
   Envelope envelope = 1;
-  // Index of the first action in `actions`; equals the request's obs_cursor (§5.1).
+  // Index of the first action in `actions`; equals the request's anchor_index (§5.1).
   uint64 start_index = 2;
   // Shape [chunk_length, action_dim], in the artifact's declared action order and units.
   Tensor actions = 3;

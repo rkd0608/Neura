@@ -16,6 +16,9 @@ neura-contracts = { workspace = true }
 neura-proto = { workspace = true }
 neura-control = { workspace = true }
 neura-agent = { workspace = true }
+neura-runtime = { workspace = true }
+neura-server = { workspace = true }
+neura-sim = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -23,6 +26,9 @@ dev = [
     "neura-proto",
     "neura-control",
     "neura-agent",
+    "neura-runtime",
+    "neura-server",
+    "neura-sim",
     "grpcio-tools==1.84.0",
     "httpx2>=0.1",
     "hypothesis>=6.169",
@@ -51,9 +57,19 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S", "N802"]
 "tools/**" = ["S603", "S607"]
+# Simulation randomness is for modeling, never for security.
+"packages/neura-sim/src/**" = ["S311"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["neura", "neura_agent", "neura_contracts", "neura_control"]
+known-first-party = [
+    "neura",
+    "neura_agent",
+    "neura_contracts",
+    "neura_control",
+    "neura_runtime",
+    "neura_server",
+    "neura_sim",
+]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -63,7 +79,7 @@ python_version = "3.13"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:tools"
+mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:tools"
 explicit_package_bases = true
 exclude = ["packages/neura-proto/src/neura/"]
 

@@ -49,16 +49,24 @@ class ReasonCode(StrEnum):
     ADMISSION_CAPACITY_EXCEEDED = "ADMISSION_CAPACITY_EXCEEDED"
     ADMISSION_MEMORY_EXCEEDED = "ADMISSION_MEMORY_EXCEEDED"
     DEPLOYMENT_NOT_ACTIVE = "DEPLOYMENT_NOT_ACTIVE"
+    SESSION_UNKNOWN = "SESSION_UNKNOWN"
+    SESSION_EPOCH_STALE = "SESSION_EPOCH_STALE"
     REQUEST_EXPIRED = "REQUEST_EXPIRED"
     REQUEST_SUPERSEDED = "REQUEST_SUPERSEDED"
     REQUEST_FENCED = "REQUEST_FENCED"
     WORKER_CRASHED = "WORKER_CRASHED"
     WORKER_OUT_OF_MEMORY = "WORKER_OUT_OF_MEMORY"
+    WORKER_UNAVAILABLE = "WORKER_UNAVAILABLE"
     WORKER_OUTPUT_INVALID = "WORKER_OUTPUT_INVALID"
     CHUNK_LATE = "CHUNK_LATE"
     CHUNK_STALE_OBSERVATION = "CHUNK_STALE_OBSERVATION"
     CHUNK_DUPLICATE = "CHUNK_DUPLICATE"
     CHUNK_EPOCH_MISMATCH = "CHUNK_EPOCH_MISMATCH"
+    CHUNK_NOT_CONTIGUOUS = "CHUNK_NOT_CONTIGUOUS"
+    CHUNK_INTEGRITY_FAILED = "CHUNK_INTEGRITY_FAILED"
+    CHUNK_UNEXPECTED = "CHUNK_UNEXPECTED"
+    REQUEST_TIMED_OUT = "REQUEST_TIMED_OUT"
+    OBSERVATION_INCOMPLETE = "OBSERVATION_INCOMPLETE"
     CHUNK_REVISION_MISMATCH = "CHUNK_REVISION_MISMATCH"
     ACTION_OUT_OF_RANGE = "ACTION_OUT_OF_RANGE"
     BUFFER_STARVED = "BUFFER_STARVED"
@@ -335,6 +343,20 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='The requested deployment revision is not active at this site.',
     ),
+    ReasonCode.SESSION_UNKNOWN: ReasonCodeInfo(
+        code=ReasonCode.SESSION_UNKNOWN,
+        area="gateway",
+        severity="error",
+        retryable=False,
+        message='The session does not exist or has been closed.',
+    ),
+    ReasonCode.SESSION_EPOCH_STALE: ReasonCodeInfo(
+        code=ReasonCode.SESSION_EPOCH_STALE,
+        area="gateway",
+        severity="info",
+        retryable=False,
+        message='The message carries a task epoch older than one the robot already announced.',
+    ),
     ReasonCode.REQUEST_EXPIRED: ReasonCodeInfo(
         code=ReasonCode.REQUEST_EXPIRED,
         area="scheduler",
@@ -370,6 +392,13 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='The policy worker ran out of GPU memory.',
     ),
+    ReasonCode.WORKER_UNAVAILABLE: ReasonCodeInfo(
+        code=ReasonCode.WORKER_UNAVAILABLE,
+        area="worker",
+        severity="warning",
+        retryable=True,
+        message='No policy worker is available for this deployment.',
+    ),
     ReasonCode.WORKER_OUTPUT_INVALID: ReasonCodeInfo(
         code=ReasonCode.WORKER_OUTPUT_INVALID,
         area="worker",
@@ -404,6 +433,41 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="info",
         retryable=False,
         message='The chunk belongs to a different task epoch.',
+    ),
+    ReasonCode.CHUNK_NOT_CONTIGUOUS: ReasonCodeInfo(
+        code=ReasonCode.CHUNK_NOT_CONTIGUOUS,
+        area="runtime",
+        severity="error",
+        retryable=False,
+        message='The chunk would leave a gap between queued actions and its first action.',
+    ),
+    ReasonCode.CHUNK_INTEGRITY_FAILED: ReasonCodeInfo(
+        code=ReasonCode.CHUNK_INTEGRITY_FAILED,
+        area="runtime",
+        severity="error",
+        retryable=False,
+        message="The chunk's payload digest, dtype or shape does not match its declaration.",
+    ),
+    ReasonCode.CHUNK_UNEXPECTED: ReasonCodeInfo(
+        code=ReasonCode.CHUNK_UNEXPECTED,
+        area="runtime",
+        severity="info",
+        retryable=False,
+        message='The chunk answers a request that is no longer outstanding.',
+    ),
+    ReasonCode.REQUEST_TIMED_OUT: ReasonCodeInfo(
+        code=ReasonCode.REQUEST_TIMED_OUT,
+        area="runtime",
+        severity="warning",
+        retryable=True,
+        message='No response arrived within the request timeout; the request was abandoned.',
+    ),
+    ReasonCode.OBSERVATION_INCOMPLETE: ReasonCodeInfo(
+        code=ReasonCode.OBSERVATION_INCOMPLETE,
+        area="runtime",
+        severity="warning",
+        retryable=True,
+        message='A required sensor input was missing or too old, so no observation was sent.',
     ),
     ReasonCode.CHUNK_REVISION_MISMATCH: ReasonCodeInfo(
         code=ReasonCode.CHUNK_REVISION_MISMATCH,

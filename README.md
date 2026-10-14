@@ -21,6 +21,9 @@ design and the build plan (§16.1).
 | `packages/neura-proto` | Generated protobuf and gRPC bindings (`from neura.v1 import ...`) |
 | `packages/neura-control` | Cloud control plane service |
 | `packages/neura-agent` | Site agent that runs on customer GPU servers |
+| `packages/neura-runtime` | Robot runtime: action queue, chunk merging, fencing, state machine, session and gRPC clients |
+| `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy workers (`neura-gateway`) |
+| `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, `neura-sim-robots` |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
@@ -32,7 +35,7 @@ Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Docker with Compose
 ```bash
 make setup     # install the workspace into .venv
 make check     # lint, strict type checks, generated-file checks, tests
-make dev       # start Postgres, the control plane and a site agent
+make dev       # start Postgres, control plane, site agent, gateway and 4 simulated robots
 make smoke     # build, start, verify end to end, stop
 ```
 
@@ -43,6 +46,12 @@ uv run neura-contracts check \
   --artifact examples/contracts/act-so101.artifact.yaml \
   --robot examples/contracts/so101.robot.yaml \
   --profile examples/contracts/act-so101-30hz.profile.yaml
+```
+
+Watch the simulated robots being served:
+
+```bash
+curl -s http://127.0.0.1:8091/v1/local/dataplane | python3 -m json.tool
 ```
 
 ## Conventions

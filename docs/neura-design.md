@@ -1,7 +1,7 @@
 # Neura: engineering design v0.1
 
 Status: proposed design, no code written · October 14, 2026
-Scope: Neura only (deployment and fleet serving of customer-owned robot policies).
+Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
 This document turns the blueprint into decisions an implementation can follow. Each decision lists what it is, why, and what evidence would make us revisit it. Numbers marked *illustrative* are starting points for simulation and tests, never operating values for a customer robot.
@@ -319,6 +319,8 @@ neura_adapters/            # ACT, SmolVLA, π0 adapters (open)
 neura_server/              # gateway, scheduler, workers, admission (proprietary)
 neura_agent/               # site agent (proprietary)
 neura_control/             # control plane API (proprietary, later)
+console/                   # web console, TypeScript (proprietary, later)
+api/                       # OpenAPI spec for the public management API
 sim/                       # simulated robots, network and GPU models; harness
 conformance/               # contract, fault and parity suites
 bench/                     # benchmark harness and reports
@@ -413,7 +415,290 @@ Data processing agreement from the first pilot; SOC 2 Type II when the control p
 
 ---
 
-## 19. Remaining open items (these need real customer workloads)
+## 19. Console (frontend)
+
+### 19.1 Principles
+
+- **Show what is observed, not what was requested.** Every robot, server and deployment shows desired, prepared and active state separately. A successful click never displays as "running".
+- **Every state has a reason.** Each status shows a label, a reason code with plain-language text, when it started, and **how old the data is**.
+- **Infrastructure health is not task success.** A healthy worker is shown separately from task outcomes. Outcomes are labeled attempted, inferred or confirmed; unknown stays unknown.
+- **Stale data looks stale.** When a site is disconnected, its last known state is shown greyed with "last seen 4 min ago", never as live.
+- **The cloud console cannot start motion.** It can request activation. A person at the site approves it (§20.6).
+- **No hidden endpoints.** The console uses only the public API (§20). Anything the console can do, the CLI and SDK can do.
+
+### 19.2 Roles and permissions
+
+| Role | Can | Cannot |
+| --- | --- | --- |
+| Viewer | See status, metrics, audit | Change anything |
+| Deployer | Register models and profiles, prepare and validate revisions, request rollout or rollback | Approve physical activation |
+| Site operator | Approve or refuse activation locally, take over, reset faults locally | Change org settings |
+| Admin | Manage org, projects, sites, SSO, tokens, telemetry routing, support access | Approve motion unless also a site operator |
+| Neura support | Only what a customer-granted, time-boxed break-glass session allows | Anything outside that grant |
+
+Deploy and physical-activation permissions are always separate. Admin and activation-related actions require MFA.
+
+### 19.3 Screens
+
+| Screen | Purpose |
+| --- | --- |
+| Home | Sites at a glance, items needing attention first |
+| Site | Servers, GPUs, agent version, connection (last heartbeat age), offline-authorization expiry countdown |
+| Connect a server | Enrollment token, install command, live preflight results with fixes (§17.2) |
+| Robots | Profile, device enrollment, current state, active revision, lease holder |
+| Models | Artifacts, manifest, licenses, compatibility matrix against robot profiles with reasons |
+| Execution profiles | Timing, merge mode, starvation response, linked evidence |
+| Capacity | "This server can run N robots at this profile", with assumptions and headroom |
+| Releases | Prepare → validate → evidence → request activation → canary → rollout; rollback |
+| Live sessions | Per robot: state, buffer level, observation age, deadline misses, recent faults. No video unless the customer opted in to payload collection |
+| Faults | Latched faults with reason code, the local response taken, linked traces |
+| Audit log | Every change and cloud instruction, with actor and result |
+| Settings | SSO, API tokens, telemetry routing, outbound ledger view (§18.2), support access grants |
+
+### 19.4 State vocabulary
+
+| Console label | Meaning | Examples of underlying state |
+| --- | --- | --- |
+| Preparing | Revision is being pulled, verified, warmed or profiled | Site agent preparation phases |
+| Ready | Compatible and able to run; not moving | Robot runtime `Ready`/`Armed` |
+| Running | Executing accepted actions | Robot runtime `Running` |
+| Waiting | Temporarily starved; the approved local response is active | Robot runtime `Waiting` |
+| Needs attention | Faulted, rejected or blocked; human action required | `Faulted`, admission rejected, preflight failed |
+| Offline | No recent data; last known state shown with its age | Heartbeat missing |
+| Unknown | No data has ever arrived | New enrollment |
+
+### 19.5 Local site console
+
+A small local web UI and CLI served by the site agent, available when the cloud is not. It shows status, approves or refuses activation, and resets faults. Operators never depend on the internet to stop, check or approve their robots.
+
+### 19.6 Technology
+
+TypeScript, React, a typed client generated from the OpenAPI spec, server-state caching with background refresh, and accessibility (WCAG 2.1 AA) as an acceptance criterion. The local site console uses the same components against the agent's local API.
+
+---
+
+## 20. Console ↔ backend communication
+
+### 20.1 One public API
+
+REST over HTTPS with JSON. The **OpenAPI 3.1 specification is the source of truth**; the console, CLI, Python SDK and customer CI all use clients generated from it.
+
+- Versioned in the path (`/v1/`). Within a version, only additive changes. Breaking changes need a new version and a published deprecation period (*illustrative* six months).
+- The management API is never on the robot action path.
+
+### 20.2 Resource shape
+
+Every resource has the same three parts:
+
+```json
+{
+  "metadata": { "id": "dep_...", "project": "prj_...", "version": "17", "created_at": "..." },
+  "spec":     { "model_artifact": "art_...", "execution_profile": "exp_..." },
+  "status": {
+    "phase": "Preparing",
+    "reason": "ARTIFACT_VERIFYING",
+    "message": "Verifying runtime image signature",
+    "observed_revision": "rev_...",
+    "observed_at": "...",
+    "data_age_seconds": 3
+  }
+}
+```
+
+`spec` is what the user wants. `status` is only ever written from site observations, so the console cannot confuse the two.
+
+### 20.3 Resources
+
+Organizations, projects, sites, compute servers, enrollment tokens, robots, robot profiles, model artifacts, execution profiles, deployments, revisions, rollouts, activation requests, sessions (read-only), faults (read-only), events, audit records, metrics queries (aggregates only), API tokens, support grants, operations.
+
+### 20.4 Changes and long-running work
+
+- Every `POST` requires an `Idempotency-Key`; a repeated key returns the original result.
+- Updates use optimistic concurrency (`ETag` / `If-Match`); a conflicting write returns `412` instead of silently overwriting.
+- Work that depends on a site (prepare, roll out, roll back) returns `202` with an **Operation** resource: `Pending → Running → Succeeded | Failed | Cancelled`, with reason codes. An operation succeeds only when the site acknowledges the result.
+- The audit record is written in the same transaction as the change; if auditing fails, the change fails.
+
+### 20.5 Errors, reads and limits
+
+- Errors use RFC 9457 problem details with a stable `reason` code from one catalog shared with the data plane and site agent, plus a `retryable` flag.
+- Cursor-based pagination and filtering on every list.
+- Rate limits per token, reported in response headers.
+
+### 20.6 Live updates
+
+- A server-sent events stream per project (`/v1/projects/{id}/events`) with resumable cursors and a retention window (*illustrative* 24 hours). Events say *what changed*; the console then re-reads the resource for the truth.
+- If the stream fails, the console falls back to polling and labels data age (§19.1).
+
+### 20.7 Authentication and authorization
+
+- People: customer SSO via OIDC (authorization code with PKCE), short-lived access tokens, MFA for admin and activation-related actions.
+- Machines: scoped, expiring API tokens, created by admins and shown once.
+- Authorization is checked by the server on every request; the console hiding a button is never the control.
+- Sites and robots do not use this API; they use certificates (§17).
+
+### 20.8 Control plane ↔ site agent
+
+A separate internal protocol (gRPC over the agent's outbound stream, §17.3):
+
+- **Down:** signed desired-state manifests and allowed commands (prepare, roll out, roll back, collect diagnostics), each checked against the site's local boundaries (§17.4).
+- **Up:** acknowledgements, status reports with reason codes, and telemetry batches restricted to the published schema (§18.2).
+- The console never talks to a site directly.
+
+### 20.9 Activation flow end to end
+
+```mermaid
+sequenceDiagram
+    participant U as Deployer (console)
+    participant C as Control plane
+    participant A as Site agent
+    participant O as Site operator (local)
+    participant R as Robot runtime
+    U->>C: POST activation request (Idempotency-Key)
+    C->>C: Record intent + audit; Operation Pending
+    C->>A: Signed desired state
+    A->>A: Check local boundaries, revision prepared
+    A->>O: Approval request at task boundary
+    O->>A: Approve
+    A->>R: Activate revision
+    R->>R: New task epoch, clear queue, fresh observation
+    R-->>A: Acknowledged active
+    A-->>C: Status: active revision, reason
+    C-->>U: Operation Succeeded (event + re-read)
+```
+
+If the operator refuses, the site disconnects, or the robot is not at a task boundary, the operation stays Pending or ends Failed with a reason. The cloud never retries motion on its own.
+
+---
+
+## 21. Service levels
+
+### 21.1 Definitions
+
+- **SLI**: what we measure. **SLO**: our internal target. **SLA**: what we promise in a contract, with credits.
+- SLAs are set **below** the SLOs we actually meet, and only after pilot data exists. Until then, every target here is an *illustrative* internal SLO.
+- Each plane fails differently, so each has its own service levels. Safety properties are **invariants**, not percentages: any infrastructure-caused acceptance of a stale, duplicated or unauthorized action is a Sev-1 incident regardless of how often it happens.
+
+### 21.2 Cloud control plane (illustrative SLOs)
+
+| SLI | Target |
+| --- | --- |
+| API availability (valid requests without server error), monthly | 99.9% |
+| Read latency p95 / write latency p95 (excluding Operation completion) | < 300 ms / < 1 s |
+| Desired-state delivery to a connected agent, p95 | < 30 s |
+| Site status visible in console while connected, p95 | < 10 s |
+| Event stream resumable without loss within retention | 100% |
+| Control-plane recovery: data loss window / time to restore | ≤ 5 min / ≤ 4 h |
+| Effect of a control-plane outage on running robots | None (design invariant) |
+
+### 21.3 Site data plane (per qualified execution profile)
+
+Targets are set during qualification for each profile and measured on the site.
+
+| SLI | Illustrative target |
+| --- | --- |
+| Site agent and gateway availability during the customer's operating hours | 99.9% |
+| Requests answered within budget at admitted load | ≥ 99.9% |
+| Neura-attributable starvation events per robot-hour | Set per profile from qualification |
+| Rollback to the previous warm revision, at the next task boundary | < 60 s |
+| Conformance and fault suite on the deployed version | 100% pass |
+| Unsafe action acceptance caused by Neura | Zero (invariant, Sev-1) |
+
+Admission control (§9.3) is what keeps these honest: load that would break them is refused, not accepted.
+
+### 21.4 Support (illustrative, production tier)
+
+| Severity | Definition | First response |
+| --- | --- | --- |
+| Sev-1 | Production robots stopped by Neura, or a safety invariant violated | 1 h, 24/7 |
+| Sev-2 | Degraded production; releases or rollback blocked | 4 business hours |
+| Sev-3 | Non-production issue, workaround exists | 1 business day |
+| Sev-4 | Question or feature request | 3 business days |
+
+### 21.5 Responsibility boundaries
+
+SLAs exclude causes outside Neura: customer robots, controllers, networks and GPUs outside the qualified envelope; model task quality; changes made outside Neura. Attribution uses Neura's own traces and reason codes, which the customer can inspect.
+
+### 21.6 How service levels are run
+
+- SLIs come from site telemetry and control-plane monitoring; each customer sees a per-site service-level view and a public status page for the cloud.
+- Internal error budgets: when a budget is spent, feature releases stop until reliability work brings it back.
+
+---
+
+## 22. Customer value
+
+A robot company running learned policies today rebuilds the same infrastructure for each program: serving, timing and buffering, fault handling, model release and rollback, monitoring, and capacity planning. Neura sells that infrastructure as a supported product. These are product hypotheses to validate in discovery and pilots.
+
+| Value | What changes for the customer | How we measure it in a pilot |
+| --- | --- | --- |
+| **Engineering time not spent** | Their autonomy team stops building and maintaining serving and release tooling per robot program | Engineer-hours on deployment and infrastructure before vs during pilot; tickets and incidents owned |
+| **Faster, safer model releases** | New policy versions go from "custom rollout" to staged, evidence-backed activation with rollback | Time from trained checkpoint to running on robots; failed or reverted releases |
+| **Fewer stalls and incidents** | Starvation, stale actions and faults are handled consistently and are visible | Starvation events and deadline misses per robot-hour; intervention rate |
+| **Lower compute per robot** (only where measured) | Several robots share a GPU when the workload allows it | GPU-hours per robot-hour vs the dedicated baseline (§10), including reserve capacity |
+| **Evidence for their own customers** | Deployment, version and fault records they can show to end customers and auditors | Records produced; customer feedback |
+
+Engineering time and release safety are the most reliable value; compute savings depend on the workload and must never be the only claim. Some workloads will not benefit from sharing; we say so and still deliver the operational value, or we decline the deal.
+
+Value equation for each pilot, agreed before it starts:
+
+`value = avoided engineering cost + avoided incident cost + compute savings (measured) − Neura fees − integration effort`
+
+---
+
+## 23. Making it simple
+
+Simplicity is a product requirement with acceptance tests, not a slogan.
+
+| Step | Target experience |
+| --- | --- |
+| Connect a GPU server | One command, preflight report with fixes, no firewall changes (§17) |
+| Bring a model | Point at an existing LeRobot-format checkpoint or a supported package; Neura builds the manifest and asks only about what it cannot infer |
+| Check compatibility | Automatic contract check against the robot profile, with plain-language reasons for any mismatch |
+| Know if it fits | Automatic profiling produces "this server can run N robots at your timing", with its assumptions shown |
+| Integrate the robot | Open-source robot runtime and SDK; reference adapters for supported arms |
+| Ship a new version | Stage, compare, activate at a task boundary, roll back: one workflow in console or CLI |
+| Prove it yourself | Customers run the same conformance and fault suites we use |
+
+*Illustrative* internal targets: first server connected in under 30 minutes; a supported policy running on a supported robot in simulation on day one; second installation needs no custom code from us.
+
+---
+
+## 24. Why customers would stay: defensibility
+
+At launch Neura has **no moat**. The code is replicable, generic GPU hosting exists, model providers bundle serving, and strong teams can build in-house. Defensibility has to be earned. These mechanisms compound with each deployment:
+
+1. **A qualified integration library.** Every policy × robot × controller combination we qualify (adapters, conformance evidence, validated fault responses) makes the next customer with that combination cheap and fast. Competitors start from zero on each one.
+2. **Embedded in the operating workflow.** Once releases, rollbacks, fault records and audit history run through Neura, replacing it means rebuilding those workflows. Data stays exportable, so customers stay because the product is useful, not because they are locked in.
+3. **Performance knowledge across hardware and models.** Profiles of latency, memory and capacity across GPU types, models and batch sizes make capacity estimates accurate out of the box. Only performance metadata is used, and only with customer consent; never payloads or weights.
+4. **The open contract as an ecosystem.** If model developers and arm makers publish Neura-compatible packages and pass our conformance tests, Neura becomes the default way to deploy them. This only works if the contract is open (§14).
+5. **A safety and reliability track record.** A record of operating without infrastructure-caused incidents, with an auditable open runtime, is slow to earn and hard to copy.
+6. **Neutrality across model providers**, which matters to customers using more than one model family. Not enough on its own.
+
+Not moats: the scheduling algorithm, the transport, the console. Those are table stakes.
+
+### Positioning against alternatives
+
+| Alternative | When it wins | Where Neura must win |
+| --- | --- | --- |
+| Build in-house | Single program, strong infra team, unique hardware | Many programs or robot types; small teams; release safety; time to deployment |
+| Generic GPU cloud | Hosting is the only need | On-site serving, robot-side semantics, fleet releases |
+| Model-provider bundle | Customer uses only that provider's models | Mixed models, customer-owned weights, on-site data |
+| Open source alone (e.g. LeRobot remote inference) | Research, single robot | Multiple robots per server, fleet operations, support |
+
+---
+
+## 25. What to validate first with customers
+
+1. Do target customers rank infrastructure engineering time and release safety as a real problem with a budget?
+2. Will they run a policy outside their present runtime?
+3. Which measure would they sign a pilot against?
+4. Does the second customer actually reuse the first customer's adapters?
+
+If the answers are no, the strategy changes before more is built.
+
+---
+
+## 26. Remaining open items (these need real customer workloads)
 
 - Customer-specific timing envelope, controller interface and validated local fault responses.
 - Pre-registered trial sizes and non-inferiority margins for a pilot.

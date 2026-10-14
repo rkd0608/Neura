@@ -31,9 +31,14 @@ services:
       target: neura-control
       secrets: [ca_bundle]
     image: neura-control:dev
+    command: ["sh", "-c", "neura-control migrate && exec neura-control serve"]
     environment:
       NEURA_CONTROL_ENVIRONMENT: development
       NEURA_CONTROL_DATABASE_URL: postgresql://neura:neura@postgres:5432/neura
+      NEURA_CONTROL_PUBLIC_URL: http://127.0.0.1:8080
+      # DEVELOPMENT ONLY: a public admin token for the local stack. Generate another with
+      # `uv run neura-control dev-token`. Refused outside the development environment.
+      NEURA_CONTROL_DEV_BOOTSTRAP_TOKEN: ntk_tok_01M4Y8WAYQCVACJ83FY3EZEDKR_F_4TsgyKux5toXDLnOLpsAvLyWNlDAHK0WMN6dUBIXw
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

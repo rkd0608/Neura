@@ -114,6 +114,8 @@ def test_operation_conventions(path: str, method: str, operation: dict[str, Any]
         if status == "201":
             assert "Location" in response.get("headers", {})
 
+    if ("query", "cursor") in names:
+        assert "422" in responses, "operations with query parameters can reject them with 422"
     if operation_id.startswith("list"):
         assert ("query", "cursor") in names
         assert ("query", "page_size") in names

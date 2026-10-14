@@ -24,6 +24,9 @@ fetch() { python3 -c "import json,sys,urllib.request; print(json.dumps(json.load
 echo "control plane readiness: $(fetch http://127.0.0.1:8080/readyz)"
 echo "control plane meta:      $(fetch http://127.0.0.1:8080/v1/meta)"
 
+# Onboard a customer through the management API.
+${UV:-uv} run python "$(dirname "$0")/smoke_api.py"
+
 # The agent probes every 2 s; wait until it reports the control plane reachable.
 agent_ok=false
 for _ in $(seq 1 30); do

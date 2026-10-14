@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation) and M2 (data plane core) implemented, M3 onward not yet built · October 14, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core) and M3 (control plane) implemented, M4 onward not yet built · October 14, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -375,7 +375,7 @@ packages/
   neura-server/            # gateway, leases, scheduler, admission, workers (proprietary) (M2)
   neura-sim/               # simulated arms and networks, deterministic site simulator (M2)
   neura-adapters/          # ACT, SmolVLA, π0 adapters (open) (M6)
-  neura-sdk/               # Python client generated from the OpenAPI spec (open) (M3)
+  neura-sdk/               # Python client generated from the OpenAPI spec (open) (M5, with the console client)
 console/                   # web console, TypeScript (proprietary) (M5)
 bench/                     # benchmark harness and reports (M6)
 examples/contracts/        # example contracts for an SO-101-class arm (M1)
@@ -416,7 +416,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | --- | --- | --- |
 | **M1. Foundation** ✅ | Monorepo and tooling (uv, ruff, mypy strict, pytest), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library with RFC 8785 digests and CLI (§4), control-plane and site-agent service skeletons, local dev stack in Docker Compose (Postgres, control plane, site agent). Console tooling (pnpm) moves to M5; simulated robots join the stack in M2 | `make dev` brings up the whole stack; `make smoke` verifies it end to end; schema, contract and compatibility tests pass in CI |
 | **M2. Data plane core** ✅ | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7). Sans-IO cores shared by a deterministic simulator (every node on its own clock) and the real gRPC adapters; gateway and simulated robots in the dev stack | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker, in simulation and over gRPC |
-| **M3. Control plane** | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20) | API conformance tests against the OpenAPI spec; idempotency, concurrency and audit tests pass |
+| **M3. Control plane** ✅ | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20). Alembic migrations; transactional idempotency keys; `If-Match` concurrency; audit and change events in the same transaction as each change; site-report service that alone writes observed state (used by the agent in M4); `GET /v1/me`; bootstrap CLI and development bootstrap | Every response in the test suite is validated against the OpenAPI spec; every spec operation is implemented; idempotency (including concurrent retries), concurrency, roles, OIDC and audit tests pass; the dev stack onboards a customer through the API |
 | **M4. Site agent** | Enrollment with one-time tokens and on-host keys, preflight, outbound stream, signed manifest reconciliation, artifact verification, local boundaries, local site console API (§17, §19.5) | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage |
 | **M5. Web console** | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19) | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests |
 | **M6. Models and GPU sharing** | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10) | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner |
@@ -608,6 +608,12 @@ Organizations, projects, sites, compute servers, enrollment tokens, robots, robo
 
 - A server-sent events stream per project (`/v1/projects/{id}/events`) with resumable cursors and a retention window (*illustrative* 24 hours). Events say *what changed*; the console then re-reads the resource for the truth.
 - If the stream fails, the console falls back to polling and labels data age (§19.1).
+
+### 20.6.1 Implementation notes (M3)
+
+- Event streams end after a configured lifetime (5 minutes by default) and send `retry:`; clients reconnect with `Last-Event-ID`. This bounds connection age behind load balancers. A cursor older than the retention window returns `410 API_CURSOR_EXPIRED`.
+- The rate limiter is per process. Running several control-plane replicas needs a shared limiter (for example Redis) before production scale.
+- Organization memberships for SSO users are managed with the `neura-control bootstrap` CLI until the user-management API lands with the console (M5).
 
 ### 20.7 Authentication and authorization
 

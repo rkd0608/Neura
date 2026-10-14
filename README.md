@@ -19,7 +19,7 @@ design and the build plan (§16.1).
 | `schemas/` | Generated JSON Schemas for contract documents |
 | `packages/neura-contracts` | Model artifact, robot profile and execution profile contracts; compatibility check; CLI |
 | `packages/neura-proto` | Generated protobuf and gRPC bindings (`from neura.v1 import ...`) |
-| `packages/neura-control` | Cloud control plane service |
+| `packages/neura-control` | Cloud control plane: management API on Postgres, migrations, auth, audit, events (`neura-control`) |
 | `packages/neura-agent` | Site agent that runs on customer GPU servers |
 | `packages/neura-runtime` | Robot runtime: action queue, chunk merging, fencing, state machine, session and gRPC clients |
 | `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy workers (`neura-gateway`) |
@@ -38,6 +38,13 @@ make check     # lint, strict type checks, generated-file checks, tests
 make dev       # start Postgres, control plane, site agent, gateway and 4 simulated robots
 make smoke     # build, start, verify end to end, stop
 ```
+
+The dev stack bootstraps an organization and an admin API token (development only; see
+`deploy/compose/compose.yaml`). `uv run python tools/smoke_api.py` onboards a customer through the
+API: project, site, enrollment token, contracts, robots, deployment, revision.
+
+Control-plane tests need PostgreSQL: `docker compose -f deploy/compose/compose.yaml up -d postgres`
+then `NEURA_TEST_DATABASE_URL=postgresql://neura:neura@127.0.0.1:5432/neura make test`.
 
 Check a model, robot and execution profile against each other:
 

@@ -58,5 +58,12 @@ jobs:
     needs: checks
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install
+        run: uv sync --frozen
       - name: Build, start and verify
         run: tools/smoke_dev_stack.sh

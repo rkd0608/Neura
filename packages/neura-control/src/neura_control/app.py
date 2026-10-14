@@ -2,33 +2,57 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import asyncio
+import contextlib
+import hashlib
+import logging
+import secrets
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import asynccontextmanager
+from datetime import timedelta
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import PostgresDsn
+from sqlalchemy import delete
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from neura.v1 import common_pb2
 from neura_contracts import API_VERSION as CONTRACTS_API_VERSION
 from neura_contracts import ReasonCode
+from neura_control.api import (
+    routes_access,
+    routes_contracts,
+    routes_core,
+    routes_deployments,
+    routes_observe,
+)
+from neura_control.clock import utcnow
 from neura_control.database import database_reachable
+from neura_control.db.engine import create_engine, session_factory
+from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey
 from neura_control.problems import (
     ProblemError,
     handle_http_exception,
     handle_problem,
     handle_unexpected,
     handle_validation_error,
+    problem_response,
 )
+from neura_control.security.oidc import OidcVerifier
+from neura_control.services import bootstrap
 from neura_control.settings import ControlPlaneSettings
 
 SERVICE_NAME = "neura-control"
 API_VERSION = "v1"
+IDEMPOTENCY_RETENTION = timedelta(hours=24)
 
+log = logging.getLogger("neura.control")
 DatabaseProbe = Callable[[PostgresDsn, float], Awaitable[bool]]
 
 
@@ -39,15 +63,124 @@ def _package_version() -> str:
         return "0.0.0+unknown"
 
 
+class RateLimiter:
+    """Per-credential token bucket. Per process; a shared store is needed with many replicas."""
+
+    def __init__(self, per_minute: int) -> None:
+        self.capacity = float(per_minute)
+        self.rate = per_minute / 60.0
+        self._buckets: dict[str, tuple[float, float]] = {}
+
+    def take(self, key: str, now: float) -> float | None:
+        """Consume one token; return None if allowed, else seconds to wait."""
+        tokens, last = self._buckets.get(key, (self.capacity, now))
+        tokens = min(self.capacity, tokens + (now - last) * self.rate)
+        if tokens < 1.0:
+            self._buckets[key] = (tokens, now)
+            return (1.0 - tokens) / self.rate
+        self._buckets[key] = (tokens - 1.0, now)
+        if len(self._buckets) > 100_000:
+            self._buckets.clear()  # bound memory against key floods
+        return None
+
+
+async def _prune(app: FastAPI, settings: ControlPlaneSettings) -> None:
+    """Drop events past retention, old idempotency records and expired enrollment tokens."""
+    while True:
+        await asyncio.sleep(60)
+        with contextlib.suppress(Exception):
+            async with app.state.sessions.begin() as session:
+                now = utcnow()
+                await session.execute(
+                    delete(Event).where(
+                        Event.occurred_at < now - timedelta(hours=settings.event_retention_hours)
+                    )
+                )
+                await session.execute(
+                    delete(IdempotencyKey).where(
+                        IdempotencyKey.created_at < now - IDEMPOTENCY_RETENTION
+                    )
+                )
+                await session.execute(
+                    delete(EnrollmentToken).where(
+                        EnrollmentToken.expires_at < now - timedelta(days=1)
+                    )
+                )
+
+
+async def _dev_bootstrap(app: FastAPI, settings: ControlPlaneSettings) -> None:
+    assert settings.dev_bootstrap_token is not None
+    async with app.state.sessions.begin() as session:
+        org = await bootstrap.ensure_organization(session, "dev")
+        await bootstrap.create_api_token(
+            session,
+            org.id,
+            display_name="development bootstrap",
+            scopes=["admin"],
+            expires_in_days=365,
+            token=settings.dev_bootstrap_token,
+        )
+    log.warning("development bootstrap: organization %s with an admin token is ready", org.id)
+
+
+def iter_routes(app: FastAPI) -> Iterator[tuple[str, str]]:
+    """Yield (method, path) for every route, including those of included routers."""
+
+    def walk(routes: Any, prefix: str) -> Iterator[tuple[str, str]]:
+        for route in routes:
+            included = getattr(route, "original_router", None)
+            if included is not None:
+                context = getattr(route, "include_context", None)
+                yield from walk(included.routes, prefix + str(getattr(context, "prefix", "") or ""))
+                continue
+            path = getattr(route, "path", None)
+            for method in getattr(route, "methods", None) or ():
+                if path is not None and method != "HEAD":
+                    yield method, prefix + path
+
+    return walk(app.routes, "")
+
+
 def create_app(
     settings: ControlPlaneSettings | None = None,
     *,
     database_probe: DatabaseProbe = database_reachable,
+    oidc_verifier: OidcVerifier | None = None,
 ) -> FastAPI:
     settings = settings or ControlPlaneSettings()
+    spec_text = settings.openapi_path.read_text(encoding="utf-8")
+    spec_version = str(yaml.safe_load(spec_text)["info"]["version"])
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        engine = create_engine(str(settings.database_url), pool_size=settings.database_pool_size)
+        app.state.engine = engine
+        app.state.sessions = session_factory(engine)
+        if oidc_verifier is not None:
+            app.state.oidc = oidc_verifier
+        elif settings.oidc_issuer and settings.oidc_audience and settings.oidc_jwks_url:
+            app.state.oidc = OidcVerifier(
+                issuer=settings.oidc_issuer,
+                audience=settings.oidc_audience,
+                jwks_url=settings.oidc_jwks_url,
+            )
+        else:
+            app.state.oidc = None
+        if settings.dev_bootstrap_token:
+            await _dev_bootstrap(app, settings)
+        pruner = asyncio.create_task(_prune(app, settings))
+        try:
+            yield
+        finally:
+            pruner.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pruner
+            await engine.dispose()
+
     app = FastAPI(
         title="Neura control plane",
         version=_package_version(),
+        lifespan=lifespan,
         # The published contract is api/openapi.yaml (spec-first, design §20.1); FastAPI's
         # generated document and interactive docs are disabled so there is only one source.
         openapi_url=None,
@@ -55,14 +188,41 @@ def create_app(
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.oidc = oidc_verifier
+    limiter = RateLimiter(settings.rate_limit_per_minute)
 
     app.add_exception_handler(ProblemError, handle_problem)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(Exception, handle_unexpected)
 
-    spec_text = settings.openapi_path.read_text(encoding="utf-8")
-    spec_version = str(yaml.safe_load(spec_text)["info"]["version"])
+    @app.middleware("http")
+    async def request_context(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        incoming = request.headers.get("X-Request-Id", "")
+        request_id = (
+            incoming
+            if 0 < len(incoming) <= 64 and incoming.isprintable()
+            else secrets.token_hex(12)
+        )
+        request.state.request_id = request_id
+        if request.url.path.startswith("/v1/") and request.url.path != "/v1/meta":
+            credential = request.headers.get("Authorization") or (
+                request.client.host if request.client else ""
+            )
+            key = hashlib.sha256(credential.encode()).hexdigest()
+            wait = limiter.take(key, time.monotonic())
+            if wait is not None:
+                response: Response = problem_response(
+                    ReasonCode.API_RATE_LIMITED, instance=request.url.path
+                )
+                response.headers["Retry-After"] = str(max(1, round(wait)))
+                response.headers["X-Request-Id"] = request_id
+                return response
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = request_id
+        return response
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
@@ -95,5 +255,14 @@ def create_app(
     @app.get("/", include_in_schema=False)
     async def root() -> JSONResponse:
         return JSONResponse({"service": SERVICE_NAME, "meta": "/v1/meta"})
+
+    for module in (
+        routes_core,
+        routes_contracts,
+        routes_deployments,
+        routes_observe,
+        routes_access,
+    ):
+        app.include_router(module.router)
 
     return app

@@ -12,6 +12,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.10",
     "pyyaml>=6.0.2",
+    "sqlalchemy[asyncio]>=2.0.40",
+    "alembic>=1.16",
+    "pyjwt[crypto]>=2.10",
 ]
 
 [project.scripts]

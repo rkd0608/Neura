@@ -404,6 +404,12 @@ codes:
     retryable: false
     http_status: 428
     message: This request requires an Idempotency-Key header.
+  - code: API_PRECONDITION_REQUIRED
+    area: api
+    severity: error
+    retryable: false
+    http_status: 428
+    message: This request requires an If-Match header with the resource version.
   - code: API_IDEMPOTENCY_KEY_REUSED
     area: api
     severity: error
@@ -416,6 +422,12 @@ codes:
     retryable: false
     http_status: 422
     message: The request body failed validation.
+  - code: API_CURSOR_EXPIRED
+    area: api
+    severity: warning
+    retryable: false
+    http_status: 410
+    message: The event cursor is older than the retention window; list resources again.
   - code: API_RATE_LIMITED
     area: api
     severity: warning

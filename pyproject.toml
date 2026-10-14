@@ -38,6 +38,7 @@ dev = [
     "pytest-asyncio>=1.2",
     "ruff>=0.14",
     "types-grpcio>=1.0.0.20250914",
+    "types-jsonschema>=4.23",
     "types-protobuf>=6.30",
     "types-pyyaml>=6.0.12",
 ]
@@ -59,6 +60,12 @@ ignore = ["S101"]
 "tools/**" = ["S603", "S607"]
 # Simulation randomness is for modeling, never for security.
 "packages/neura-sim/src/**" = ["S311"]
+# Token prefixes and identifier kinds, not secrets.
+"packages/neura-control/src/neura_control/security/tokens.py" = ["S105"]
+"packages/neura-control/src/neura_control/ids.py" = ["S105"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.isort]
 known-first-party = [

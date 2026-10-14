@@ -68,7 +68,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -140,7 +140,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -169,7 +169,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -200,6 +200,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -275,6 +277,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -422,6 +426,29 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/me:
+    get:
+      operationId: getCurrentPrincipal
+      tags:
+      - Access
+      summary: Who the caller is and which organizations it can access.
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPrincipal'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -595,6 +622,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -665,6 +694,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -737,6 +768,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -850,7 +883,7 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -881,6 +914,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -945,6 +980,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1023,20 +1060,22 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: 'API_CURSOR_EXPIRED: the cursor is older than the retention window; re-list resources.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '410':
-          description: The cursor is older than the retention window; re-list resources.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
   /v1/projects/{project_id}/execution-profiles:
     get:
       operationId: listExecutionProfiles
@@ -1061,6 +1100,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1084,6 +1125,15 @@ paths:
             schema:
               $ref: '#/components/schemas/ExecutionProfileCreate'
       responses:
+        '200':
+          description: 'Already registered: the identical document''s existing resource.'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
         '201':
           description: Created.
           content:
@@ -1137,6 +1187,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1201,6 +1253,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1224,6 +1278,15 @@ paths:
             schema:
               $ref: '#/components/schemas/ModelArtifactCreate'
       responses:
+        '200':
+          description: 'Already registered: the identical document''s existing resource.'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelArtifact'
         '201':
           description: Created.
           content:
@@ -1277,6 +1340,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1300,6 +1365,15 @@ paths:
             schema:
               $ref: '#/components/schemas/RobotProfileCreate'
       responses:
+        '200':
+          description: 'Already registered: the identical document''s existing resource.'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RobotProfile'
         '201':
           description: Created.
           content:
@@ -1353,6 +1427,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1427,6 +1503,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1457,6 +1535,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1669,7 +1749,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1698,7 +1778,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1768,7 +1848,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1797,7 +1877,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1899,7 +1979,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1928,7 +2008,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -2003,6 +2083,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -2030,7 +2112,7 @@ paths:
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          $ref: '#/components/responses/IfMatchRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -2230,6 +2312,12 @@ components:
             $ref: '#/components/schemas/Problem'
     Forbidden:
       description: API_FORBIDDEN
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    IfMatchRequired:
+      description: API_PRECONDITION_REQUIRED
       content:
         application/problem+json:
           schema:
@@ -2583,6 +2671,50 @@ components:
         spec:
           type: object
       additionalProperties: false
+    CurrentPrincipal:
+      type: object
+      description: The authenticated caller and the organizations it can access.
+      required:
+      - subject
+      - kind
+      - organizations
+      properties:
+        subject:
+          type: string
+        kind:
+          enum:
+          - user
+          - api_token
+          - site_agent
+          - support
+          - system
+        organizations:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - display_name
+            - permissions
+            properties:
+              id:
+                $ref: '#/components/schemas/OrganizationId'
+              display_name:
+                type: string
+              permissions:
+                type: array
+                items:
+                  enum:
+                  - read
+                  - deploy
+                  - admin
+        project_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ProjectId'
+          description: Projects an API token is restricted to; null when unrestricted.
     Deployment:
       type: object
       required:

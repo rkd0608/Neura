@@ -1,0 +1,219 @@
+"""Control-plane test fixtures.
+
+Database tests need PostgreSQL: set ``NEURA_TEST_DATABASE_URL`` (CI does). Each test run creates a
+throwaway database, migrates it, and truncates every table before each test.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json as jsonlib
+import os
+import secrets
+import sys
+import uuid
+from collections.abc import Callable, Iterator
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx2 as httpx
+import psycopg
+import pytest
+import yaml
+from fastapi.testclient import TestClient
+
+from neura_control.app import create_app
+from neura_control.db.engine import create_engine, session_factory
+from neura_control.db.migrate import upgrade
+from neura_control.security.principal import Role
+from neura_control.services import bootstrap
+from neura_control.settings import ControlPlaneSettings
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from spec_validator import SpecValidator
+
+EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
+VALIDATOR = SpecValidator()
+
+
+def _with_database(url: str, name: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, f"/{name}", parts.query, parts.fragment))
+
+
+@pytest.fixture(scope="session")
+def database_url() -> Iterator[str]:
+    base = os.environ.get("NEURA_TEST_DATABASE_URL")
+    if not base:
+        pytest.skip("set NEURA_TEST_DATABASE_URL to run control-plane database tests")
+    name = f"neura_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(base, autocommit=True) as conn:
+        conn.execute(f'CREATE DATABASE "{name}"')
+    url = _with_database(base, name)
+    upgrade(url)
+    try:
+        yield url
+    finally:
+        with psycopg.connect(base, autocommit=True) as conn:
+            conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+TABLES = [
+    "idempotency_keys",
+    "events",
+    "audit_records",
+    "metric_points",
+    "faults",
+    "robot_sessions",
+    "site_commands",
+    "activation_requests",
+    "operations",
+    "revisions",
+    "deployments",
+    "robots",
+    "contract_documents",
+    "servers",
+    "enrollment_tokens",
+    "support_grants",
+    "sites",
+    "projects",
+    "api_tokens",
+    "memberships",
+    "organizations",
+]
+
+
+@pytest.fixture
+def clean_database(database_url: str) -> str:
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        conn.execute(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE")
+    return database_url
+
+
+class ConformanceClient:
+    """A TestClient wrapper that checks every response against the OpenAPI spec."""
+
+    def __init__(self, client: TestClient, token: str | None) -> None:
+        self.client = client
+        self.token = token
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        headers: dict[str, str] | None = None,
+        idempotency_key: str | bool | None = True,
+        token: str | bool | None = True,
+        content_type: str | None = None,
+        params: Any = None,
+        validate: bool = True,
+    ) -> httpx.Response:
+        merged: dict[str, str] = dict(headers or {})
+        bearer = self.token if token is True else token
+        if bearer:
+            merged["Authorization"] = f"Bearer {bearer}"
+        if method == "POST" and idempotency_key is not False and idempotency_key is not None:
+            merged["Idempotency-Key"] = (
+                secrets.token_hex(16) if idempotency_key is True else str(idempotency_key)
+            )
+        if json is not None:
+            merged.setdefault(
+                "Content-Type",
+                content_type
+                or ("application/merge-patch+json" if method == "PATCH" else "application/json"),
+            )
+        content = None if json is None else jsonlib.dumps(json)
+        response = self.client.request(method, path, content=content, headers=merged, params=params)
+        if validate and path.startswith("/v1/"):
+            VALIDATOR.validate(
+                method,
+                path,
+                response.status_code,
+                response.headers.get("content-type", ""),
+                response.content,
+            )
+        return response
+
+    def get(self, path: str, **kw: Any) -> httpx.Response:
+        return self.request("GET", path, **kw)
+
+    def post(self, path: str, json: Any = None, **kw: Any) -> httpx.Response:
+        return self.request("POST", path, json=json if json is not None else {}, **kw)
+
+    def patch(self, path: str, json: Any, *, version: str | None, **kw: Any) -> httpx.Response:
+        headers = dict(kw.pop("headers", {}) or {})
+        if version is not None:
+            headers["If-Match"] = f'"{version}"'
+        return self.request("PATCH", path, json=json, headers=headers, **kw)
+
+    def delete(self, path: str, *, version: str | None, **kw: Any) -> httpx.Response:
+        headers = dict(kw.pop("headers", {}) or {})
+        if version is not None:
+            headers["If-Match"] = f'"{version}"'
+        return self.request("DELETE", path, headers=headers, **kw)
+
+    def as_token(self, token: str | None) -> ConformanceClient:
+        return ConformanceClient(self.client, token)
+
+
+async def _bootstrap(url: str, role_subjects: dict[str, Role]) -> tuple[str, str]:
+    engine = create_engine(url, pool_size=1)
+    try:
+        async with session_factory(engine).begin() as session:
+            org = await bootstrap.ensure_organization(session, "Acme Robotics")
+            for subject, role in role_subjects.items():
+                await bootstrap.add_membership(session, org.id, subject, role)
+            token = await bootstrap.create_api_token(
+                session, org.id, display_name="test admin", scopes=["admin"]
+            )
+            return org.id, token
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+def settings(clean_database: str) -> ControlPlaneSettings:
+    return ControlPlaneSettings(
+        environment="test",
+        database_url=clean_database,  # type: ignore[arg-type]
+        rate_limit_per_minute=100_000,
+        events_poll_interval_s=0.05,
+        events_keepalive_s=0.2,
+        events_max_stream_s=0.5,
+    )
+
+
+AppFactory = Callable[..., tuple[ConformanceClient, str]]
+
+
+@pytest.fixture
+def make_api(settings: ControlPlaneSettings) -> Iterator[AppFactory]:
+    clients: list[TestClient] = []
+
+    def factory(**app_kwargs: Any) -> tuple[ConformanceClient, str]:
+        subjects = app_kwargs.pop("memberships", {})
+        overrides = app_kwargs.pop("settings_overrides", {})
+        app_settings = settings.model_copy(update=overrides) if overrides else settings
+        org_id, token = asyncio.run(_bootstrap(str(app_settings.database_url), subjects))
+        client = TestClient(create_app(app_settings, **app_kwargs), raise_server_exceptions=False)
+        client.__enter__()
+        clients.append(client)
+        return ConformanceClient(client, token), org_id
+
+    yield factory
+    for client in clients:
+        client.__exit__(None, None, None)
+
+
+@pytest.fixture
+def api(make_api: AppFactory) -> tuple[ConformanceClient, str]:
+    return make_api()
+
+
+def contract(name: str) -> dict[str, Any]:
+    data = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data

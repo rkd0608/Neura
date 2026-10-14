@@ -87,8 +87,10 @@ class ReasonCode(StrEnum):
     API_CONFLICT = "API_CONFLICT"
     API_PRECONDITION_FAILED = "API_PRECONDITION_FAILED"
     API_IDEMPOTENCY_KEY_REQUIRED = "API_IDEMPOTENCY_KEY_REQUIRED"
+    API_PRECONDITION_REQUIRED = "API_PRECONDITION_REQUIRED"
     API_IDEMPOTENCY_KEY_REUSED = "API_IDEMPOTENCY_KEY_REUSED"
     API_VALIDATION_FAILED = "API_VALIDATION_FAILED"
+    API_CURSOR_EXPIRED = "API_CURSOR_EXPIRED"
     API_RATE_LIMITED = "API_RATE_LIMITED"
     API_INTERNAL_ERROR = "API_INTERNAL_ERROR"
     API_UNAVAILABLE = "API_UNAVAILABLE"
@@ -615,6 +617,14 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         message='This request requires an Idempotency-Key header.',
         http_status=428,
     ),
+    ReasonCode.API_PRECONDITION_REQUIRED: ReasonCodeInfo(
+        code=ReasonCode.API_PRECONDITION_REQUIRED,
+        area="api",
+        severity="error",
+        retryable=False,
+        message='This request requires an If-Match header with the resource version.',
+        http_status=428,
+    ),
     ReasonCode.API_IDEMPOTENCY_KEY_REUSED: ReasonCodeInfo(
         code=ReasonCode.API_IDEMPOTENCY_KEY_REUSED,
         area="api",
@@ -630,6 +640,14 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='The request body failed validation.',
         http_status=422,
+    ),
+    ReasonCode.API_CURSOR_EXPIRED: ReasonCodeInfo(
+        code=ReasonCode.API_CURSOR_EXPIRED,
+        area="api",
+        severity="warning",
+        retryable=False,
+        message='The event cursor is older than the retention window; list resources again.',
+        http_status=410,
     ),
     ReasonCode.API_RATE_LIMITED: ReasonCodeInfo(
         code=ReasonCode.API_RATE_LIMITED,

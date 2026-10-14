@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
 
 from neura_control import ControlPlaneSettings, create_app
+from neura_control.app import iter_routes
 from neura_control.database import database_reachable
 from neura_control.problems import PROBLEM_MEDIA_TYPE
 
@@ -84,11 +85,11 @@ def test_implemented_routes_are_in_the_published_spec() -> None:
     app = create_app(ControlPlaneSettings(environment="test"))
     spec = yaml.safe_load(ControlPlaneSettings().openapi_path.read_text(encoding="utf-8"))
     operational = {"/", "/healthz", "/readyz", "/v1/openapi.yaml"}
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        if path is None or path in operational:
-            continue
+    served = [(m, p) for m, p in iter_routes(app) if p not in operational]
+    assert len(served) > 50
+    for method, path in served:
         assert path in spec["paths"], f"{path} is served but not declared in the OpenAPI spec"
+        assert method.lower() in spec["paths"][path], f"{method} {path} is not declared"
 
 
 @pytest.mark.skipif(

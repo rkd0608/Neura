@@ -364,30 +364,24 @@ site/                      # public developer docs site source (§26)
 
 Steps 1–3 need no GPU or robot and set the safety guarantees everything else relies on.
 
-### 16.1 Pilot-first delivery plan
+### 16.1 Platform build plan
 
-Decision (October 14, 2026): fund Neura from paid customer work, reinvesting revenue. Each phase ends with something **sellable**, so revenue can start before the full platform exists. The steps above are regrouped into four phases.
+Decision (October 14, 2026): build the complete Neura platform as designed in this document, engineered for production and scale, before taking it to customers. The demo is the real product: a customer is onboarded in the console, connects their GPU server to the NucleiLabs backend, registers a model, deploys it to robots, and manages it, all on the real system, with simulated robots until hardware is attached.
 
-| Phase | What we sell | What we build | Steps |
-| --- | --- | --- | --- |
-| **P1. Capacity Assessment** | A paid, fixed-scope engagement: "we profile your policy on your GPU server and tell you how many robots it can serve, at what cost per robot-hour, shared vs dedicated" | `neura profile`: a CLI that loads a LeRobot-format checkpoint, runs synthetic observations of the declared shapes on the customer's GPU, and produces a polished report covering the four sharing cases (§9.5) | 0 |
-| **P2. Live simulation demo** | Sales demo and design-partner sign-ups | Contracts, robot runtime, simulator with fault injection, gateway, scheduler, workers; N simulated robots served from one GPU; local site console | 1–5 |
-| **P3. Pilot Edition** | A paid pilot on the customer's robots and server | Installer and site agent, signed artifacts, release and rollback at task boundaries, adapters for the customer's policy and arm, a generated pilot report; physical validation on an SO-101-class arm first | 6–8, single site |
-| **P4. Platform** | Annual agreements, more sites | Cloud control plane, web console, SSO, multi-site, docs site beyond the initial pages | 9, §19–§21 in full |
+Every layer exists from the first milestone and deepens with each one, so the end-to-end flow always runs on real components, never mock-ups.
 
-Why P1 comes first: it needs only the customer's GPU and checkpoint, never touches their robots, carries far less trust risk than the action path, tests the primary bet on their real workload, and proves a budget owner exists (§25.2). A completed assessment is the natural lead-in to a P3 pilot.
+| Milestone | Delivers | Done when |
+| --- | --- | --- |
+| **M1. Foundation** | Monorepo and tooling (uv, ruff, mypy strict, pytest, pnpm for the console), CI with required checks, protobuf schema (§11), OpenAPI spec (§20), reason-code catalog, contracts library (§4), local dev stack in Docker Compose (Postgres, control plane, site agent, simulated robots) | `make dev` brings up the whole stack; schema, contract and compatibility tests pass in CI |
+| **M2. Data plane core** | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7) | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker |
+| **M3. Control plane** | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20) | API conformance tests against the OpenAPI spec; idempotency, concurrency and audit tests pass |
+| **M4. Site agent** | Enrollment with one-time tokens and on-host keys, preflight, outbound stream, signed manifest reconciliation, artifact verification, local boundaries, local site console API (§17, §19.5) | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage |
+| **M5. Web console** | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19) | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests |
+| **M6. Models and GPU sharing** | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10) | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner |
+| **M7. Production hardening** | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations |
+| **M8. Physical validation** | SO-101-class arms connected through the same platform | Fault suite and parity pass on hardware |
 
-**Pilot Edition scope.** In: one site, one server, the customer's policy (ACT- or SmolVLA-class first), their arm through a validated adapter, shared serving with admission control, the full fault suite, release and rollback, local site console, Prometheus metrics and OpenTelemetry traces with ready-made Grafana dashboards, and a pilot report against the agreed value equation (§22). Out: the cloud control plane, web console, SSO, multi-site, Kubernetes, and compliance certification. The site is designed to run without the cloud (§13), so leaving it out is a scope cut, not a design change.
-
-**What makes it look good** (built into P1 and P2, not added later):
-
-- The Capacity Assessment report: robots per GPU, cost per robot-hour, latency curves, and the cases where sharing loses, each from a reproducible run.
-- The local site console: live robot tiles with buffer level, observation age and deadline status, plus a **GPU savings panel** showing robots served per GPU against the dedicated baseline.
-- A recorded demo: eight simulated robots on one GPU, a worker killed and network delay injected on screen, every robot reaching a safe state, then recovering.
-
-**The moat built during the pilot phases**: every assessment adds to the performance knowledge base (§24.3, with consent); every pilot adds a qualified adapter and conformance evidence to the integration library (§24.1); the open robot runtime and contract start the ecosystem (§24.4).
-
-**Low-capital rules**: rent GPUs only for runs; use the customer's hardware for anything customer-specific; buy no hardware before P3 except one or two SO-101-class arms; build nothing from P4 until pilot revenue or a design partner requires it.
+Engineering standards for every milestone: typed code, tests written with the code, CI gates that cannot be bypassed, architecture decisions recorded in this document, and no component on the action path depending on the cloud.
 
 ---
 

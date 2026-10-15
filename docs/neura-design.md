@@ -777,6 +777,9 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
 - An upgrade restarts the gateway with the agent, so robots reconnect after the switch; the switch waits for a task boundary instead. The console has no upgrade screen yet (the API and SDK have the operation).
 - The container sandbox needs the agent on the host (the installer's systemd service). The bind-mounted paths are the agent's own, so an agent inside a container would need its state directory at the same path on the host. A seccomp or AppArmor profile beyond the runtime's default is not shipped yet.
 - The control plane does not check incoming messages against the outbound schema; it relies on the agent's filter.
+- Real-process chaos covers the gateway, its workers and the network. The site agent and control plane are covered by the smoke test's control-plane outage and their own fault tests; a chaos run that restarts them under load on the Compose stack is not built yet.
+- Against real processes the monitor sees only the robot side: grants and generations as robots receive them, not the gateway's emissions.
+- The soak's 72 hours are simulated time on the production cores; wall-clock aging (certificate expiry, clock drift, disk growth over days) is covered by unit tests, not by a 72-hour run of real processes.
 
 ### 17.5 Other connection modes (later, on demand)
 

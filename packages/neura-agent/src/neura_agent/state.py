@@ -61,6 +61,9 @@ class AgentState:
     # robot name -> client certificates the site CA issued it: {"sha256", "not_after"}.
     robot_certificates: dict[str, list[dict[str, str]]] = field(default_factory=dict)
     last_contact_unix: float | None = None
+    # The longest time since contact this site has seen, kept up with the monotonic clock and
+    # persisted, so moving the wall clock back cannot extend offline authorization.
+    offline_elapsed_s: float = 0.0
 
     def manifest(self) -> dict[str, Any] | None:
         if self.manifest_payload is None:

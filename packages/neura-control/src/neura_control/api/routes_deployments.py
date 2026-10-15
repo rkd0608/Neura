@@ -31,6 +31,7 @@ from neura_control.api.routes_contracts import load_contract, report_json
 from neura_control.api.routes_core import flush_unique, patched_spec
 from neura_control.api.schemas import (
     ActivationRequestCreate,
+    AgentUpgradeCreate,
     DeploymentCreate,
     DeploymentSpec,
     RevisionCreate,
@@ -44,6 +45,7 @@ from neura_control.db.models import (
     Project,
     Revision,
     Robot,
+    Server,
     Site,
     SiteCommand,
 )
@@ -387,6 +389,39 @@ def _accepted(operation: Operation) -> ApiResult:
     return ApiResult(
         202, serializers.operation(operation), {"Location": f"/v1/operations/{operation.id}"}
     )
+
+
+@router.post("/v1/servers/{server_id}/agent-upgrades", status_code=202)
+async def upgrade_agent(
+    server_id: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    """Upgrade one server's agent to a signed release (design §17.3). The site verifies the
+    bundle against the release keys pinned on the server, and only if its operator allows remote
+    upgrades; it switches at a task boundary and rolls back by itself if the release is not
+    healthy."""
+    body = await parse_body(request, AgentUpgradeCreate)
+    ctx = Ctx(request, principal)
+
+    async def work(session: AsyncSession) -> ApiResult:
+        server, project = await ctx.owned(session, Server, server_id, Permission.ADMIN)
+        operation = await _start_operation(
+            session,
+            ctx,
+            project,
+            site_id=server.site_id,
+            kind="upgrade_agent",
+            target=server.id,
+            command={
+                "kind": "upgrade_agent",
+                "server_id": server.id,
+                "version": body.version,
+                "bundle_url": body.bundle_url,
+                "bundle_sha256": body.bundle_sha256,
+            },
+        )
+        return _accepted(operation)
+
+    return await idempotent(request, principal, work)
 
 
 @router.post("/v1/revisions/{revision_id}/prepare", status_code=202)

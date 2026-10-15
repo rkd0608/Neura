@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import signal
 from collections.abc import Callable
 
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
@@ -18,6 +20,7 @@ from neura_agent.outbound import site_outbound
 from neura_agent.preflight import Runner, collect_facts, run_command
 from neura_agent.registry import NeuraRegistry
 from neura_agent.settings import AgentSettings
+from neura_agent.upgrade import Upgrader
 from neura_contracts import ReasonCode
 
 log = logging.getLogger("neura.agent")
@@ -36,6 +39,7 @@ class AgentRuntime:
         *,
         gateway: GatewayRunner | None = None,
         command_runner: Runner = run_command,
+        restart: Callable[[], None] | None = None,
     ) -> None:
         self.settings = settings
         self.identities = IdentityStore(settings.state_dir)
@@ -43,6 +47,10 @@ class AgentRuntime:
             settings.gateway_command, settings.gateway_status_listen or "127.0.0.1:8091"
         )
         self._runner = command_runner
+        # How the agent restarts into another release: ask systemd's main process (this one) to
+        # stop; the unit restarts it through the launcher.
+        self._restart = restart or (lambda: os.kill(os.getpid(), signal.SIGTERM))
+        self.upgrader: Upgrader | None = None
         self.outbound = site_outbound(settings)
         self.core: AgentCore | None = None
         self.connection: ControlConnection | None = None
@@ -143,6 +151,12 @@ class AgentRuntime:
         self.core.artifacts.registry = NeuraRegistry(
             self.settings, identity, key, outbound=self.outbound
         )
+        self.upgrader = self.core.upgrader = Upgrader(
+            self.core,
+            version=agent_version(),
+            connected=lambda: bool(self.connection and self.connection.connected),
+            restart=self._restart,
+        )
         self.core.recover()
         await self.core.reconcile()  # resume serving committed state immediately, cloud or not
         self.connection = ControlConnection(
@@ -167,6 +181,8 @@ class AgentRuntime:
 
     async def _watch(self) -> None:
         assert self.core is not None
+        if self.upgrader is not None:
+            self.upgrader.check()
         await self.core.enforce_authorization()
         self.last_gateway_status = await self.gateway.status()
         await self.core.watch_activations(self.last_gateway_status)

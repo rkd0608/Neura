@@ -33,9 +33,11 @@ from neura_agent.gateway import (
 )
 from neura_agent.identity import Identity, atomic_write
 from neura_agent.outbound import Outbound, site_outbound
+from neura_agent.releases import UpgradeState
 from neura_agent.settings import AgentSettings
 from neura_agent.site_pki import SitePki, default_gateway_names, unexpired
 from neura_agent.state import Activation, AgentState, Assignment, AuditLog, StateStore
+from neura_agent.upgrade import Upgrader
 from neura_contracts import (
     ContractError,
     ExecutionProfile,
@@ -86,17 +88,21 @@ class AgentCore:
         gateway: GatewayRunner,
         *,
         clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
         cuda_indexes: Callable[[], list[int]] = list,
         outbound: Outbound | None = None,
     ) -> None:
         self.settings = settings
         self.outbound = outbound or site_outbound(settings)
+        # Set by the runtime when this agent can upgrade itself (an installed agent).
+        self.upgrader: Upgrader | None = None
         # For the agent's metrics: operations by final state, artifact checks by result.
         self.operations: Counter[str] = Counter()
         self.artifact_checks: Counter[str] = Counter()
         self.identity = identity
         self.gateway = gateway
         self._clock = clock
+        self._monotonic = monotonic
         # The CUDA GPUs this agent may place workers on (detected and allowed).
         self._cuda_indexes = cuda_indexes
         token = settings.artifact_source_token
@@ -121,6 +127,9 @@ class AgentCore:
         self.gateway_suspended = False
         self._nonces: list[bytes] = []
         self._contact_persisted_at: float | None = None
+        # Offline time is state.offline_elapsed_s at this monotonic instant, plus what passed since.
+        self._elapsed_mark = monotonic()
+        self._accounted_at: float | None = None
 
     # --- helpers ------------------------------------------------------------------------------
 
@@ -142,6 +151,8 @@ class AgentCore:
     def note_contact(self) -> None:
         now = self._clock()
         self.state.last_contact_unix = now
+        self.state.offline_elapsed_s = 0.0
+        self._elapsed_mark = self._monotonic()
         if (
             self._contact_persisted_at is None
             or now - self._contact_persisted_at >= CONTACT_PERSIST_INTERVAL_S
@@ -173,16 +184,46 @@ class AgentCore:
         self.note_contact()
         return True
 
+    def offline_elapsed_s(self) -> float | None:
+        """Time since the last verified contact: the wall clock's measure, but never less than
+        the monotonic time the agent has itself counted since then, across restarts (design §13).
+        A wall clock moved backwards therefore cannot extend offline authorization."""
+        if self.state.last_contact_unix is None:
+            return None
+        counted = self.state.offline_elapsed_s + max(0.0, self._monotonic() - self._elapsed_mark)
+        return max(self._clock() - self.state.last_contact_unix, counted)
+
+    def _account_offline_time(self) -> None:
+        """Fold the time counted so far into the persisted measure."""
+        elapsed = self.offline_elapsed_s()
+        if elapsed is not None:
+            self.state.offline_elapsed_s = elapsed
+            self._elapsed_mark = self._monotonic()
+
     def offline_remaining_s(self) -> float | None:
         manifest = self.state.manifest()
-        if manifest is None or self.state.last_contact_unix is None:
+        elapsed = self.offline_elapsed_s()
+        if manifest is None or elapsed is None:
             return None
         allowed = float(manifest.get("offline_authorization_hours", 0)) * 3600
-        return max(0.0, allowed - (self._clock() - self.state.last_contact_unix))
+        return max(0.0, allowed - elapsed)
 
     def authorization_expired(self) -> bool:
         remaining = self.offline_remaining_s()
         return remaining is not None and remaining <= 0
+
+    def report(
+        self,
+        command_id: str,
+        operation_id: str,
+        state: str,
+        *,
+        reason: ReasonCode | None = None,
+        message: str = "",
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        """Report an operation's progress (persisted, and resent after a reconnect)."""
+        self._report(command_id, operation_id, state, reason=reason, message=message, result=result)
 
     def _report(
         self,
@@ -237,7 +278,11 @@ class AgentCore:
         """After a restart: fail operations that were running when the agent stopped. Commands run
         at most once, so an interrupted one is reported rather than resumed; activations awaiting
         approval or a task boundary are durable and carry on."""
+        # An agent upgrade restarts the agent on purpose; the new (or restored) agent reports it.
+        upgrading = UpgradeState.load(self.settings.state_dir)
         for command_id, report in sorted(self.state.reports.items(), key=lambda i: i[1]["at"]):
+            if upgrading is not None and command_id == upgrading.command_id:
+                continue
             if report["state"] == "Running" and command_id not in self.state.activations:
                 self._report(
                     command_id,
@@ -360,12 +405,15 @@ class AgentCore:
         )
         self._send(ack)
         operation_id = command.operation_id
+        if kind == "upgrade_agent" and command.upgrade_agent.server_id != self.identity.server_id:
+            return  # for another server of this site, which reports it
         name = {
             "prepare": "prepare",
             "request_activation": "request_activation",
             "rollback": "rollback",
             "collect_diagnostics": "collect_diagnostics",
             "cancel": "cancel",
+            "upgrade_agent": "upgrade_agent",
         }.get(kind)
         if name is None or name not in self.settings.allowed_operations:
             self._report(
@@ -398,6 +446,17 @@ class AgentCore:
             await self._cancel(command.cancel.operation_id)
         elif kind == "collect_diagnostics":
             self._report(command_id, operation_id, "Succeeded", result=self.diagnostics())
+        elif kind == "upgrade_agent":
+            if self.upgrader is None:
+                self._report(
+                    command_id,
+                    operation_id,
+                    "Failed",
+                    reason=ReasonCode.AGENT_UPGRADE_REFUSED,
+                    message="this agent cannot upgrade itself",
+                )
+            else:
+                self.upgrader.start(command_id, operation_id, command.upgrade_agent)
 
     async def _prepare(self, command_id: str, operation_id: str, revision_id: str) -> None:
         self._report(command_id, operation_id, "Running", message="verifying contracts")
@@ -780,6 +839,11 @@ class AgentCore:
 
     async def enforce_authorization(self) -> None:
         """Stop serving when offline authorization runs out; resume when contact returns."""
+        now = self._monotonic()
+        if self._accounted_at is None or now - self._accounted_at >= CONTACT_PERSIST_INTERVAL_S:
+            self._accounted_at = now
+            self._account_offline_time()
+            self._save()
         if self.authorization_expired():
             if not self.gateway_suspended:
                 log.error("offline authorization expired: stopping the data plane")

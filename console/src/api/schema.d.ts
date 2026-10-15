@@ -641,6 +641,26 @@ export interface paths {
     patch: operations["updateServer"];
     trace?: never;
   };
+  "/v1/servers/{server_id}/agent-upgrades": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upgrade a server's site agent to a signed release.
+     * @description A signed agent release for one server (design §17.3). The site verifies the bundle against the release keys its installer pinned and applies it only if its operator allows remote upgrades (NEURA_AGENT_ALLOWED_OPERATIONS); it switches when every robot is between tasks and rolls back by itself if the new release does not reconnect. Requires the admin role.
+     */
+    post: operations["upgradeAgent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/sessions/{session_id}": {
     parameters: {
       query?: never;
@@ -840,6 +860,14 @@ export interface components {
     ActivationRequestPage: {
       items: components["schemas"]["ActivationRequest"][];
       page: components["schemas"]["PageInfo"];
+    };
+    /** @description A signed agent release for one server (design §17.3). The site verifies the bundle against the release keys its installer pinned and applies it only if its operator allows remote upgrades (NEURA_AGENT_ALLOWED_OPERATIONS); it switches when every robot is between tasks and rolls back by itself if the new release does not reconnect. */
+    AgentUpgradeCreate: {
+      version: string;
+      /** @description Where the site fetches the release bundle (built by tools/build_agent_release.py). */
+      bundle_url: string;
+      /** @description SHA-256 of the bundle file. */
+      bundle_sha256: string;
     };
     ApiToken: {
       metadata: components["schemas"]["Metadata"];
@@ -1259,7 +1287,12 @@ export interface components {
     Operation: {
       metadata: components["schemas"]["Metadata"];
       /** @enum {string} */
-      kind: "prepare_revision" | "activate_revision" | "rollback" | "collect_diagnostics";
+      kind:
+        | "prepare_revision"
+        | "activate_revision"
+        | "rollback"
+        | "collect_diagnostics"
+        | "upgrade_agent";
       /** @description Identifier of the resource the operation acts on. */
       target: string;
       state: components["schemas"]["OperationState"];
@@ -3598,6 +3631,44 @@ export interface operations {
       404: components["responses"]["NotFound"];
       412: components["responses"]["PreconditionFailed"];
       428: components["responses"]["IfMatchRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  upgradeAgent: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        server_id: components["parameters"]["ServerId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentUpgradeCreate"];
+      };
+    };
+    responses: {
+      /** @description Accepted; follow the Operation until it finishes. */
+      202: {
+        headers: {
+          Location: components["headers"]["Location"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Operation"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];

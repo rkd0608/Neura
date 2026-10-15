@@ -551,7 +551,7 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - a **contact proof**: the agent sends a random nonce with each status report, and the control plane returns the manifest key's signature over `CONTACT_PROOF_CONTEXT ‖ site_id ‖ 0x00 ‖ nonce`.
 
   Neither a replayed message nor a stream left open without the control plane behind it can extend authorization, and no clocks are compared across machines.
-- When authorization runs out, the agent stops the data plane and refuses activations until contact returns. It is measured on the server's wall clock so that it survives restarts. A server clock moved backwards extends it; bounding that with monotonic time across restarts is M7 hardening.
+- When authorization runs out, the agent stops the data plane and refuses activations until contact returns. It is measured on the server's wall clock so that it survives restarts. Since M7 it is also bounded by monotonic time persisted across restarts, so a clock moved backwards no longer extends it (§17.7).
 
 **Data plane and local API**
 
@@ -687,11 +687,35 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - from inside the container, check that there is no network, no writable root and no root user.
 - `process` mode runs workers as plain child processes, for development and tests only.
 
+**Installation and signed upgrades**
+
+- **Releases.** `tools/build_agent_release.py` builds a release bundle: the agent's wheels and its dependencies, the launcher, and `release.json` listing every file's SHA-256. It signs `release.json` with Neura's Ed25519 release key and prints the bundle's SHA-256.
+- **Installer.** `deploy/install/install.sh` verifies a bundle before installing anything: the signature with `openssl` against the release keys given, then every file against its signed digest. It then:
+  - installs the release in its own virtual environment (`/opt/neura/agent/releases/<version>`), with `current` pointing at it;
+  - pins the release keys (`/etc/neura/release-keys.pem`);
+  - writes `/etc/neura/agent.env` and a hardened systemd unit (dedicated user, `NoNewPrivileges`, `ProtectSystem=strict`, writes only to the state and install directories);
+  - enrolls the server and starts the agent.
+
+  Running it again with a newer bundle is a manual upgrade.
+- **Remote upgrades** are opt-in at the site: `upgrade_agent` is not among the default allowed operations. `POST /v1/servers/{id}/agent-upgrades` (admin role) sends the server a version, an https URL and the bundle's SHA-256. The agent then:
+  1. fetches the bundle and checks its SHA-256;
+  2. verifies it against the pinned release keys, so the control plane cannot push code Neura did not sign;
+  3. stages it in a new virtual environment;
+  4. waits until no robot is armed, running or waiting (up to `NEURA_AGENT_UPGRADE_WAIT_S`, else `AGENT_UPGRADE_DEFERRED`);
+  5. points `current` at the new release, records the upgrade and restarts.
+- **Automatic rollback.** systemd starts the agent through `neura-agent-launch`, a standard-library script outside every release.
+  - It counts the new release's start attempts. After three failed starts it points `current` back at the old release.
+  - The new agent commits the upgrade once it has reconnected to the control plane. If it does not within `NEURA_AGENT_UPGRADE_HEALTH_TIMEOUT_S`, it rolls itself back.
+  - The old agent then reports `AGENT_UPGRADE_ROLLED_BACK` with the reason.
+  - Tests build real bundles, install them with the installer (openssl, venv, pip), and exercise commit, both rollbacks and every refusal: wrong digest, version or key, tampered file, not installed.
+- **Offline authorization and the clock.** Time since the last verified contact is the larger of the wall clock's measure and the time the agent itself has counted with the monotonic clock, persisted across restarts. Setting the server's clock back no longer extends offline authorization.
+
 **Known limits, scheduled**
 
 - Signatures are checked at prepare. A revision prepared before its publisher was distrusted keeps running until it is replaced or prepared again.
 - The registry stores files in a directory: local disk, or a shared filesystem when several control-plane replicas run. An object-storage backend is not built yet.
 - Traces (OpenTelemetry) are not exported yet; metrics and the local audit and outbound logs are.
+- An upgrade restarts the gateway with the agent, so robots reconnect after the switch; the switch waits for a task boundary instead. The console has no upgrade screen yet (the API and SDK have the operation).
 - The container sandbox needs the agent on the host (the installer's systemd service). The bind-mounted paths are the agent's own, so an agent inside a container would need its state directory at the same path on the host. A seccomp or AppArmor profile beyond the runtime's default is not shipped yet.
 - The control plane does not check incoming messages against the outbound schema; it relies on the agent's filter.
 

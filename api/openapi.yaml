@@ -1929,6 +1929,51 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/servers/{server_id}/agent-upgrades:
+    post:
+      operationId: upgradeAgent
+      tags:
+      - Servers
+      summary: Upgrade a server's site agent to a signed release.
+      description: A signed agent release for one server (design §17.3). The site verifies the bundle
+        against the release keys its installer pinned and applies it only if its operator allows remote
+        upgrades (NEURA_AGENT_ALLOWED_OPERATIONS); it switches when every robot is between tasks and rolls
+        back by itself if the new release does not reconnect. Requires the admin role.
+      parameters:
+      - $ref: '#/components/parameters/ServerId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpgradeCreate'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/sessions/{session_id}:
     get:
       operationId: getSession
@@ -2808,6 +2853,29 @@ components:
             $ref: '#/components/schemas/ActivationRequest'
         page:
           $ref: '#/components/schemas/PageInfo'
+    AgentUpgradeCreate:
+      type: object
+      description: A signed agent release for one server (design §17.3). The site verifies the bundle
+        against the release keys its installer pinned and applies it only if its operator allows remote
+        upgrades (NEURA_AGENT_ALLOWED_OPERATIONS); it switches when every robot is between tasks and rolls
+        back by itself if the new release does not reconnect.
+      required:
+      - version
+      - bundle_url
+      - bundle_sha256
+      properties:
+        version:
+          type: string
+          pattern: ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]+)?$
+        bundle_url:
+          type: string
+          pattern: ^https://\S{1,2000}$
+          description: Where the site fetches the release bundle (built by tools/build_agent_release.py).
+        bundle_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: SHA-256 of the bundle file.
+      additionalProperties: false
     ApiToken:
       type: object
       required:
@@ -3833,6 +3901,7 @@ components:
           - activate_revision
           - rollback
           - collect_diagnostics
+          - upgrade_agent
         target:
           type: string
           description: Identifier of the resource the operation acts on.

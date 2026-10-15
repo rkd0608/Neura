@@ -84,6 +84,14 @@ class ContractCreate(Strict):
     signatures: list[dict[str, Any]] | None = Field(default=None, max_length=16)
 
 
+class AgentUpgradeCreate(Strict):
+    version: Annotated[
+        str, StringConstraints(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]+)?$")
+    ]
+    bundle_url: Annotated[str, StringConstraints(pattern=r"^https://\S{1,2000}$")]
+    bundle_sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
 class ArtifactSignatureCreate(Strict):
     key_id: str
     public_key: str

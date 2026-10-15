@@ -88,6 +88,9 @@ class ReasonCode(StrEnum):
     AGENT_ARTIFACT_SIGNATURE_INVALID = "AGENT_ARTIFACT_SIGNATURE_INVALID"
     AGENT_ARTIFACT_KEY_UNAVAILABLE = "AGENT_ARTIFACT_KEY_UNAVAILABLE"
     WORKER_IMAGE_UNAVAILABLE = "WORKER_IMAGE_UNAVAILABLE"
+    AGENT_UPGRADE_REFUSED = "AGENT_UPGRADE_REFUSED"
+    AGENT_UPGRADE_DEFERRED = "AGENT_UPGRADE_DEFERRED"
+    AGENT_UPGRADE_ROLLED_BACK = "AGENT_UPGRADE_ROLLED_BACK"
     AGENT_DEVICE_UNAVAILABLE = "AGENT_DEVICE_UNAVAILABLE"
     AGENT_ENROLLMENT_INVALID = "AGENT_ENROLLMENT_INVALID"
     AGENT_UNAUTHENTICATED = "AGENT_UNAUTHENTICATED"
@@ -632,6 +635,27 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="error",
         retryable=True,
         message="The model's runtime image is not at this site and could not be pulled.",
+    ),
+    ReasonCode.AGENT_UPGRADE_REFUSED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_UPGRADE_REFUSED,
+        area="agent",
+        severity="error",
+        retryable=False,
+        message='The agent release was refused (not signed by a trusted release key, wrong digest or version, or not installable here).',
+    ),
+    ReasonCode.AGENT_UPGRADE_DEFERRED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_UPGRADE_DEFERRED,
+        area="agent",
+        severity="warning",
+        retryable=True,
+        message='The agent upgrade waited too long for every robot to be between tasks and was not applied.',
+    ),
+    ReasonCode.AGENT_UPGRADE_ROLLED_BACK: ReasonCodeInfo(
+        code=ReasonCode.AGENT_UPGRADE_ROLLED_BACK,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message='The new agent release did not come up healthy; the previous release runs again.',
     ),
     ReasonCode.AGENT_DEVICE_UNAVAILABLE: ReasonCodeInfo(
         code=ReasonCode.AGENT_DEVICE_UNAVAILABLE,

@@ -716,6 +716,15 @@ def _command_message(command: SiteCommand) -> site_pb2.Command:
         )
     elif kind == "cancel":
         message.cancel.CopyFrom(site_pb2.CancelOperation(operation_id=data["operation_id"]))
+    elif kind == "upgrade_agent":
+        message.upgrade_agent.CopyFrom(
+            site_pb2.UpgradeAgent(
+                server_id=data["server_id"],
+                version=data["version"],
+                bundle_url=data["bundle_url"],
+                bundle_sha256=data["bundle_sha256"],
+            )
+        )
     else:
         message.collect_diagnostics.CopyFrom(
             site_pb2.CollectDiagnostics(scope=str(data.get("scope", "")))

@@ -36,6 +36,19 @@ class ActivationRequestPage(TypedDict):
     page: PageInfo
 
 
+class AgentUpgradeCreate(TypedDict):
+    """
+    A signed agent release for one server (design §17.3). The site verifies the bundle
+    against the release keys its installer pinned and applies it only if its operator allows
+    remote upgrades (NEURA_AGENT_ALLOWED_OPERATIONS); it switches when every robot is between
+    tasks and rolls back by itself if the new release does not reconnect.
+    """
+
+    version: str
+    bundle_url: str
+    bundle_sha256: str
+
+
 class ApiToken(TypedDict):
     metadata: Metadata
     display_name: DisplayName
@@ -495,7 +508,9 @@ class Operation(TypedDict):
     """Long-running work that completes only when the site acknowledges it (design §20.4)."""
 
     metadata: Metadata
-    kind: Literal["prepare_revision", "activate_revision", "rollback", "collect_diagnostics"]
+    kind: Literal[
+        "prepare_revision", "activate_revision", "rollback", "collect_diagnostics", "upgrade_agent"
+    ]
     target: str
     state: OperationState
     reason: NotRequired[ReasonCode | None]

@@ -137,6 +137,21 @@ docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbou
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --verify
 ```
 
+## Installing a site agent
+
+On a GPU server (Linux, Python 3.13+, openssl 3; Docker and the NVIDIA container toolkit for the
+worker sandbox), with a signed release bundle and an enrollment token from the console:
+
+```bash
+sudo deploy/install/install.sh --bundle neura-agent-<version>.tar \
+  --release-keys release-keys.pem --control-plane <host:port> --token <nen_...>
+```
+
+Release bundles are built and signed with `tools/build_agent_release.py`; the installer verifies
+them before installing anything. Later upgrades arrive signed through the control plane, if the
+site operator allows them (`NEURA_AGENT_ALLOWED_OPERATIONS`), and roll back by themselves when the
+new release is not healthy (design §17.7).
+
 ## Conventions
 
 - **Generated files are committed and checked.** Edit the source (`proto/`, `catalog/`, contract

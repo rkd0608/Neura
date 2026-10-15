@@ -703,3 +703,35 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
     assert pki.identity(renewed) == pki.server_uri(identity.server_id)
     server = client.get(f"/v1/sites/{site}/servers").json()["items"][0]
     assert server["metadata"]["id"] == identity.server_id
+
+
+def test_agent_upgrades_are_commands_to_one_server(harness: Harness) -> None:
+    enrolled, key = harness.enrolled()
+    path = f"/v1/servers/{enrolled.server_id}/agent-upgrades"
+    body = {
+        "version": "1.2.0",
+        "bundle_url": "https://releases.example/neura-agent-1.2.0.tar",
+        "bundle_sha256": "ab" * 32,
+    }
+    assert harness.client.post(path, {**body, "bundle_url": "http://x/b.tar"}).status_code == 422
+    accepted = harness.client.post(path, body)
+    assert accepted.status_code == 202, accepted.text
+    operation = accepted.json()
+    assert (operation["kind"], operation["target"]) == ("upgrade_agent", enrolled.server_id)
+    messages = asyncio.run(
+        connect(
+            harness.endpoint,
+            connection_token(key, enrolled.server_id),
+            [hello(harness.site)],
+            until=lambda r: "command" in kinds(r),
+        )
+    )
+    command = next(m.command for m in messages if m.WhichOneof("body") == "command")
+    assert command.WhichOneof("kind") == "upgrade_agent"
+    assert command.operation_id == operation["metadata"]["id"]
+    upgrade = command.upgrade_agent
+    assert (upgrade.server_id, upgrade.version, upgrade.bundle_sha256) == (
+        enrolled.server_id,
+        "1.2.0",
+        "ab" * 32,
+    )

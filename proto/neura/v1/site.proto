@@ -174,9 +174,22 @@ message Command {
     Rollback rollback = 4;
     CollectDiagnostics collect_diagnostics = 5;
     CancelOperation cancel = 6;
+    UpgradeAgent upgrade_agent = 8;
   }
   // The operation this command belongs to; the agent reports progress against it.
   string operation_id = 7;
+}
+
+// Upgrade one server's agent to a signed release (design §17.3). The agent verifies the bundle
+// against the release keys pinned on the server, stages it, switches at a task boundary, and
+// rolls back by itself if the new release does not come up healthy.
+message UpgradeAgent {
+  string server_id = 1;
+  string version = 2;
+  // Where to fetch the release bundle: https:// (Neura's or the customer's mirror) or file://.
+  string bundle_url = 3;
+  // SHA-256 of the bundle file, hex.
+  string bundle_sha256 = 4;
 }
 
 // Stop work for an operation that has not finished (for example a pending activation approval).

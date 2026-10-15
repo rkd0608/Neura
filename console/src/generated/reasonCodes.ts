@@ -450,6 +450,24 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: true,
     message: "The model's runtime image is not at this site and could not be pulled.",
   },
+  AGENT_UPGRADE_REFUSED: {
+    area: "agent",
+    severity: "error",
+    retryable: false,
+    message: "The agent release was refused (not signed by a trusted release key, wrong digest or version, or not installable here).",
+  },
+  AGENT_UPGRADE_DEFERRED: {
+    area: "agent",
+    severity: "warning",
+    retryable: true,
+    message: "The agent upgrade waited too long for every robot to be between tasks and was not applied.",
+  },
+  AGENT_UPGRADE_ROLLED_BACK: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "The new agent release did not come up healthy; the previous release runs again.",
+  },
   AGENT_DEVICE_UNAVAILABLE: {
     area: "agent",
     severity: "error",

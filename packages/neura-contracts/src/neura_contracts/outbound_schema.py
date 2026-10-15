@@ -146,6 +146,8 @@ RESULTS: dict[str, OutboundField] = {
     'pending_activations': OutboundField(True, 'Diagnostics: activations awaiting approval.'),
     'gateway_running': OutboundField(True, 'Diagnostics: whether the gateway runs.'),
     'gateway_suspended': OutboundField(True, 'Diagnostics: whether serving is suspended.'),
+    'agent_version_from': OutboundField(True, 'Agent upgrade: the release before.'),
+    'agent_version_to': OutboundField(True, 'Agent upgrade: the release after.'),
 }
 
 METRICS: dict[str, OutboundMetric] = {

@@ -139,6 +139,8 @@ results:
   pending_activations: {minimal: true, description: "Diagnostics: activations awaiting approval."}
   gateway_running: {minimal: true, description: "Diagnostics: whether the gateway runs."}
   gateway_suspended: {minimal: true, description: "Diagnostics: whether serving is suspended."}
+  agent_version_from: {minimal: true, description: "Agent upgrade: the release before."}
+  agent_version_to: {minimal: true, description: "Agent upgrade: the release after."}
 
 # TelemetryBatch metrics (standard mode only). Labels not listed are dropped.
 metrics:

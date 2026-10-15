@@ -205,13 +205,14 @@ class Signature(_message.Message):
     def __init__(self, key_id: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
 
 class Command(_message.Message):
-    __slots__ = ("command_id", "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "operation_id")
+    __slots__ = ("command_id", "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "upgrade_agent", "operation_id")
     COMMAND_ID_FIELD_NUMBER: _ClassVar[int]
     PREPARE_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ACTIVATION_FIELD_NUMBER: _ClassVar[int]
     ROLLBACK_FIELD_NUMBER: _ClassVar[int]
     COLLECT_DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
     CANCEL_FIELD_NUMBER: _ClassVar[int]
+    UPGRADE_AGENT_FIELD_NUMBER: _ClassVar[int]
     OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
     command_id: str
     prepare: PrepareRevision
@@ -219,8 +220,21 @@ class Command(_message.Message):
     rollback: Rollback
     collect_diagnostics: CollectDiagnostics
     cancel: CancelOperation
+    upgrade_agent: UpgradeAgent
     operation_id: str
-    def __init__(self, command_id: _Optional[str] = ..., prepare: _Optional[_Union[PrepareRevision, _Mapping]] = ..., request_activation: _Optional[_Union[RequestActivation, _Mapping]] = ..., rollback: _Optional[_Union[Rollback, _Mapping]] = ..., collect_diagnostics: _Optional[_Union[CollectDiagnostics, _Mapping]] = ..., cancel: _Optional[_Union[CancelOperation, _Mapping]] = ..., operation_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, command_id: _Optional[str] = ..., prepare: _Optional[_Union[PrepareRevision, _Mapping]] = ..., request_activation: _Optional[_Union[RequestActivation, _Mapping]] = ..., rollback: _Optional[_Union[Rollback, _Mapping]] = ..., collect_diagnostics: _Optional[_Union[CollectDiagnostics, _Mapping]] = ..., cancel: _Optional[_Union[CancelOperation, _Mapping]] = ..., upgrade_agent: _Optional[_Union[UpgradeAgent, _Mapping]] = ..., operation_id: _Optional[str] = ...) -> None: ...
+
+class UpgradeAgent(_message.Message):
+    __slots__ = ("server_id", "version", "bundle_url", "bundle_sha256")
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    BUNDLE_URL_FIELD_NUMBER: _ClassVar[int]
+    BUNDLE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    server_id: str
+    version: str
+    bundle_url: str
+    bundle_sha256: str
+    def __init__(self, server_id: _Optional[str] = ..., version: _Optional[str] = ..., bundle_url: _Optional[str] = ..., bundle_sha256: _Optional[str] = ...) -> None: ...
 
 class CancelOperation(_message.Message):
     __slots__ = ("operation_id",)

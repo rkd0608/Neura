@@ -9,6 +9,7 @@ from urllib.parse import quote
 from neura_sdk.models import (
     ActivationRequestCreate,
     ActivationRequestPage,
+    AgentUpgradeCreate,
     ApiTokenCreate,
     ApiTokenPage,
     ApiTokenWithSecret,
@@ -852,6 +853,25 @@ class Operations:
             "DELETE",
             f"/v1/servers/{_segment(server_id)}",
             if_match=if_match,
+        )
+
+    def upgrade_agent(
+        self,
+        server_id: str,
+        *,
+        body: AgentUpgradeCreate,
+        idempotency_key: str | None = None,
+    ) -> Operation:
+        """
+        Upgrade a server's site agent to a signed release. (``POST
+        /v1/servers/{server_id}/agent-upgrades``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/servers/{_segment(server_id)}/agent-upgrades",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
         )
 
     def get_session(

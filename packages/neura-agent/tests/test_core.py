@@ -137,6 +137,8 @@ class Site:
         )
         self.gateway = FakeGateway()
         self.clock = Clock()
+        self.mono = Clock()  # the server's monotonic clock, which restarts with each boot
+        self.mono.now = 1000.0
         self.cuda: list[int] = []  # GPUs the agent may use
         self.generation = 0
         self.commands = 0
@@ -148,6 +150,7 @@ class Site:
             self.identity,
             self.gateway,
             clock=self.clock,
+            monotonic=self.mono,
             cuda_indexes=self.cuda.copy,
         )
 
@@ -952,3 +955,54 @@ async def test_the_agent_exports_its_state_for_the_customers_monitoring(site: Si
     assert value("neura_agent_outbound_messages", kind="hello") == 1
     assert value("neura_agent_connected") == 0
     assert value("neura_agent_certificate_expiry_timestamp_seconds", certificate="site_ca") > 0
+
+
+async def test_moving_the_clock_back_does_not_extend_offline_authorization(site: Site) -> None:
+    await site.commit([REV1])  # one hour of offline authorization
+    site.core.note_contact()
+    site.clock.now += 1800
+    site.mono.now += 1800
+    await site.core.enforce_authorization()  # counts and persists the time offline
+    assert site.core.offline_remaining_s() == pytest.approx(1800)
+    # The server's wall clock is set back ten hours and the machine reboots.
+    site.clock.now -= 36_000
+    site.mono.now = 5.0
+    site.core = site.new_core()
+    assert site.core.offline_remaining_s() == pytest.approx(1800)
+    site.mono.now += 1800
+    assert site.core.authorization_expired()
+    await site.core.enforce_authorization()
+    assert site.core.gateway_suspended
+    # Real contact renews it.
+    site.core.note_contact()
+    assert site.core.offline_remaining_s() == pytest.approx(3600)
+
+
+async def test_agent_upgrade_commands_respect_the_target_and_the_boundaries(
+    tmp_path: Path,
+) -> None:
+    from neura_agent.releases import UpgradeState
+
+    def upgrade(site: Site, server_id: str) -> site_pb2.Command:
+        return site.command(
+            upgrade_agent=site_pb2.UpgradeAgent(
+                server_id=server_id, version="9.9.9", bundle_url="file:///x", bundle_sha256="0"
+            )
+        )
+
+    site = Site(tmp_path / "a")
+    await site.core.on_command(upgrade(site, "srv_another"))
+    assert site.reports() == []  # another server of the site reports its own upgrade
+    await site.core.on_command(upgrade(site, site.identity.server_id))
+    assert site.reports()[-1].reason.code == ReasonCode.AGENT_BOUNDARY_DENIED.value
+    allowed = Site(tmp_path / "b", allowed_operations=["upgrade_agent"])
+    await allowed.core.on_command(upgrade(allowed, allowed.identity.server_id))
+    assert allowed.reports()[-1].reason.code == ReasonCode.AGENT_UPGRADE_REFUSED.value
+
+    # An upgrade restarts the agent on purpose: its operation is not "interrupted".
+    allowed.core.report("cmd_up", "opr_up", "Running", message="switching")
+    UpgradeState("cmd_up", "opr_up", "1.0.0", "1.1.0", "switching").save(allowed.settings.state_dir)
+    allowed.drain()
+    allowed.core = allowed.new_core()
+    allowed.core.recover()
+    assert all(r.command_id != "cmd_up" for r in allowed.reports())

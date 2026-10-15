@@ -15,8 +15,10 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, model_
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RemoteOperation = Literal[
-    "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel"
+    "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "upgrade_agent"
 ]
+# Remote agent upgrades run new code on the server: the site operator opts in to them.
+DEFAULT_OPERATIONS = [o for o in get_args(RemoteOperation) if o != "upgrade_agent"]
 
 
 class ArtifactKey(BaseModel):
@@ -59,7 +61,7 @@ class AgentSettings(BaseSettings):
 
     # --- boundaries (design §17.4) ---
     allowed_operations: list[RemoteOperation] = Field(
-        default_factory=lambda: list(get_args(RemoteOperation))
+        default_factory=lambda: list(DEFAULT_OPERATIONS)
     )
     allowed_gpu_indexes: list[int] | None = None  # None: every GPU the server reports
     # SHA-256 of the local operator credential. Without it, local approvals are disabled.
@@ -120,6 +122,16 @@ class AgentSettings(BaseSettings):
     require_artifact_signatures: bool = True
     # Round trip to robots assumed by capacity estimates until robots report measured ones.
     capacity_rtt_p99_ms: float = Field(default=20.0, gt=0)
+
+    # --- installation and upgrades (design §17.3) ---
+    # Where the installer put the agent's releases, and the Neura release keys every release
+    # must be signed with.
+    install_dir: Path = Path("/opt/neura/agent")
+    release_keys_file: Path = Path("/etc/neura/release-keys.pem")
+    # How long an upgrade waits for every robot to be between tasks, and how long a new release
+    # has to reconnect to the control plane before it is rolled back.
+    upgrade_wait_s: float = Field(default=3600.0, gt=0)
+    upgrade_health_timeout_s: float = Field(default=300.0, gt=0)
 
     # --- what leaves the site (design §18.2) ---
     # standard: every field of the published outbound schema (catalog/outbound.yaml). minimal:

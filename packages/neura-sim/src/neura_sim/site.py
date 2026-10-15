@@ -8,11 +8,13 @@ server) are driven here; only the transport and the GPU are simulated.
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import heapq
 import itertools
 import math
 import random
-from collections import Counter
+from collections import Counter, deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -24,7 +26,7 @@ from neura.v1 import dataplane_pb2
 from neura_adapters import MockPolicy, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
-from neura_runtime.runtime import RobotRuntime, RuntimeConfig, RuntimeState
+from neura_runtime.runtime import RobotRuntime, RuntimeConfig, RuntimeState, TransitionError
 from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_server.admission import AdmissionController
 from neura_server.gateway import BatchGroup, Deployment, GatewayCore
@@ -32,6 +34,7 @@ from neura_server.leases import GenerationStore, LeaseTable, MemoryGenerationSto
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import Batch, Policy, Scheduler
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
+from neura_sim.invariants import InvariantMonitor
 from neura_sim.network import Link, LinkModel
 
 MS = 1_000
@@ -53,6 +56,9 @@ class EventLoop:
             self.now_us = time_us
             action()
         self.now_us = max(self.now_us, end_us)
+
+    def __len__(self) -> int:
+        return len(self._queue)
 
 
 @dataclass(slots=True)
@@ -76,6 +82,8 @@ class WorkerFaults:
     out_of_memory_batches: set[int] = field(default_factory=set)
     invalid_output_batches: set[int] = field(default_factory=set)
     corrupt_output_batches: set[int] = field(default_factory=set)  # out-of-range actions
+    # Faults for the next batches to complete, in order: "out_of_memory", "invalid", "corrupt".
+    next_batches: deque[str] = field(default_factory=deque)
 
 
 @dataclass(slots=True)
@@ -104,6 +112,11 @@ class SiteConfig:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     policy_factory: Callable[[ExecutionBinding], PolicyBackend] | None = None
     revision_id: str = "rev_sim"
+    # Watch every message and action with an independent InvariantMonitor.
+    check_invariants: bool = True
+    # Keep each robot's full (epoch, index) dispatch history in ``SimRobot.dispatches``. Soaks
+    # turn this off: the monitor checks the same rules with bounded memory.
+    record_dispatches: bool = True
 
 
 class SimRobot:
@@ -119,19 +132,45 @@ class SimRobot:
         self.client = SessionClient(
             self.runtime, SessionConfig(robot_id=name, revision_id=site.config.revision_id)
         )
-        self.uplink = Link(site.config.uplink, site.rng)
-        self.downlink = Link(site.config.downlink, site.rng)
+        # Each robot gets its own copy of the link models so faults can target one robot.
+        self.uplink = Link(copy.deepcopy(site.config.uplink), site.rng)
+        self.downlink = Link(copy.deepcopy(site.config.downlink), site.rng)
         self.auto_arm = site.config.auto_arm
         self.dispatches: list[tuple[int, int]] = []
         self.states: Counter[RuntimeState] = Counter()
+        self.stopped = False
+        self.oversize_next = False  # report the next stream message as too large
         self._calls: dict[int, str] = {}
         self._call_ids = itertools.count(1)
-        self.runtime.dispatch_listener = lambda epoch, index: self.dispatches.append((epoch, index))
+        self.monitor = site.monitor.client(self, name) if site.monitor is not None else None
+        self.runtime.dispatch_listener = self._dispatched
 
     def now(self) -> int:
         return self.site.loop.now_us + self.offset_us
 
+    def _dispatched(self, epoch: int, index: int) -> None:
+        if self.site.config.record_dispatches:
+            self.dispatches.append((epoch, index))
+        if self.monitor is not None:
+            assert self.site.monitor is not None
+            self.site.monitor.dispatched(
+                self.monitor, epoch, index, self.controller.last_command, self.runtime.state
+            )
+
+    def stop(self) -> None:
+        """The client process exits: it stops ticking and ignores anything still in flight."""
+        self.stopped = True
+
+    def reset(self) -> None:
+        """The explicit local reset of a latched fault, after revalidation (design §7)."""
+        if self.monitor is not None:
+            assert self.site.monitor is not None
+            self.site.monitor.reset(self.monitor)
+        self.runtime.reset(self.now(), revalidated=True)
+
     def tick(self) -> None:
+        if self.stopped:
+            return
         now = self.now()
         outbound = self.client.tick(now)
         self.arm.step()
@@ -140,9 +179,17 @@ class SimRobot:
             and self.runtime.state is RuntimeState.READY
             and self.runtime.session_id is not None
         ):
-            self.runtime.arm(now)
+            # Arming can be refused (no actuator authority, say); try again next period.
+            with contextlib.suppress(TransitionError):
+                self.runtime.arm(now)
             outbound.extend(self.client.drain())
         self.states[self.runtime.state] += 1
+        if self.monitor is not None:
+            assert self.site.monitor is not None
+            runtime = self.runtime
+            self.site.monitor.ticked(
+                self.monitor, now, runtime.state, runtime.task_epoch, runtime.fault
+            )
         for item in outbound:
             self._send(item)
         self.site.loop.at(
@@ -151,14 +198,26 @@ class SimRobot:
 
     def _send(self, item: Outbound) -> None:
         call_id = next(self._call_ids)
+        oversize = False
         if item.channel != "stream":
             self._calls[call_id] = item.channel
             timeout_at = self.site.loop.now_us + self.site.config.rpc_timeout_us
             self.site.loop.at(timeout_at, lambda: self._rpc_timeout(call_id))
+        else:
+            oversize, self.oversize_next = self.oversize_next, False
+            message = item.message
+            assert isinstance(message, dataplane_pb2.RobotMessage)
+            if self.monitor is not None and message.WhichOneof("body") == "observation":
+                assert self.site.monitor is not None
+                self.site.monitor.observation_sent(self.monitor, message.observation)
         for at in self.uplink.deliveries(self.site.loop.now_us):
-            self.site.loop.at(at, lambda: self.site.gateway_receive(self, item, call_id))
+            self.site.loop.at(
+                at, lambda: self.site.gateway_receive(self, item, call_id, oversize=oversize)
+            )
 
     def _rpc_timeout(self, call_id: int) -> None:
+        if self.stopped:
+            return
         channel = self._calls.pop(call_id, None)
         if channel == "open":
             self.client.on_open_failed(self.now())
@@ -167,10 +226,16 @@ class SimRobot:
 
     def deliver_response(self, call_id: int, response: Any) -> None:
         channel = self._calls.pop(call_id, None)
-        if channel is None:
+        if channel is None or self.stopped:
             return  # timed out already, or a duplicate
         now = self.now()
         if channel == "open":
+            if self.monitor is not None and response.WhichOneof("result") == "accepted":
+                assert self.site.monitor is not None
+                accepted = response.accepted
+                self.site.monitor.session_granted(
+                    self.monitor, accepted.session_id, accepted.lease_generation
+                )
             self.client.on_open_response(response, now)
         elif channel == "heartbeat":
             self.client.on_heartbeat_response(response, now)
@@ -178,7 +243,26 @@ class SimRobot:
             self.client.on_control_response(response, now)
 
     def deliver_stream(self, message: dataplane_pb2.GatewayMessage) -> None:
-        self.client.on_gateway_message(message, self.now())
+        if self.stopped:
+            return
+        monitor = self.site.monitor
+        if self.monitor is None or monitor is None or message.WhichOneof("body") != "action_chunk":
+            self.client.on_gateway_message(message, self.now())
+            return
+        runtime = self.runtime
+        now = self.now()
+        arrival = monitor.chunk_arriving(
+            self.monitor,
+            message.action_chunk,
+            session_id=runtime.session_id,
+            lease_generation=runtime.lease_generation,
+            task_epoch=runtime.task_epoch,
+            state=runtime.state,
+            accepted_before=runtime.counters["chunks_accepted"],
+            now_us=now,
+        )
+        self.client.on_gateway_message(message, now)
+        monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
 
 
 class SimSite:
@@ -192,6 +276,11 @@ class SimSite:
         self.frames = {c.role: bytes(c.width * c.height * 3) for c in binding.robot.spec.cameras}
         self.store = generation_store or MemoryGenerationStore()
         self.profile = LatencyProfile(list(config.profile))
+        self.monitor = (
+            InvariantMonitor(binding, clock=lambda: self.loop.now_us)
+            if config.check_invariants
+            else None
+        )
         self.worker_model = WorkerModel(self.profile)
         self.policy: PolicyBackend = (
             config.policy_factory(binding) if config.policy_factory else MockPolicy(binding)
@@ -213,6 +302,7 @@ class SimSite:
         self._worker_down_until = 0
         self.worker_busy_us = 0
         self.gateway_restarts = 0
+        self._sweeps = 0
         self._session_robot: dict[str, SimRobot] = {}
         for crash in config.worker_faults.crash_at_us:
             self.loop.at(crash, self._crash_worker)
@@ -250,14 +340,21 @@ class SimSite:
     def gateway_now(self) -> int:
         return self.loop.now_us + self.config.gateway_clock_offset_us
 
-    def gateway_receive(self, robot: SimRobot, item: Outbound, call_id: int) -> None:
+    def gateway_receive(
+        self, robot: SimRobot, item: Outbound, call_id: int, *, oversize: bool = False
+    ) -> None:
         now = self.gateway_now()
         message = item.message
         if item.channel == "open":
             assert isinstance(message, dataplane_pb2.OpenSessionRequest)
             response: Any = self.core.open_session(robot.name, message, now)
             if response.WhichOneof("result") == "accepted":
-                self._session_robot[response.accepted.session_id] = robot
+                accepted = response.accepted
+                self._session_robot[accepted.session_id] = robot
+                if self.monitor is not None:
+                    self.monitor.lease_granted(
+                        robot.name, accepted.session_id, accepted.lease_generation
+                    )
             self._respond(robot, call_id, response)
         elif item.channel == "heartbeat":
             assert isinstance(message, dataplane_pb2.HeartbeatRequest)
@@ -267,17 +364,22 @@ class SimSite:
             self._respond(robot, call_id, self.core.control(robot.name, message, now))
         else:
             assert isinstance(message, dataplane_pb2.RobotMessage)
-            deliveries = self.core.receive(robot.name, message, message.ByteSize(), now)
-            self._deliver(deliveries)
+            size = self.core.max_message_bytes + 1 if oversize else message.ByteSize()
+            # Answers to a robot's own message go back on its stream, whatever their session.
+            self._deliver(self.core.receive(robot.name, message, size, now), to=robot)
             self._try_dispatch()
 
     def _respond(self, robot: SimRobot, call_id: int, response: Any) -> None:
         for at in robot.downlink.deliveries(self.loop.now_us):
             self.loop.at(at, lambda: robot.deliver_response(call_id, response))
 
-    def _deliver(self, deliveries: list[Any]) -> None:
+    def _deliver(self, deliveries: list[Any], *, to: SimRobot | None = None) -> None:
         for delivery in deliveries:
-            robot = self._session_robot.get(delivery.session_id)
+            if self.monitor is not None and delivery.message.WhichOneof("body") == "action_chunk":
+                self.monitor.chunk_emitted(
+                    delivery.message.action_chunk, self.core.leases, self.gateway_now()
+                )
+            robot = to or self._session_robot.get(delivery.session_id)
             if robot is None:
                 continue
             for at in robot.downlink.deliveries(self.loop.now_us):
@@ -301,17 +403,24 @@ class SimSite:
             return  # the worker crashed or the gateway restarted: never deliver old results
         self._worker_busy = None
         faults = self.config.worker_faults
+        injected = faults.next_batches.popleft() if faults.next_batches else None
         outputs: list[NDArray[np.float32]] | PolicyError
-        if batch.batch_id in faults.out_of_memory_batches:
+        if batch.batch_id in faults.out_of_memory_batches or injected == "out_of_memory":
             outputs = PolicyError("CUDA out of memory (simulated)", out_of_memory=True)
         else:
             outputs = self.policy.infer([r.inputs for r in batch.requests])
-            if batch.batch_id in faults.invalid_output_batches:
+            if batch.batch_id in faults.invalid_output_batches or injected == "invalid":
                 outputs = [np.full_like(o, np.nan) for o in outputs]
-            if batch.batch_id in faults.corrupt_output_batches:
+            if batch.batch_id in faults.corrupt_output_batches or injected == "corrupt":
                 outputs = [np.full_like(o, 1e6) for o in outputs]
         self._deliver(self.core.complete(self.group_key, batch, outputs, self.gateway_now()))
         self._try_dispatch()
+
+    def crash_worker(self, restart_us: int | None = None) -> None:
+        """Kill the worker now; it is back after ``restart_us`` (default: the configured time)."""
+        if restart_us is not None:
+            self.config.worker_faults.restart_us = restart_us
+        self._crash_worker()
 
     def _crash_worker(self) -> None:
         self._worker_generation += 1
@@ -342,6 +451,11 @@ class SimSite:
     def _sweep(self) -> None:
         self.core.sweep(self.gateway_now())
         self._try_dispatch()
+        self._sweeps += 1
+        if self._sweeps % 100 == 0:
+            # Forget routes of sessions the gateway no longer has (keeps a long soak bounded).
+            for session_id in [s for s in self._session_robot if s not in self.core.sessions]:
+                del self._session_robot[session_id]
         self.loop.at(self.loop.now_us + 100 * MS, self._sweep)
 
     # --- running ------------------------------------------------------------------------------

@@ -466,6 +466,11 @@ class RobotRuntime:
     def on_rejected(self, message: dataplane_pb2.RequestRejected, now_us: int) -> None:
         env = message.envelope
         reason = _reason(message.reason.code)
+        if env.session_id != self._session_id:
+            # A late answer addressed to an earlier session (each lease has its own session id):
+            # it says nothing about this one.
+            self._note(ReasonCode.LEASE_GENERATION_STALE)
+            return
         if (
             self._pending is not None
             and env.task_epoch == self.task_epoch

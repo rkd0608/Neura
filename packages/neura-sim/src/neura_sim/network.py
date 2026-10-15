@@ -1,7 +1,8 @@
 """A one-way network link model for the discrete-event simulator.
 
 Latency is ``base + uniform jitter`` plus any active delay spike. Like a TCP stream, a link
-delivers in order unless reordering is injected. Partitions drop everything sent while active.
+delivers in order unless reordering is injected. Partitions drop everything sent while active;
+loss windows drop each message with a probability.
 Duplication and reordering model replays and misbehaving middleboxes, which the runtime must
 tolerate even though gRPC itself would not produce them.
 """
@@ -27,6 +28,7 @@ class LinkModel:
     jitter_us: int = 200
     partitions: list[Window] = field(default_factory=list)
     spikes: list[tuple[Window, int]] = field(default_factory=list)  # window, extra delay
+    losses: list[tuple[Window, float]] = field(default_factory=list)  # window, drop probability
     duplicate_probability: float = 0.0
     reorder_probability: float = 0.0
     reorder_extra_us: int = 5_000
@@ -45,7 +47,9 @@ class Link:
         """Delivery times (true time) for one message sent at ``now_us``; empty if lost."""
         self.sent += 1
         model = self.model
-        if any(w.contains(now_us) for w in model.partitions):
+        if any(w.contains(now_us) for w in model.partitions) or any(
+            w.contains(now_us) and self._rng.random() < p for w, p in model.losses
+        ):
             self.dropped += 1
             return []
         delay = model.base_us + self._rng.randint(0, max(model.jitter_us, 0))
@@ -61,3 +65,10 @@ class Link:
             self.duplicated += 1
             times.append(at + self._rng.randint(1, max(model.jitter_us, 1) * 4))
         return times
+
+    def prune(self, now_us: int) -> None:
+        """Forget fault windows that have ended (keeps a long soak's link checks cheap)."""
+        model = self.model
+        model.partitions = [w for w in model.partitions if w.end_us > now_us]
+        model.spikes = [(w, extra) for w, extra in model.spikes if w.end_us > now_us]
+        model.losses = [(w, p) for w, p in model.losses if w.end_us > now_us]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -32,10 +33,15 @@ class SimulatedArm:
         return {name: float(v) for name, v in zip(self.names, self.position, strict=True)}
 
 
+LOG_LENGTH = 1_000
+
+
 @dataclass(slots=True)
 class ControllerLog:
-    commands: list[NDArray[np.float64]] = field(default_factory=list)
-    responses: list[FaultResponse] = field(default_factory=list)
+    """The most recent commands and fault responses (bounded, so a soak can run for days)."""
+
+    commands: deque[NDArray[np.float64]] = field(default_factory=lambda: deque(maxlen=LOG_LENGTH))
+    responses: deque[FaultResponse] = field(default_factory=lambda: deque(maxlen=LOG_LENGTH))
 
 
 class SimController:
@@ -48,6 +54,7 @@ class SimController:
         self.fail_commands = False
         self.confirm_responses = True
         self.validated = {FaultResponse.HOLD_POSITION, FaultResponse.CONTROLLED_STOP}
+        self.last_command: NDArray[np.float64] | None = None
 
     def has_authority(self) -> bool:
         return self.authority
@@ -58,7 +65,8 @@ class SimController:
         if np.any(action < self.arm.low) or np.any(action > self.arm.high):
             # A real controller would refuse too; the runtime must never send one.
             raise AssertionError("runtime dispatched an out-of-range action")
-        self.log.commands.append(action.copy())
+        self.last_command = action.copy()
+        self.log.commands.append(self.last_command)
         self.arm.holding = False
         self.arm.target = action.copy()
         return CommandResult(True)

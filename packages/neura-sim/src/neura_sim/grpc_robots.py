@@ -2,7 +2,9 @@
 
 Each robot is a simulated arm with the same runtime, session client and gRPC connection a real
 integration uses. Robots arm automatically whenever they are Ready (a stand-in for an operator's
-local approval) and print a status line every few seconds.
+local approval) and print a status line every few seconds. With ``--check-invariants`` every
+robot is watched by the independent InvariantMonitor (design §21: any violation is a Sev-1), and
+``--reset-after`` stands in for an operator who resets a latched fault after a while.
 """
 
 from __future__ import annotations
@@ -15,12 +17,14 @@ import json
 import logging
 import os
 import signal
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import grpc
 
+from neura.v1 import dataplane_pb2
 from neura_contracts import (
     ContractError,
     ExecutionProfile,
@@ -32,8 +36,9 @@ from neura_contracts import (
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.grpc_client import GatewayConnection, RobotCredentials, fetch_assignment
 from neura_runtime.runtime import RobotRuntime, RuntimeState, TransitionError
-from neura_runtime.session import SessionClient, SessionConfig
+from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
+from neura_sim.invariants import InvariantMonitor
 
 
 def load_binding(artifact: Path, robot: Path, profile: Path) -> ExecutionBinding:
@@ -58,6 +63,7 @@ class SimulatedRobotProcess:
         arm: SimulatedArm | None = None,
         task_seconds: float | None = None,
         instruction: str = "pick and place",
+        reset_after_s: float | None = None,
     ) -> None:
         self.robot_id = robot_id
         self.revision_id = revision_id
@@ -74,11 +80,91 @@ class SimulatedRobotProcess:
         self.task_seconds = task_seconds
         self.hold = False  # when True, finish the current task and do not start another
         self.tasks_completed = 0
+        self.resets = 0
+        self.reset_after_s = reset_after_s
         self._task_started_us: int | None = None
+        self._monitor: InvariantMonitor | None = None
+        self._watched: Any = None
+
+    def watch(self, monitor: InvariantMonitor) -> None:
+        """Report everything this robot sends, receives and does to ``monitor``."""
+        record = monitor.client(self, self.robot_id, self.runtime.binding)
+        self._monitor, self._watched = monitor, record
+        client, runtime, controller = self.client, self.runtime, self.controller
+        drain = client.drain
+        on_open = client.on_open_response
+        on_message = client.on_gateway_message
+
+        def watched_drain() -> list[Outbound]:
+            items = drain()  # SessionClient.tick drains through this too
+            for item in items:
+                message = item.message
+                if (
+                    isinstance(message, dataplane_pb2.RobotMessage)
+                    and message.WhichOneof("body") == "observation"
+                ):
+                    monitor.observation_sent(record, message.observation)
+            return items
+
+        def watched_open(response: dataplane_pb2.OpenSessionResponse, now_us: int) -> None:
+            if response.WhichOneof("result") == "accepted":
+                accepted = response.accepted
+                monitor.session_granted(record, accepted.session_id, accepted.lease_generation)
+            on_open(response, now_us)
+
+        def watched_message(message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
+            if message.WhichOneof("body") != "action_chunk":
+                on_message(message, now_us)
+                return
+            arrival = monitor.chunk_arriving(
+                record,
+                message.action_chunk,
+                session_id=runtime.session_id,
+                lease_generation=runtime.lease_generation,
+                task_epoch=runtime.task_epoch,
+                state=runtime.state,
+                accepted_before=runtime.counters["chunks_accepted"],
+                now_us=now_us,
+            )
+            on_message(message, now_us)
+            monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
+
+        client.drain = watched_drain  # type: ignore[method-assign]
+        client.on_open_response = watched_open  # type: ignore[method-assign]
+        client.on_gateway_message = watched_message  # type: ignore[method-assign]
+        runtime.dispatch_listener = lambda epoch, index: monitor.dispatched(
+            record, epoch, index, controller.last_command, runtime.state
+        )
+
+    @property
+    def violations(self) -> int:
+        if self._monitor is None:
+            return 0
+        return self._monitor.by_client[self._watched.label]
+
+    def reset(self, now_us: int) -> None:
+        """The explicit local reset of a latched fault, after revalidation (design §7)."""
+        if self._monitor is not None:
+            self._monitor.reset(self._watched)
+        self.runtime.reset(now_us, revalidated=True)
+        self.resets += 1
 
     def _on_tick(self, now_us: int) -> None:
         self.arm.step()
         state = self.runtime.state
+        if self._monitor is not None:
+            runtime = self.runtime
+            self._monitor.ticked(self._watched, now_us, state, runtime.task_epoch, runtime.fault)
+        fault = self.runtime.fault
+        if (
+            state is RuntimeState.FAULTED
+            and fault is not None
+            and self.reset_after_s is not None
+            and now_us - fault.at_us >= self.reset_after_s * 1e6
+        ):
+            with contextlib.suppress(TransitionError):
+                self.reset(now_us)
+            return
         if (
             state is RuntimeState.RUNNING
             and self.task_seconds is not None
@@ -111,6 +197,8 @@ class SimulatedRobotProcess:
             "fault": snapshot.fault.reason.value if snapshot.fault else None,
             "late_ticks": self.connection.late_ticks,
             "rtt_p99_us": self.client.rtt.p99_us(),
+            "resets": self.resets,
+            **({"violations": self.violations} if self._monitor is not None else {}),
         }
 
 
@@ -128,8 +216,12 @@ class AssignedRobot:
         credentials: RobotCredentials | str | Callable[[], RobotCredentials],
         task_seconds: float = 8.0,
         poll_seconds: float = 1.0,
+        monitor: InvariantMonitor | None = None,
+        reset_after_s: float | None = None,
     ) -> None:
         self.name = name
+        self._monitor = monitor
+        self._reset_after_s = reset_after_s
         self._gateway = gateway
         # A callable loads credentials when first needed (a robot can start before the site
         # has issued its certificate) and is retried until it succeeds.
@@ -199,7 +291,10 @@ class AssignedRobot:
                         self._resolved(),
                         arm=self.arm,
                         task_seconds=self._task_seconds,
+                        reset_after_s=self._reset_after_s,
                     )
+                    if self._monitor is not None:
+                        self.process.watch(self._monitor)
                     process_stop = asyncio.Event()
                     connection_task = asyncio.create_task(self.process.connection.run(process_stop))
                     self.switches += 1
@@ -316,6 +411,19 @@ def main() -> None:
         "(otherwise --revision with the contracts given here)",
     )
     parser.add_argument(
+        "--check-invariants",
+        action="store_true",
+        default=env("NEURA_SIM_CHECK_INVARIANTS", "") in ("1", "true"),
+        help="watch every robot with the independent invariant monitor; exit 1 on a violation",
+    )
+    parser.add_argument(
+        "--reset-after",
+        type=float,
+        default=float(env("NEURA_SIM_RESET_AFTER", "0")) or None,
+        help="reset a latched fault after this many seconds, as an operator would "
+        "(default: never; a faulted robot stays faulted)",
+    )
+    parser.add_argument(
         "--task-seconds",
         type=float,
         default=float(env("NEURA_SIM_TASK_SECONDS", "5")),
@@ -333,6 +441,12 @@ def main() -> None:
     def later(robot_id: str) -> Callable[[], RobotCredentials]:
         return lambda: credentials(robot_id)
 
+    monitor = (
+        InvariantMonitor(clock=lambda: time.monotonic_ns() // 1000, gateway_observed=False)
+        if args.check_invariants
+        else None
+    )
+
     if args.assigned:
         assigned = [
             AssignedRobot(
@@ -340,23 +454,35 @@ def main() -> None:
                 gateway=args.gateway,
                 credentials=later(f"{args.robot_prefix}{i}"),
                 task_seconds=args.task_seconds,
+                monitor=monitor,
+                reset_after_s=args.reset_after,
             )
             for i in range(args.robots)
         ]
         asyncio.run(
             run_robots(assigned, duration_s=args.duration, report_every_s=args.report_every)
         )
-        return
-    binding = load_binding(args.artifact, args.robot_profile, args.profile)
-    robots = []
-    for i in range(args.robots):
-        robot_id = f"{args.robot_prefix}{i}"
-        robots.append(
-            SimulatedRobotProcess(
-                binding, robot_id, args.revision, args.gateway, credentials(robot_id)
+    else:
+        binding = load_binding(args.artifact, args.robot_profile, args.profile)
+        robots = []
+        for i in range(args.robots):
+            robot_id = f"{args.robot_prefix}{i}"
+            process = SimulatedRobotProcess(
+                binding,
+                robot_id,
+                args.revision,
+                args.gateway,
+                credentials(robot_id),
+                reset_after_s=args.reset_after,
             )
-        )
-    asyncio.run(run_robots(robots, duration_s=args.duration, report_every_s=args.report_every))
+            if monitor is not None:
+                process.watch(monitor)
+            robots.append(process)
+        asyncio.run(run_robots(robots, duration_s=args.duration, report_every_s=args.report_every))
+    if monitor is not None:
+        print(json.dumps({"invariants": monitor.summary()}), flush=True)
+        if monitor.violations:
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

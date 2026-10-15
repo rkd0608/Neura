@@ -1675,6 +1675,7 @@ dependencies = [
     { name = "neura-runtime" },
     { name = "neura-server" },
     { name = "numpy" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1685,6 +1686,7 @@ requires-dist = [
     { name = "neura-runtime", editable = "packages/neura-runtime" },
     { name = "neura-server", editable = "packages/neura-server" },
     { name = "numpy", specifier = ">=2.2" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

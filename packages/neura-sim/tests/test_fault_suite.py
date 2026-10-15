@@ -4,7 +4,10 @@ Every scenario also checks the invariants that must hold no matter what happens:
   - within a task epoch, dispatched action indexes are exactly 0, 1, 2, ... (no duplicate, no
     skip, no re-dispatch), and epochs never go backwards;
   - nothing out of the robot's declared ranges is ever sent (the simulated controller raises);
-  - a latched fault is never cleared without an explicit reset.
+  - a latched fault is never cleared without an explicit reset;
+  - and everything the independent InvariantMonitor watches (neura_sim.invariants): every
+    accepted chunk was emitted under a live lease for the robot's own session, epoch and latest
+    request, from a fresh observation; every dispatched action came from an accepted chunk.
 """
 
 from __future__ import annotations
@@ -32,6 +35,11 @@ def assert_invariants(site: SimSite) -> None:
             )
             next_index[epoch] = index + 1
             previous_epoch = epoch
+    assert site.monitor is not None
+    assert site.monitor.violations == 0, site.monitor.summary()
+    assert site.monitor.checked["actions_dispatched"] == sum(
+        r.runtime.dispatched for r in [*site.robots, *site.extra_clients]
+    )
 
 
 def run(site: SimSite, seconds: float) -> Any:
@@ -138,7 +146,7 @@ def test_reset_after_outage_resumes_under_a_new_lease(config: SiteConfig) -> Non
     robot = site.robots[0]
     generation = robot.runtime.lease_generation
     assert robot.runtime.state is RuntimeState.FAULTED
-    robot.runtime.reset(robot.now(), revalidated=True)
+    robot.reset()  # the explicit local reset, which the monitor sees
     run(site, 3)
     assert robot.runtime.snapshot().state is RuntimeState.RUNNING
     assert generation is not None

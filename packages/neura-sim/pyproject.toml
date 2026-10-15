@@ -11,10 +11,13 @@ dependencies = [
     "neura-server",
     "numpy>=2.2",
     "grpcio>=1.84,<2",
+    "pyyaml>=6.0.2",
 ]
 
 [project.scripts]
 neura-sim-robots = "neura_sim.grpc_robots:main"
+neura-sim-soak = "neura_sim.soak:main"
+neura-chaos = "neura_sim.chaos:main"
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]

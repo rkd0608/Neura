@@ -389,8 +389,14 @@ class GatewayCore:
         deliveries: list[Delivery] = []
         for request in scheduler.complete(batch, now_us):
             session = self.sessions.get(request.session_id)
-            if session is None or session.lease.generation != request.envelope.lease_generation:
-                continue
+            lease = self.leases.get(request.session_id)
+            if (
+                session is None
+                or lease is None
+                or lease.generation != request.envelope.lease_generation
+                or lease.expires_at_us <= now_us
+            ):
+                continue  # only a live lease is ever served, even between sweeps (design §6.1)
             output = results[id(request)]
             binding = session.deployment.binding
             expected = (binding.chunk_length, binding.action_dim)

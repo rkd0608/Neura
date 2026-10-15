@@ -25,10 +25,12 @@ design and the build plan (§16.1).
 | `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy worker processes (`neura-gateway`, `neura-worker`) |
 | `packages/neura-adapters` | Model adapters: LeRobot ACT, SmolVLA, π0, π0.5 and Diffusion Policy, a mock, synthetic checkpoints, profiler, multi-adapter (LoRA) batching |
 | `packages/neura-bench` | GPU-sharing benchmark: each sharing case against the dedicated baselines (`neura-bench`) |
-| `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, `neura-sim-robots` |
+| `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, invariant monitor, `neura-sim-robots`, `neura-sim-soak`, `neura-chaos` |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
+| `site/` | Public developer docs (Docusaurus): every page labeled, references generated from the sources |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
+| `examples/site/` | A development gateway configuration, used by the docs quickstart |
 | `bench/reports/` | Benchmark reports, one directory per device |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
@@ -52,6 +54,9 @@ make console-e2e     # the whole journey in Chromium against the real backend
 make models-setup    # also install PyTorch and LeRobot (about 5 GB), for real models
 make test-models     # LeRobot adapters, real worker processes, a smoke run of the benchmark
 make bench           # the GPU-sharing benchmark on a GPU; report in bench/reports/<gpu>/
+
+make docs-setup      # the developer docs site (site/, Docusaurus)
+make docs            # docs dev server; make docs-check: labels, wording, build
 
 make soak            # 72 simulated hours of the site with injected faults (about 2 hours)
 make chaos           # faults in a real gateway, its workers and the network (5 minutes)

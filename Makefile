@@ -17,13 +17,14 @@ models-setup: ## Also install PyTorch and LeRobot (the models group), for model 
 	$(UV) sync --frozen --group models
 
 .PHONY: gen
-gen: ## Regenerate code from proto/, catalog/, contract models and the API spec
+gen: ## Regenerate code and reference docs from proto/, catalog/, contract models and the API spec
 	$(UV) run python tools/gen_reason_codes.py
 	$(UV) run python tools/gen_outbound.py
 	$(UV) run python tools/gen_dashboards.py
 	$(UV) run python tools/gen_proto.py
 	$(UV) run python tools/gen_schemas.py
 	$(UV) run python tools/gen_sdk.py
+	$(UV) run python tools/gen_docs.py
 	cd console && pnpm run gen
 
 .PHONY: examples
@@ -39,6 +40,7 @@ check-generated: ## Fail if any generated file is stale
 	$(UV) run python tools/gen_schemas.py --check
 	$(UV) run python tools/refresh_example_bindings.py --check
 	$(UV) run python tools/gen_sdk.py --check
+	$(UV) run python tools/gen_docs.py --check
 
 .PHONY: fmt
 fmt: ## Format code
@@ -111,6 +113,20 @@ console-dev: ## Console dev server on http://127.0.0.1:5173, against the API on 
 .PHONY: console-e2e
 console-e2e: ## Console end-to-end tests: real backend, site agent and robots in Chromium
 	cd console && pnpm run e2e
+
+.PHONY: docs-setup
+docs-setup: ## Install the docs site's dependencies (pnpm)
+	cd site && pnpm install --frozen-lockfile
+
+.PHONY: docs
+docs: ## Docs site dev server on http://127.0.0.1:3000/neura/
+	cd site && pnpm run start
+
+.PHONY: docs-check
+docs-check: ## Docs: labels, wording, generated references, types and a warning-free build
+	$(UV) run python tools/gen_docs.py --check
+	$(UV) run python tools/check_docs.py
+	cd site && pnpm run typecheck && pnpm run build
 
 .PHONY: dev-down
 dev-down: ## Stop the local stack and delete its data

@@ -1,0 +1,21 @@
+# A development site gateway for the quickstart (site/docs/quickstart.md): two simulated robots
+# served by the mock policy with simulated GPU latency, in the gateway process.
+#
+# Development only: robots authenticate with device tokens (dev-token-robot-0, -1; only their
+# SHA-256 is here) instead of site-CA certificates, and leases live in memory. A real site's
+# gateway configuration is written by the site agent (design §17).
+listen: 127.0.0.1:50051
+status_listen: 127.0.0.1:8091
+devices:
+  - robot_id: robot-0
+    token_sha256: ce1f175f45a76404bf4ac423f1d39fc52ba3f6372f64a9b72b3173ccd76dc406
+  - robot_id: robot-1
+    token_sha256: 55ea906da05a8a0c013b10dc59dca788b43238d24da78b58103d982ccaf5126b
+deployments:
+  - revision_id: rev_dev
+    artifact: ../contracts/act-so101.artifact.yaml
+    robot_profile: ../contracts/so101.robot.yaml
+    execution_profile: ../contracts/act-so101-30hz.profile.yaml
+    robots: [robot-0, robot-1]
+serving:
+  backend: simulated

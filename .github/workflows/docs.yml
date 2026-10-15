@@ -1,0 +1,60 @@
+name: Docs site
+
+# Publishes the developer docs (design §26) to GitHub Pages from main. Every pull request builds
+# the site in CI (the `docs` job) and uploads it as the `docs-site` artifact, a preview to
+# download. Set NEURA_DOCS_URL and NEURA_DOCS_BASE_URL as repository variables for another host
+# or domain.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "catalog/**", "api/**", "proto/**", "packages/neura-sdk/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.13"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.28.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20"
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: Install
+        run: |
+          uv sync --frozen
+          make docs-setup
+      - name: Check and build
+        env:
+          NEURA_DOCS_URL: ${{ vars.NEURA_DOCS_URL }}
+          NEURA_DOCS_BASE_URL: ${{ vars.NEURA_DOCS_BASE_URL }}
+        run: make docs-check
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

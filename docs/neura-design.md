@@ -1228,6 +1228,29 @@ Content that stays internal and is never published: customer targets, pricing, d
 
 Until the first release, the site shows a single "next" version with a site-wide banner: *Neura is in design and early development. Nothing described here is a released product.* From the first release, docs are versioned per release, and "next" remains the in-development version.
 
+### 26.9 Implementation notes (M7)
+
+- **The site** is Docusaurus 3 under `site/` (docs only, static, `make docs`). It has local search (no third-party scripts), Mermaid diagrams, and a site-wide banner: *Neura is in early development. Nothing described here is a released product.*
+- **Labels.** Each page's `status` front matter is shown as a banner by a wrapper around the docs page component.
+  - Pages describing implemented software are Experimental. No page is Supported, and the Compatibility page says so.
+  - The Supported table is a component reading `site/data/supported.json`, which only qualification runs write.
+- **Pages.** The six initial pages (§26.3), plus pages whose conditions (§26.4) are met:
+  - Quickstart: it runs in simulation and CI runs its commands.
+  - Fault suite, soak and chaos: anyone can run them.
+  - Troubleshooting: from real failures.
+  - Generated references: management API, Python SDK, protocol, reason codes and the outbound schema.
+
+  Installation and Benchmarks wait for their conditions (a clean-machine install from the docs; the GPU report). The Development status page says so.
+- **Generated references.** `tools/gen_docs.py` writes them from `api/openapi.yaml`, the SDK, the protobuf schema (through `protoc`, with its comments) and the two catalogs. `make gen` writes them, and `make check-generated` fails when they are stale.
+- **Checks** (`tools/check_docs.py`, the `docs` CI job):
+  - every page has one valid label, and a Deprecated page a removal date;
+  - outside code, a page not labeled Supported cannot say "supports", "supported", "guarantees", "production-ready" and similar (generated references quote product strings and are exempt);
+  - the Supported data is complete;
+  - external links answer, and links into this repository must name a path in the checkout;
+  - the quickstart's blocks marked `quickstart` run in one shell and must succeed;
+  - the build fails on any broken link, anchor or image.
+- **Hosting.** The `Docs site` workflow publishes `main` to GitHub Pages. Every pull request uploads the built site as a downloadable preview. The URL and base path are repository variables until a domain is chosen.
+
 ---
 
 ## 27. Remaining open items (these need real customer workloads)

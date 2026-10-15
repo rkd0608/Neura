@@ -1,0 +1,28 @@
+.banner {
+  border-left: 4px solid var(--status-color);
+  background: var(--status-background);
+  border-radius: 4px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.proposed {
+  --status-color: #8a6d00;
+  --status-background: rgba(255, 196, 0, 0.12);
+}
+
+.experimental {
+  --status-color: #1f4f8b;
+  --status-background: rgba(31, 79, 139, 0.1);
+}
+
+.supported {
+  --status-color: #1d7a3a;
+  --status-background: rgba(29, 122, 58, 0.1);
+}
+
+.deprecated {
+  --status-color: #a12b2b;
+  --status-background: rgba(161, 43, 43, 0.1);
+}

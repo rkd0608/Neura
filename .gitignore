@@ -12,3 +12,7 @@ build/
 htmlcov/
 .env
 node_modules/
+
+# Docs site (site/)
+site/build/
+site/.docusaurus/

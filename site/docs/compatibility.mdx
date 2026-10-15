@@ -1,0 +1,36 @@
+---
+title: Compatibility
+sidebar_position: 5
+description: Which model, robot and execution profile combinations are qualified, and which are under evaluation.
+status: Experimental
+---
+
+import SupportedTable from "@site/src/components/SupportedTable";
+
+# Compatibility
+
+A combination of a model, a robot and an execution profile is labeled **Supported** only after it
+passes the contract tests, open-loop parity against the model's reference runtime, closed-loop
+task success in simulation that is no worse than the reference, and the fault suite. Physical
+support needs the same on hardware. The table below is generated from the results of
+qualification runs; it cannot be edited by hand.
+
+## Supported
+
+<SupportedTable />
+
+## Candidates under evaluation
+
+These have adapters in the repository and are exercised in tests and in simulation. None is
+qualified yet.
+
+| Model | What it exercises | Adapter | Qualification target |
+| --- | --- | --- | --- |
+| ACT (LeRobot) | Small, deterministic, long chunks, absolute joint targets | `lerobot-act` | ALOHA simulation; SO-101 class arm |
+| SmolVLA (LeRobot) | Language-conditioned, stochastic, heavy enough for batching to matter | `lerobot-smolvla` | LIBERO; SO-101 class arm |
+| π0-class (LeRobot port) | Large, memory pressure, real-time chunking | `lerobot-pi0` | LIBERO |
+
+| Robot | Status |
+| --- | --- |
+| SO-101 class arm | Example robot profile in the repository; physical validation not started |
+| ALOHA (simulation) | Planned for qualification runs |

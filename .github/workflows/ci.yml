@@ -120,6 +120,40 @@ jobs:
           path: console/playwright-report
           retention-days: 7
 
+  docs:
+    name: Docs site (labels, wording, links, build, quickstart)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: Install
+        run: |
+          uv sync --frozen
+          make docs-setup
+      - name: Labels, wording, generated references, types, build
+        run: make docs-check
+      - name: External links
+        run: uv run python tools/check_docs.py --external
+      - name: The quickstart, as written
+        run: uv run python tools/check_docs.py --run-quickstart
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: site/build
+          retention-days: 7
+
   dev-stack:
     name: Dev stack smoke test
     runs-on: ubuntu-24.04

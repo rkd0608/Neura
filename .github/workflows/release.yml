@@ -2,9 +2,9 @@ name: Release
 
 # A release from a version tag (vX.Y.Z), after all of CI passes on it (design §17.7, §18.2):
 #
-# - every image is built once, pushed to GHCR by digest, signed keyless with Sigstore (cosign,
-#   this workflow's GitHub identity), with a CycloneDX SBOM attached as a signed attestation and
-#   SLSA build provenance;
+# - every image is built once, pushed to GHCR by digest, scanned for known vulnerabilities (a
+#   critical one stops the release), signed keyless with Sigstore (cosign, this workflow's GitHub
+#   identity), with a CycloneDX SBOM attached as a signed attestation and SLSA build provenance;
 # - the site-agent release bundle is built and signed with Neura's Ed25519 release key (the
 #   NEURA_RELEASE_SIGNING_KEY secret), the key sites pin at install and verify every upgrade
 #   against; the bundle gets an SBOM and provenance too;
@@ -89,6 +89,13 @@ jobs:
           output-file: ${{ matrix.target }}.cdx.json
           upload-artifact: false
           upload-release-assets: false
+      - name: Known vulnerabilities in the image
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        with:
+          sbom: ${{ matrix.target }}.cdx.json
+          fail-build: true
+          severity-cutoff: critical
+          output-format: table
       - name: Attest the SBOM
         env:
           DIGEST: ${{ steps.build.outputs.digest }}

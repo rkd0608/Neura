@@ -781,6 +781,50 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
 - Against real processes the monitor sees only the robot side: grants and generations as robots receive them, not the gateway's emissions.
 - The soak's 72 hours are simulated time on the production cores; wall-clock aging (certificate expiry, clock drift, disk growth over days) is covered by unit tests, not by a 72-hour run of real processes.
 
+### 17.8 Security review (M7)
+
+The review covered every component against the controls below.
+
+**Method.**
+
+1. An automated reviewer audited the code for each control and cited the files and tests that implement it.
+2. Each gap it found was fixed or decided here.
+3. Each fix landed with a regression test.
+
+**Status words.**
+
+- **Implemented**: present before the review.
+- **Fixed**: changed in this review.
+- **Accepted**: a residual risk kept on purpose, with the reason given.
+- **Scheduled**: owned work after M7.
+
+An external penetration test is scheduled before the first customer pilot. This review does not replace it.
+
+| Area | In place (evidence) | Fixed in this review | Residual risk and decision |
+| --- | --- | --- | --- |
+| **Action safety** (§1 goal 1) | Robot runtime fencing, freshness, latched faults; fault suite; independent invariant monitor; 72-hour soak; real-process chaos (§17.7) | Gateway serves a chunk only under a live lease; robots ignore late rejections for an earlier session; a frozen host can no longer lock admission out | Real-process chaos does not yet restart the agent or control plane under load: **scheduled** |
+| **API authentication** | OIDC: signature, issuer, audience, expiry, asymmetric algorithms only. API tokens: SHA-256 at rest, scoped, expiring in 1–365 days, constant-time compare (`test_api_conventions`) | Optional authorized-party (`azp`) and `amr` checks. Verification off the event loop. Tests for another issuer, a forged signature, HMAC and unsigned tokens | — |
+| **Secrets at rest** | Token hashes; keys 0600 (agent, TLS, site CA, gateway, KEK, robot); operator token hash only; ledger redacts the enrollment token | Idempotency records held new API and enrollment token secrets in plaintext for 24 h. They are now sealed with a key derived from the client's Idempotency-Key, stored by hash, and old rows were purged (migration 0006, `test_security`). The agent's audit log is 0600 | The enrollment token is passed on the installer's command line: it is one-time, expires within an hour, and is visible only to local users while install runs. **Accepted.** Key-file permission checks at control-plane startup: **scheduled** |
+| **Authorization and tenancy** | Roles and token scopes on every route; 404 for invisible resources; deploying and approving motion are separate, and activation is approved only at the site | A token limited to some projects could administer the organization and mint an organization-wide admin token. It can now only read there. A site's report can update only its own robots' sessions. Tested with two real organizations | No row-level security in Postgres; isolation is enforced in queries and tested. **Accepted** |
+| **Abuse limits** | Pagination bounds; metric query caps; event streams end after 5 min; one agent stream per server; gateway admission | Rate limits per credential and per client address, with LRU eviction (no reset by key flooding). Forwarded addresses trusted only from configured proxies. 413 before a body is buffered. Caps on requests in progress, event streams, agent and gateway RPCs. Small messages on the enrollment listener | Limits are per process; with several replicas, add them at the ingress. **Accepted** for M7. Sealed-weight storage quotas per project: **scheduled** |
+| **Input validation** | Request models forbid unknown fields; merge patches re-validated; ORM only (no SQL built from strings); observation decoding checks names, shapes, finiteness and sizes | — | — |
+| **Errors** | RFC 9457 problems with catalog codes; no tracebacks to clients (`test_unexpected_errors_do_not_leak_details`) | — | `/v1/meta` is public by design: the console needs the sign-in configuration and versions. **Accepted** |
+| **Audit** | Records written in the same transaction as each change; site-local audit log | Audit records are append-only: a database trigger refuses UPDATE and DELETE (`test_security`) | Organization-level records cannot be listed through the API; denials are not recorded; local approvals are not mirrored to the cloud audit. **Scheduled** |
+| **Site agent channel** | Single-use enrollment tokens; key generated on the server; EdDSA stream tokens valid at most 5 min; mTLS with certificate pinning and renewal; signed desired state with increasing generations; signed contact proofs | Insecure settings require `NEURA_AGENT_DEVELOPMENT=true`: plaintext, robots without TLS, the simulated policy, workers outside the sandbox, unsigned artifacts, development credentials, plain-http weight sources | Commands are authenticated by the channel, not signed one by one. Activation still needs local approval, and upgrades are signed. **Accepted.** Rotating the manifest key without re-enrolling: **scheduled** |
+| **Local approvals** | Operator credential compared by SHA-256 in constant time; approvals disabled without it | Tests for missing, wrong and non-bearer credentials | One shared credential per site; no lockout; the local API is plain HTTP, on loopback by default. Per-operator credentials: **scheduled** |
+| **Gateway** | Robot mTLS with fingerprint pinning and robot/site identity; tokens only without TLS; 16 MiB messages; strict observation decoding | RPC concurrency cap; robots without TLS only in development | The status listener is unauthenticated, on loopback by default. **Accepted** |
+| **Worker sandbox** | No network; read-only root; no capabilities; no new privileges; pids limit; image pinned by digest, never pulled at run time; non-root user; its GPU only | Workers outside the sandbox only in development | Memory and CPU limits are off by default, because model needs vary; operators set them. **Accepted.** The agent's Docker group is root-equivalent on the host; rootless Podman is recommended. **Accepted.** Custom seccomp and AppArmor profiles: **scheduled** |
+| **Console** | Same-origin API; CSP without inline scripts; frame-ancestors none; tokens in session storage; bearer tokens only, so no CSRF surface; no CORS | Headers on every response (nginx dropped some per location), plus HSTS, COOP and CORP. nginx runs as non-root. Large uploads stream through the proxy. Verified on the built image | Inline styles are allowed in the CSP. **Scheduled** |
+| **TLS** | Staging and production require TLS for agents and Postgres (`verify-full`, now parsed properly); automatic renewal of agent and gateway certificates | `sslmode` is parsed from the URL instead of matched as text | gRPC uses BoringSSL defaults (TLS 1.2+); the management API sits behind the operator's TLS terminator. **Accepted.** The control plane's listener certificate is read at start (restart to rotate). Site CA rotation and robot certificate renewal: **scheduled** |
+| **Supply chain** | Locked dependencies; ruff security rules | Base images pinned by digest; actions pinned by SHA; Dependabot; dependency audit in CI with reviewed, expiring exceptions; release images scanned (critical stops the release), signed, with SBOM and provenance; signed agent bundles (§17.7) | Three accepted advisories, until 2027-01-15 (§17.7) |
+| **Upgrades** | Signature and per-file digests; no extra files; contained paths; launcher and health rollback | A remote upgrade never goes back to an older release | Release keys are pinned at install from the installer argument, so the installer's copy must be checked. Publishing their fingerprints out of band: **scheduled**. The install directory is writable by the agent, which stages releases there. **Accepted** |
+| **Artifacts and weights** | Publisher signatures checked at prepare; sealed weights (AES-256-GCM, header-bound); the registry holds ciphertext only | Weight-source tokens are sent over TLS only | No size cap on a single download beyond the digest check and the disk preflight. **Accepted** |
+| **What leaves the site** | Outbound allowlist with telemetry modes; hash-chained ledger | — | The chain has no key: the customer verifies it, and truncating the newest entries is not detectable. Upgrade, weight and health fetches carry no site data and are not in the ledger. **Scheduled**: record them, and anchor the chain head with the control plane |
+| **Support access** | Grants are customer-created, time-boxed, scoped and audited | — | No support access path exists, so support has no access at all. The break-glass session that consumes grants: **scheduled** |
+| **MFA** | Delegated to the customer's identity provider | Optional enforcement through `oidc_required_amr` | API tokens do not use MFA: they are scoped and expiring. **Accepted** |
+| **Logging** | No secrets in logs; the outbound gate logs field paths only | The control plane and agent configure logging (INFO messages were dropped before) | Logs are plain text. Structured JSON logs: **scheduled** |
+| **Database** | TLS required outside development; migrations reviewed | Append-only audit trigger | One role migrates and serves. A separate migration role: **scheduled** |
+
 ### 17.5 Other connection modes (later, on demand)
 
 - **Air-gapped:** signed offline bundles (manifest plus images) imported from an internal registry or removable media; telemetry exported to files.

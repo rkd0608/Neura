@@ -32,6 +32,7 @@ design and the build plan (§16.1).
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
 | `examples/site/` | A development gateway configuration, used by the docs quickstart |
 | `bench/reports/` | Benchmark reports, one directory per device |
+| `soak/reports/` | 72-hour soak reports with injected faults, and how to reproduce them |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
 

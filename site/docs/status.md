@@ -18,7 +18,7 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M4. Site agent | Enrollment, signed desired state, preflight, local approval, task-boundary switches, offline authorization, local site API and CLI | Built |
 | M5. Web console | Onboarding to deployment in the browser, live sessions, faults, audit, settings; generated Python SDK | Built |
 | M6. Models and GPU sharing | ACT, SmolVLA and π0-class adapters, batching and multi-adapter batching, profiling, benchmark harness | Built; benchmark on a GPU pending |
-| M7. Production hardening | Mutual TLS, artifact signing, customer-managed keys, outbound ledger, dashboards, installer and signed upgrades, worker sandbox, chaos and soak testing, these docs | In progress |
+| M7. Production hardening | Mutual TLS, artifact signing, customer-managed keys, outbound ledger, dashboards, installer and signed upgrades, worker sandbox, supply-chain controls, chaos and soak testing, a security review, these docs | Built; 72-hour soaks with injected faults had no invariant violation |
 | M8. Physical validation | SO-101 class arms through the same platform: fault suite and parity on hardware | Not started |
 
 ## Not yet on this site

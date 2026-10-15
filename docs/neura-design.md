@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 onward not yet built · October 15, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 (production hardening) implemented; M8 (physical validation) not started · October 15, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -465,7 +465,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M4. Site agent** ✅ | Enrollment with one-time tokens and on-host keys, preflight, outbound stream (TLS), signed manifest reconciliation, contract verification at the site, local boundaries, at-most-once commands, local approval, task-boundary revision switches, signed contact proofs for offline authorization, supervised data plane, local site API and CLI (§17, §19.5); implementation notes in §17.6 | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage and reconnects by itself (`make smoke` runs the whole pilot on the Compose stack) |
 | **M5. Web console** ✅ | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19); members API with invitations; sign-in configuration in `/v1/meta`; site-computed capacity estimates; generated Python SDK; implementation notes in §19.7 | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests (`make console-e2e`, in CI) |
 | **M6. Models and GPU sharing** (built; GPU run pending) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
-| **M7. Production hardening** | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations |
+| **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
 | **M8. Physical validation** | SO-101-class arms connected through the same platform | Fault suite and parity pass on hardware |
 
 Engineering standards for every milestone: typed code, tests written with the code, CI gates that cannot be bypassed, architecture decisions recorded in this document, and no component on the action path depending on the cloud.
@@ -742,6 +742,20 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
 - **Where they run.**
   - Every CI run includes the fault suite with the monitor, the mutation tests, a five-minute soak with a fault every two seconds, and 45 s of real-process chaos.
   - The `Soak and chaos` workflow runs weekly and on demand: the 72-hour soak for ACT with replace merge, SmolVLA with replace merge and ACT with blend merge, plus 30 minutes of chaos.
+- **The 72-hour result (M7 exit criterion).** Three soaks of 72 simulated hours each, on the code at `30ac115`. Since then nothing the simulator runs has changed except the generated list of reason codes. Reports and the commands to reproduce them are in `soak/reports/`.
+
+  | Run | Faults (22 kinds) | Latched faults reset | Gateway restarts | Chunks accepted | Actions checked | Violations | Availability |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | ACT, replace merge | 4,339 | 1,350 | 102 | 1,006,921 | 30,226,689 | 0 | 96.8–97.4% |
+  | SmolVLA, replace merge | 4,425 | 1,479 | 114 | 2,006,850 | 30,150,473 | 0 | 96.7–97.1% |
+  | ACT, blend merge | 4,264 | 1,402 | 106 | 1,005,181 | 30,175,256 | 0 | 96.9–97.1% |
+
+  - Every robot was running after the fault-free cooldown, and no resource check fired.
+  - Gateway sessions, leases and admitted sessions stayed at the number of robots, and the event queue stayed under 20.
+  - Peak memory levelled off at 130–142 MiB within the first hours.
+  - The worst single hour for any robot still dispatched 92.6% of its control periods.
+  - Availability counts the time robots spent faulted and waiting for the operator stand-in. A fault arrived about once a minute, far above what a site sees.
+  - Real-process chaos ran for 3 minutes with 28 faults, among them 3 gateway kills, 2 terminations, 2 freezes and 3 reloads: no violation, every robot recovered, and lease generations kept increasing across 6 gateway starts.
 - **What they found, now fixed.**
   - *A frozen gateway host locked the site out.* The latency profile adapts upward from observed batch times and, with few samples, used the worst one. A batch in flight while the host was frozen recorded a 3 s latency, and admission then refused every session. No session meant no new batch of that size, so the estimate never came back down.
 

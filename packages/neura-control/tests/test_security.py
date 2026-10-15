@@ -145,3 +145,54 @@ def test_event_streams_are_capped(make_api: Any) -> None:
     response = client.get(f"/v1/projects/{project}/events")
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "5"
+
+
+def test_organizations_cannot_see_each_other(api: Api, database_url: str) -> None:
+    from neura_control.services import bootstrap
+
+    client, org = api
+    project = new_project(client, org, "ours")["metadata"]["id"]
+
+    async def other_organization() -> tuple[str, str]:
+        engine = create_engine(database_url, pool_size=1)
+        try:
+            async with session_factory(engine).begin() as session:
+                other = await bootstrap.ensure_organization(session, "Other Robotics")
+                token = await bootstrap.create_api_token(
+                    session, other.id, display_name="other admin", scopes=["admin"]
+                )
+                return other.id, token
+        finally:
+            await engine.dispose()
+
+    other_org, other_token = asyncio.run(other_organization())
+    assert other_org != org
+    stranger = client.as_token(other_token)
+    for path in (
+        f"/v1/organizations/{org}",
+        f"/v1/organizations/{org}/projects",
+        f"/v1/organizations/{org}/api-tokens",
+        f"/v1/projects/{project}",
+        f"/v1/projects/{project}/sites",
+        f"/v1/projects/{project}/audit-records",
+    ):
+        assert stranger.get(path).status_code == 404, path
+    # And the other way round.
+    assert client.get(f"/v1/organizations/{other_org}").status_code == 404
+
+
+def test_no_cross_origin_access_is_granted(api: Api) -> None:
+    client, org = api
+    response = client.get(
+        f"/v1/organizations/{org}", headers={"Origin": "https://evil.example.com"}
+    )
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+    preflight = client.client.options(
+        f"/v1/organizations/{org}",
+        headers={
+            "Origin": "https://evil.example.com",
+            "Access-Control-Request-Method": "DELETE",
+        },
+    )
+    assert "access-control-allow-origin" not in preflight.headers

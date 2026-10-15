@@ -59,7 +59,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 | `page_size` | query | no |  |
 | `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
 
-Responses: `200`, `401`, `403`, `422`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 ### Create a project
 
@@ -72,7 +72,7 @@ Responses: `200`, `401`, `403`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `ProjectCreate`.
 
-Responses: `201`, `401`, `403`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a project
 

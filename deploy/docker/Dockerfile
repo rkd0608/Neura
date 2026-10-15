@@ -130,8 +130,14 @@ COPY api /src/api
 RUN pnpm run build
 
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS neura-console
-COPY deploy/console/default.conf.template /etc/nginx/templates/default.conf.template
+COPY deploy/console/default.conf.template deploy/console/security-headers.inc.template \
+    /etc/nginx/templates/
 COPY --from=console-build /src/console/dist /usr/share/nginx/html
+# nginx runs as its own unprivileged user: no root master process. It listens on 8080, keeps its
+# pid and temporary files where that user can write, and renders its templates into conf.d.
+RUN sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d
+USER nginx
 ENV NEURA_API_UPSTREAM=http://control-plane:8080 \
     NEURA_CSP_CONNECT_EXTRA=""
 EXPOSE 8080

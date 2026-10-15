@@ -2491,6 +2491,7 @@ export interface operations {
       };
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
       422: components["responses"]["ValidationFailed"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -2528,6 +2529,7 @@ export interface operations {
       };
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
       413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];

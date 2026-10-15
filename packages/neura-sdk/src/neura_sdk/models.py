@@ -840,14 +840,17 @@ class CapacityEstimateAssumptions(TypedDict):
     reserve_fraction: NotRequired[float]
     latency_p99_ms_by_batch: NotRequired[dict[str, float]]
     memory_available_mib: NotRequired[int | None]
+    device: NotRequired[str | None]
+    co_located_groups: NotRequired[int]
 
 
 class CapacityEstimate(TypedDict):
     """
     How many robots one batch group on this site's server can serve at this revision's
     execution profile, from the same admission model the gateway enforces (design §9.3).
-    `source` says whether the latency profile was configured or measured (measured profiles
-    arrive with M6).
+    `source` says whether the latency profile was measured on the site's device at prepare or
+    configured; `sharing_case` says how this revision's group shares its device (design
+    §9.5).
     """
 
     max_robots: int
@@ -860,5 +863,8 @@ class CapacityEstimate(TypedDict):
         "search_limit",
     ]
     source: Literal["configured_profile", "measured_profile"]
+    sharing_case: NotRequired[
+        Literal["same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"]
+    ]
     assumptions: CapacityEstimateAssumptions
     estimated_at: Timestamp

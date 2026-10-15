@@ -56,37 +56,60 @@ def build_gateway_config(
         for revision_id in assignment.allowed():
             by_revision.setdefault(revision_id, []).append(name)
     deployments = []
+    workers = settings.gateway_backend == "workers"
     for revision_id, robots in sorted(by_revision.items()):
         documents = revision_documents(manifest, revision_id)
         if documents is None or revision_id not in state.prepared:
             continue
-        directory = gateway_dir / "revisions" / revision_id
-        paths = {}
-        for role, filename in (
-            ("model_artifact", "artifact.json"),
-            ("robot_profile", "robot.json"),
-            ("execution_profile", "profile.json"),
-        ):
-            path = directory / filename
-            atomic_write(path, json.dumps(documents[role]["document"]).encode(), 0o644)
-            paths[role] = str(path)
-        deployments.append(
-            {
-                "revision_id": revision_id,
-                "artifact": paths["model_artifact"],
-                "robot_profile": paths["robot_profile"],
-                "execution_profile": paths["execution_profile"],
-                "robots": robots,
-            }
-        )
+        placement = state.placements.get(revision_id)
+        if workers and placement is None:
+            continue  # prepared before the workers backend was configured: prepare again
+        paths = write_revision_documents(gateway_dir, revision_id, documents)
+        deployment: dict[str, Any] = {
+            "revision_id": revision_id,
+            "artifact": str(paths["model_artifact"]),
+            "robot_profile": str(paths["robot_profile"]),
+            "execution_profile": str(paths["execution_profile"]),
+            "robots": robots,
+        }
+        if workers and placement is not None:
+            deployment["device"] = placement["device"]
+            for key in ("checkpoint", "profile", "adapter"):
+                if placement.get(key) is not None:
+                    deployment[key] = placement[key]
+        deployments.append(deployment)
     return {
         "listen": settings.gateway_listen,
         "status_listen": settings.gateway_status_listen,
         "lease_store": str(gateway_dir / "leases.db"),
         "devices": devices,
         "deployments": deployments,
-        "serving": {"backend": "mock", "simulate_latency": settings.gateway_simulate_latency},
+        "serving": {
+            "backend": settings.gateway_backend,
+            "simulate_latency": settings.gateway_simulate_latency,
+            "max_batch": settings.gateway_max_batch,
+            "worker_command": settings.worker_command,
+        },
     }
+
+
+def write_revision_documents(
+    gateway_dir: Path, revision_id: str, documents: dict[str, Any]
+) -> dict[str, Path]:
+    """The revision's contract documents as files the gateway and its workers read."""
+    directory = gateway_dir / "revisions" / revision_id
+    paths = {}
+    for role, filename in (
+        ("model_artifact", "artifact.json"),
+        ("robot_profile", "robot.json"),
+        ("execution_profile", "profile.json"),
+    ):
+        path = directory / filename
+        data = json.dumps(documents[role]["document"]).encode()
+        if not path.exists() or path.read_bytes() != data:
+            atomic_write(path, data, 0o644)
+        paths[role] = path
+    return paths
 
 
 def write_gateway_config(config: dict[str, Any], path: Path) -> bool:

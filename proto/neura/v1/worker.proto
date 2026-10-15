@@ -1,0 +1,72 @@
+// Gateway <-> policy worker protocol (design §9.1, §12).
+//
+// One worker process serves one batch group on one device. The gateway is its only client and
+// reaches it over a Unix domain socket that only the gateway's user can open; the worker has no
+// other network access. Inputs arrive already validated and decoded by the gateway, so a worker
+// never parses robot traffic.
+syntax = "proto3";
+
+package neura.v1;
+
+import "neura/v1/common.proto";
+
+service PolicyWorker {
+  // What the worker loaded and on which device. Succeeds only once the model is loaded and
+  // warmed up: the gateway sends no batch before that.
+  rpc Describe(DescribeRequest) returns (WorkerDescription);
+  // One forward pass for one batch. The worker runs one batch at a time.
+  rpc Infer(InferRequest) returns (InferResponse);
+}
+
+message DescribeRequest {}
+
+message WorkerDescription {
+  // Content digest of the model artifact the worker loaded.
+  string artifact_digest = 1;
+  string adapter = 2;
+  string device = 3;
+  string precision = 4;
+  bool deterministic = 5;
+  bool batching = 6;
+  bool multi_adapter = 7;
+  uint64 parameters = 8;
+  uint32 chunk_length = 9;
+  uint32 action_dim = 10;
+  // Operating-system process id, for diagnostics.
+  uint32 pid = 11;
+}
+
+// One request's inputs, decoded: state vectors by input name, images as H x W x 3 uint8 tensors
+// by camera role, in the camera's declared color order.
+message WorkerInputs {
+  map<string, Tensor> state = 1;
+  map<string, Tensor> images = 2;
+  string instruction = 3;
+  // Present only for real-time chunking (rtc) requests.
+  Tensor frozen_prefix = 4;
+}
+
+message InferRequest {
+  // Echoed in the response; the gateway discards a response for any other batch.
+  uint64 batch_id = 1;
+  repeated WorkerInputs inputs = 2;
+}
+
+message InferResponse {
+  uint64 batch_id = 1;
+  oneof result {
+    Chunks chunks = 2;
+    WorkerError error = 3;
+  }
+  // Time spent in the forward pass, measured inside the worker.
+  uint64 compute_us = 4;
+}
+
+message Chunks {
+  // One (chunk_length, action_dim) float32 tensor per input, in request order.
+  repeated Tensor chunks = 1;
+}
+
+message WorkerError {
+  Reason reason = 1;
+}

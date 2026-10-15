@@ -443,7 +443,8 @@ def test_agents_enroll_over_tls_and_refuse_an_unknown_server(
 
     def runtime(name: str, **settings: Any) -> AgentRuntime:
         return AgentRuntime(
-            AgentSettings(state_dir=tmp_path / name, **settings), command_runner=lambda args: None
+            AgentSettings(state_dir=tmp_path / name, gateway_backend="simulated", **settings),
+            command_runner=lambda args: None,
         )
 
     def enroll(agent: AgentRuntime) -> Any:

@@ -20,11 +20,14 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from neura.v1 import common_pb2, site_pb2
+from neura_agent import placement
+from neura_agent.artifacts import ArtifactError, ArtifactStore
 from neura_agent.gateway import (
     GatewayRunner,
     build_gateway_config,
     revision_documents,
     write_gateway_config,
+    write_revision_documents,
 )
 from neura_agent.identity import Identity
 from neura_agent.settings import AgentSettings
@@ -46,7 +49,7 @@ from neura_contracts.site_protocol import (
 )
 from neura_runtime.binding import ExecutionBinding, IncompatibleBindingError
 from neura_server import capacity
-from neura_server.config import ServingConfig
+from neura_server.config import ServingConfig, load_profile_points
 
 log = logging.getLogger("neura.agent")
 OUTBOX_LIMIT = 1000
@@ -76,11 +79,20 @@ class AgentCore:
         gateway: GatewayRunner,
         *,
         clock: Callable[[], float] = time.time,
+        cuda_indexes: Callable[[], list[int]] = list,
     ) -> None:
         self.settings = settings
         self.identity = identity
         self.gateway = gateway
         self._clock = clock
+        # The CUDA GPUs this agent may place workers on (detected and allowed).
+        self._cuda_indexes = cuda_indexes
+        token = settings.artifact_source_token
+        self.artifacts = ArtifactStore(
+            settings.state_dir / "artifacts",
+            settings.artifact_sources,
+            token.get_secret_value() if token is not None else None,
+        )
         self.store = StateStore(settings.state_dir / "state.json")
         self.audit = AuditLog(settings.state_dir / "audit.jsonl")
         self.gateway_dir = settings.state_dir / "gateway"
@@ -286,6 +298,7 @@ class AgentCore:
             rev["id"] for d in manifest.get("deployments", []) for rev in d.get("revisions", [])
         }
         self.state.prepared = {k: v for k, v in self.state.prepared.items() if k in live}
+        self.state.placements = {k: v for k, v in self.state.placements.items() if k in live}
         for name in list(self.state.assignments):
             assignment = self.state.assignments[name]
             if name not in names:
@@ -447,8 +460,22 @@ class AgentCore:
                 message=f"incompatible at this site: {first.message}",
             )
             return
-        # Weights and runtime images are pulled and verified here once real model workers exist
-        # (M6); the mock backend needs only the contracts.
+        serving = self.serving_config()
+        estimate_args: dict[str, Any] = {}
+        if self.settings.gateway_backend == "workers":
+            try:
+                placed = await self._place(
+                    command_id, operation_id, revision_id, binding, revision["documents"]
+                )
+            except ArtifactError as exc:
+                self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
+                return
+            estimate_args = {
+                "measured": load_profile_points(Path(placed["profile"])),
+                "sharing_case": placed["sharing_case"],
+                "device": placed["device"],
+                "co_located_groups": placed["co_located_groups"],
+            }
         self.state.prepared[revision_id] = revision["revision_digest"]
         self._save()
         await self.reconcile()
@@ -459,10 +486,71 @@ class AgentCore:
             result={
                 "revision_digest": revision["revision_digest"],
                 "capacity": capacity.estimate(
-                    binding, self.serving_config(), rtt_p99_ms=self.settings.capacity_rtt_p99_ms
+                    binding,
+                    serving,
+                    rtt_p99_ms=self.settings.capacity_rtt_p99_ms,
+                    **estimate_args,
                 ),
             },
         )
+
+    def _placed_groups(self, excluding: str) -> list[placement.PlacedGroup]:
+        """Batch groups of the other prepared revisions, and their devices."""
+        return [
+            placement.PlacedGroup(p["group"], p["device"], p["adapter_name"])
+            for revision_id, p in sorted(self.state.placements.items())
+            if revision_id != excluding and revision_id in self.state.prepared
+        ]
+
+    async def _place(
+        self,
+        command_id: str,
+        operation_id: str,
+        revision_id: str,
+        binding: ExecutionBinding,
+        documents: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Choose the device, materialize the weights, and measure the model there (design §13).
+        Records the placement; raises ArtifactError with the reason prepare fails for."""
+        others = self._placed_groups(revision_id)
+        device = placement.choose_device(binding, others, self._cuda_indexes())
+        adapter = self.settings.dev_adapter_override or binding.artifact.spec.adapter.name
+        checkpoint: Path | None = None
+        if adapter != "mock":
+            self._report(command_id, operation_id, "Running", message="verifying model weights")
+            checkpoint = await asyncio.to_thread(self.artifacts.checkout, binding.artifact)
+        paths = write_revision_documents(self.gateway_dir, revision_id, documents)
+        max_batch = self.settings.gateway_max_batch
+        profile = placement.profile_path(
+            self.gateway_dir / "profiles", binding, device, max_batch, adapter
+        )
+        if not profile.is_file():
+            self._report(
+                command_id, operation_id, "Running", message=f"loading and profiling on {device}"
+            )
+            await placement.measure(
+                self.settings.worker_command,
+                documents=paths,
+                device=device,
+                checkpoint=checkpoint,
+                out=profile,
+                max_batch=max_batch,
+                iterations=self.settings.profile_iterations,
+                timeout_s=self.settings.profile_timeout_s,
+                adapter=self.settings.dev_adapter_override,
+            )
+        sharing = placement.sharing_case(binding, device, others)
+        record = {
+            "device": device,
+            "group": placement.group_key(binding),
+            "adapter_name": binding.artifact.spec.adapter.name,
+            "adapter": self.settings.dev_adapter_override,
+            "checkpoint": str(checkpoint) if checkpoint is not None else None,
+            "profile": str(profile),
+        }
+        self.state.placements[revision_id] = record
+        co_located = len({g.key for g in others if g.device == device} - {record["group"]})
+        return {**record, "sharing_case": sharing, "co_located_groups": co_located}
 
     def _request_activation(
         self, command_id: str, operation_id: str, kind: str, revision_id: str, robot_ids: list[str]

@@ -15,13 +15,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_contracts import ReasonCode
+from neura_adapters import PolicyError
+from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
 from neura_server.admission import AdmissionController, SessionDemand
 from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.leases import Lease, LeaseDenied, LeaseTable
-from neura_server.policy import PolicyError
 from neura_server.scheduler import Batch, Dropped, InferenceRequest, Scheduler
 
 MAX_REPORTED_RTT_US = 10_000_000
@@ -32,12 +32,20 @@ class Deployment:
     revision_id: str
     binding: ExecutionBinding
     robots: frozenset[str]
+    # The concrete device ("cpu", "cuda:0"); None: the execution profile's device kind.
+    device: str | None = None
+
+    @property
+    def device_name(self) -> str:
+        if self.device is not None:
+            return self.device
+        return "cuda:0" if self.binding.profile.spec.runtime.device is DeviceKind.CUDA else "cpu"
 
     @property
     def group_key(self) -> str:
         """Requests share a forward pass only within the same artifact, device and precision."""
-        runtime = self.binding.profile.spec.runtime
-        return f"{self.binding.artifact_digest}:{runtime.device.value}:{runtime.precision.value}"
+        precision = self.binding.profile.spec.runtime.precision.value
+        return f"{self.binding.artifact_digest}:{self.device_name}:{precision}"
 
 
 @dataclass(slots=True)
@@ -130,6 +138,18 @@ class GatewayCore:
                 session.deployment = index[robot][session.deployment.revision_id]
         self._deployments_by_robot = index
         return closed
+
+    def unused_groups(self) -> list[str]:
+        """Batch groups no deployment and no session uses any more."""
+        used = {
+            d.group_key for by_id in self._deployments_by_robot.values() for d in by_id.values()
+        }
+        used |= {s.group.key for s in self.sessions.values()}
+        return [key for key in self.groups if key not in used]
+
+    def remove_group(self, key: str) -> None:
+        """Forget an unused group (its sessions are closed, so its scheduler is empty)."""
+        del self.groups[key]
 
     # --- sessions -----------------------------------------------------------------------------
 
@@ -344,12 +364,7 @@ class GatewayCore:
     ) -> list[Delivery]:
         scheduler = self.groups[group_key].scheduler
         if isinstance(outputs, PolicyError):
-            code = (
-                ReasonCode.WORKER_OUT_OF_MEMORY
-                if outputs.out_of_memory
-                else ReasonCode.WORKER_CRASHED
-            )
-            return self._rejections([Dropped(r, code) for r in scheduler.fail(batch)])
+            return self._rejections([Dropped(r, outputs.reason) for r in scheduler.fail(batch)])
         if len(outputs) != len(batch.requests):
             failed = scheduler.fail(batch)
             return self._rejections([Dropped(r, ReasonCode.WORKER_OUTPUT_INVALID) for r in failed])

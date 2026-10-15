@@ -198,6 +198,7 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         reconnect_max_backoff_s=0.5,
         dev_robot_tokens={name: f"dev-token-{name}" for name in ROBOTS},
         activation_timeout_s=60,
+        gateway_backend="simulated",
     )
     gateway = InProcessGateway()
     agent = AgentRuntime(agent_settings, gateway=gateway, command_runner=lambda args: None)

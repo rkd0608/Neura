@@ -1,0 +1,22 @@
+[project]
+name = "neura-bench"
+version = "0.1.0.dev0"
+description = "Neura GPU-sharing benchmarks: shared serving against dedicated baselines (design §9.5, §10)."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-adapters",
+    "neura-contracts",
+    "neura-runtime",
+    "neura-server",
+    "neura-sim",
+    "numpy>=2.2",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+neura-bench = "neura_bench.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

@@ -50,6 +50,9 @@ class AgentState:
     manifest_signature: str | None = None  # hex
     manifest_generation: int = 0
     prepared: dict[str, str] = field(default_factory=dict)  # revision id -> revision digest
+    # revision id -> where its batch group runs: device, group, adapter, checkpoint and measured
+    # profile paths (workers backend only).
+    placements: dict[str, dict[str, Any]] = field(default_factory=dict)
     assignments: dict[str, Assignment] = field(default_factory=dict)  # robot name -> assignment
     activations: dict[str, Activation] = field(default_factory=dict)  # command id -> activation
     executed: list[str] = field(default_factory=list)  # command ids, oldest first

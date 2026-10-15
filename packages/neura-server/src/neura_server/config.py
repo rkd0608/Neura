@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, load_document
+from neura_contracts import (
+    DeviceKind,
+    ExecutionProfile,
+    ModelArtifact,
+    RobotProfile,
+    load_document,
+)
 from neura_runtime.binding import ExecutionBinding
 from neura_server.profiles import ProfilePoint
 from neura_server.scheduler import Policy
@@ -28,12 +36,27 @@ class DeviceConfig(_Model):
     token_sha256: Sha256Hex
 
 
+Device = Annotated[str, StringConstraints(pattern=r"^(cpu|cuda:[0-9]{1,3})$")]
+
+
 class DeploymentConfig(_Model):
     revision_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
     artifact: Path
     robot_profile: Path
     execution_profile: Path
     robots: list[str] = Field(min_length=1)
+    # The rest matter to the workers backend only.
+    # Directory holding the artifact's weight files, verified against their digests.
+    checkpoint: Path | None = None
+    # Overrides the artifact's adapter, e.g. "mock" to exercise real worker processes without
+    # weights. Development and tests only.
+    adapter: str | None = None
+    # The device this deployment's worker runs on; None: the execution profile's device kind
+    # (its first device).
+    device: Device | None = None
+    # Latency profile measured on that device (`neura-worker profile` output). None: the
+    # serving section's configured profile.
+    profile: Path | None = None
 
 
 class ProfilePointConfig(_Model):
@@ -44,9 +67,22 @@ class ProfilePointConfig(_Model):
 
 
 class ServingConfig(_Model):
-    backend: Literal["mock"] = "mock"
-    # The mock backend sleeps for a latency sampled from the profile, emulating a GPU.
+    # workers: one policy worker process per batch group, running the artifact's adapter on its
+    # device (design §12). simulated: the mock policy in the gateway process, for development
+    # stacks and tests.
+    backend: Literal["workers", "simulated"] = "workers"
+    # The simulated backend sleeps for a latency sampled from the profile, emulating a GPU.
     simulate_latency: bool = True
+    worker_command: list[str] = Field(
+        default_factory=lambda: [sys.executable, "-m", "neura_server.worker"], min_length=1
+    )
+    # Where worker sockets live; None: a private temporary directory.
+    worker_dir: Path | None = None
+    # Loading and warming up a large model can take minutes.
+    worker_start_timeout_s: float = Field(default=600, gt=0)
+    # A batch that takes longer than its latest deadline and at least this long marks the worker
+    # hung: it is restarted and the batch fails with WORKER_TIMED_OUT.
+    worker_timeout_ms: float = Field(default=1000, gt=0)
     policy: Policy = Policy.DEADLINE_FAIRNESS
     max_batch: int = Field(default=8, ge=1, le=256)
     reserve_fraction: float = Field(default=0.2, ge=0, lt=1)
@@ -88,25 +124,72 @@ class GatewayConfig(_Model):
                     "artifact": (base / d.artifact).resolve(),
                     "robot_profile": (base / d.robot_profile).resolve(),
                     "execution_profile": (base / d.execution_profile).resolve(),
+                    "checkpoint": (base / d.checkpoint).resolve() if d.checkpoint else None,
+                    "profile": (base / d.profile).resolve() if d.profile else None,
                 }
             )
             for d in config.deployments
         ]
         lease_store = (base / config.lease_store).resolve() if config.lease_store else None
-        return config.model_copy(update={"deployments": deployments, "lease_store": lease_store})
+        serving = config.serving
+        if serving.worker_dir is not None:
+            serving = serving.model_copy(
+                update={"worker_dir": (base / serving.worker_dir).resolve()}
+            )
+        return config.model_copy(
+            update={"deployments": deployments, "lease_store": lease_store, "serving": serving}
+        )
 
 
 def load_binding(deployment: DeploymentConfig) -> ExecutionBinding:
-    artifact = load_document(deployment.artifact.read_text(encoding="utf-8"))
-    robot = load_document(deployment.robot_profile.read_text(encoding="utf-8"))
-    profile = load_document(deployment.execution_profile.read_text(encoding="utf-8"))
+    try:
+        return load_binding_files(
+            deployment.artifact, deployment.robot_profile, deployment.execution_profile
+        )
+    except ValueError as exc:
+        raise ValueError(f"deployment {deployment.revision_id}: {exc}") from exc
+
+
+def load_binding_files(artifact: Path, robot: Path, profile: Path) -> ExecutionBinding:
+    documents = [load_document(p.read_text(encoding="utf-8")) for p in (artifact, robot, profile)]
+    model, robot_profile, execution = documents
     if not (
-        isinstance(artifact, ModelArtifact)
-        and isinstance(robot, RobotProfile)
-        and isinstance(profile, ExecutionProfile)
+        isinstance(model, ModelArtifact)
+        and isinstance(robot_profile, RobotProfile)
+        and isinstance(execution, ExecutionProfile)
     ):
-        raise ValueError(f"deployment {deployment.revision_id}: documents have the wrong kinds")
-    return ExecutionBinding(artifact, robot, profile)
+        raise ValueError("documents have the wrong kinds")
+    return ExecutionBinding(model, robot_profile, execution)
+
+
+def deployment_device(binding: ExecutionBinding, configured: str | None) -> str:
+    """The concrete device a deployment runs on."""
+    if configured is not None:
+        return configured
+    return "cuda:0" if binding.profile.spec.runtime.device is DeviceKind.CUDA else "cpu"
+
+
+def profile_batch_sizes(max_batch: int) -> list[int]:
+    """Batch sizes workers warm up and profilers measure: powers of two up to max_batch, and
+    max_batch itself."""
+    sizes = {1, max_batch}
+    size = 2
+    while size < max_batch:
+        sizes.add(size)
+        size *= 2
+    return sorted(sizes)
+
+
+def load_profile_points(path: Path) -> list[ProfilePoint]:
+    """Points of a measured profile (neura_adapters.profiler.MeasuredProfile.to_json)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    points = [
+        ProfilePoint(int(p["batch_size"]), int(p["p50_us"]), int(p["p99_us"]), int(p["memory_mib"]))
+        for p in data["points"]
+    ]
+    if not points:
+        raise ValueError(f"{path}: the measured profile has no points")
+    return points
 
 
 def token_digest(token: str) -> str:

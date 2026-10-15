@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RemoteOperation = Literal[
@@ -53,7 +53,24 @@ class AgentSettings(BaseSettings):
     gateway_command: list[str] = Field(
         default_factory=lambda: [sys.executable, "-m", "neura_server"]
     )
+    # workers: real policy worker processes running the artifact's adapter, with weights from
+    # the artifact store (production). simulated: the mock policy, for development stacks.
+    gateway_backend: Literal["workers", "simulated"] = "workers"
     gateway_simulate_latency: bool = True
+    gateway_max_batch: int = Field(default=8, ge=1, le=256)
+    worker_command: list[str] = Field(
+        default_factory=lambda: [sys.executable, "-m", "neura_server.worker"]
+    )
+    # Profiling at prepare: forward passes timed per batch size, and how long loading and
+    # profiling a model may take.
+    profile_iterations: int = Field(default=30, ge=5, le=1000)
+    profile_timeout_s: float = Field(default=1800.0, gt=0)
+
+    # --- model weights (design §18.1: they stay with the customer) ---
+    # Where the agent fetches weight files it does not have: directories or HTTPS base URLs laid
+    # out as <source>/sha256/<hex>. Empty: only weights imported with `neura-agent import-weights`.
+    artifact_sources: list[str] = Field(default_factory=list)
+    artifact_source_token: SecretStr | None = None
     # Round trip to robots assumed by capacity estimates until robots report measured ones.
     capacity_rtt_p99_ms: float = Field(default=20.0, gt=0)
 
@@ -61,6 +78,9 @@ class AgentSettings(BaseSettings):
     require_gpu: bool = False
     min_free_disk_mib: int = Field(default=1024, ge=0)
 
+    # DEVELOPMENT ONLY: run every revision's worker with this adapter (e.g. "mock") instead of
+    # the artifact's, so real worker processes run without the artifact's weights.
+    dev_adapter_override: str | None = None
     # DEVELOPMENT ONLY: robot name -> plain device token, so a local stack works without issuing
     # credentials through the local API.
     dev_robot_tokens: dict[str, str] | None = None

@@ -241,6 +241,21 @@ codes:
     severity: error
     retryable: false
     message: The policy produced non-finite or wrongly shaped actions.
+  - code: WORKER_INFERENCE_FAILED
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy raised an error for this batch.
+  - code: WORKER_LOAD_FAILED
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy worker could not load the model on its device.
+  - code: WORKER_TIMED_OUT
+    area: worker
+    severity: error
+    retryable: false
+    message: The policy worker did not finish the batch in time and was restarted.
 
   # ---------------------------------------------------------------------------
   # Robot runtime (design §5, §7)
@@ -359,6 +374,16 @@ codes:
     severity: error
     retryable: false
     message: A downloaded artifact does not match its declared digest.
+  - code: AGENT_ARTIFACT_UNAVAILABLE
+    area: agent
+    severity: error
+    retryable: true
+    message: The model's weights are not available at this site; import them or configure a source.
+  - code: AGENT_DEVICE_UNAVAILABLE
+    area: agent
+    severity: error
+    retryable: true
+    message: No device this site may use matches the execution profile.
   - code: AGENT_ENROLLMENT_INVALID
     area: agent
     severity: error

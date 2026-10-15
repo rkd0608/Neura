@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from neura.v1 import common_pb2
+from neura_adapters import ModelInputs
 from neura_contracts import ReasonCode
-from neura_server.inputs import ModelInputs
 from neura_server.profiles import LatencyProfile
 
 

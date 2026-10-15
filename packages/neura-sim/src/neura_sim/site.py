@@ -21,6 +21,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
+from neura_adapters import MockPolicy, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.runtime import RobotRuntime, RuntimeConfig, RuntimeState
@@ -28,7 +29,6 @@ from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_server.admission import AdmissionController
 from neura_server.gateway import BatchGroup, Deployment, GatewayCore
 from neura_server.leases import GenerationStore, LeaseTable, MemoryGenerationStore
-from neura_server.policy import MockPolicy, PolicyBackend, PolicyError
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import Batch, Policy, Scheduler
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
@@ -319,7 +319,9 @@ class SimSite:
         self._worker_busy = None
         self._worker_down_until = self.loop.now_us + self.config.worker_faults.restart_us
         if batch is not None:
-            error = PolicyError("worker process exited (simulated)")
+            error = PolicyError(
+                "worker process exited (simulated)", reason=ReasonCode.WORKER_CRASHED
+            )
             self._deliver(self.core.complete(self.group_key, batch, error, self.gateway_now()))
         self.loop.at(self._worker_down_until, self._try_dispatch)
 

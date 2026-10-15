@@ -1473,7 +1473,7 @@ export interface components {
       items: components["schemas"]["Member"][];
       page: components["schemas"]["PageInfo"];
     };
-    /** @description How many robots one batch group on this site's server can serve at this revision's execution profile, from the same admission model the gateway enforces (design §9.3). `source` says whether the latency profile was configured or measured (measured profiles arrive with M6). */
+    /** @description How many robots one batch group on this site's server can serve at this revision's execution profile, from the same admission model the gateway enforces (design §9.3). `source` says whether the latency profile was measured on the site's device at prepare or configured; `sharing_case` says how this revision's group shares its device (design §9.5). */
     CapacityEstimate: {
       max_robots: number;
       /**
@@ -1489,6 +1489,12 @@ export interface components {
         | "search_limit";
       /** @enum {unknown} */
       source: "configured_profile" | "measured_profile";
+      /**
+       * @description same_weights: robots running this revision share forward passes and nothing else runs on the device. multi_adapter: one base forward pass serves several adapters. co_located_fine_tunes: other fine-tunes of the same architecture have their own workers on the device. different_architectures: other models share the device. With co-located groups the estimate assumes no contention from them (see the benchmark reports).
+       * @enum {unknown}
+       */
+      sharing_case?:
+        "same_weights" | "multi_adapter" | "co_located_fine_tunes" | "different_architectures";
       /** @description The inputs of the estimate, so it can be checked and reproduced. */
       assumptions: {
         control_period_ms?: number;
@@ -1503,6 +1509,10 @@ export interface components {
           [key: string]: number;
         };
         memory_available_mib?: number | null;
+        /** @description The device the group runs on, e.g. cuda:0. */
+        device?: string | null;
+        /** @description Other batch groups on the same device. */
+        co_located_groups?: number;
       };
       estimated_at: components["schemas"]["Timestamp"];
     };

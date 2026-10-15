@@ -1,7 +1,8 @@
 """The gateway process: gRPC adapter, batch dispatchers, lease sweeper and local status API.
 
 All ``GatewayCore`` calls run on the asyncio event-loop thread, so the core needs no locks. Model
-inference runs in worker threads; results are applied back on the loop.
+inference runs in policy worker processes, one per batch group (`neura_server.backends`), or with
+the simulated backend in a thread; results are applied back on the loop.
 """
 
 from __future__ import annotations
@@ -11,9 +12,12 @@ import contextlib
 import logging
 import math
 import random
+import shutil
+import tempfile
 import time
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -23,19 +27,27 @@ from fastapi import FastAPI
 from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2, dataplane_pb2_grpc
+from neura_adapters import MockPolicy, ModelInputs, PolicyBackend, PolicyError
 from neura_server.admission import AdmissionController
-from neura_server.config import DeviceRegistry, GatewayConfig, load_binding
+from neura_server.backends import Backend, InProcessBackend, WorkerBackend, WorkerSpec
+from neura_server.config import (
+    DeploymentConfig,
+    DeviceRegistry,
+    GatewayConfig,
+    ServingConfig,
+    load_binding,
+    load_profile_points,
+    profile_batch_sizes,
+)
 from neura_server.gateway import BatchGroup, Delivery, Deployment, GatewayCore
-from neura_server.inputs import ModelInputs
 from neura_server.leases import (
     GenerationStore,
     LeaseTable,
     MemoryGenerationStore,
     SqliteGenerationStore,
 )
-from neura_server.policy import MockPolicy, PolicyBackend, PolicyError
 from neura_server.profiles import LatencyProfile
-from neura_server.scheduler import Scheduler
+from neura_server.scheduler import Batch, Scheduler
 
 log = logging.getLogger("neura.gateway")
 STREAM_QUEUE = 256
@@ -72,8 +84,10 @@ class SimulatedLatency:
 @dataclass(slots=True)
 class _Group:
     key: str
-    backend: PolicyBackend
+    backend: Backend
+    profile_source: str
     wake: asyncio.Event = field(default_factory=asyncio.Event)
+    task: asyncio.Task[None] | None = None
 
 
 class GatewayServer:
@@ -82,6 +96,13 @@ class GatewayServer:
     ) -> None:
         self.config = config
         self.devices = DeviceRegistry(config.devices)
+        self._group_seq = 0
+        self._owned_worker_dir: Path | None = None
+        if config.serving.worker_dir is not None:
+            config.serving.worker_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            self._worker_dir = config.serving.worker_dir
+        else:
+            self._worker_dir = self._owned_worker_dir = Path(tempfile.mkdtemp(prefix="neura-w-"))
         deployments, groups, backends = self._build(config, set())
         # A store the server opens itself is closed by stop(); a caller's store stays the caller's.
         self._owned_store: SqliteGenerationStore | None = None
@@ -97,7 +118,7 @@ class GatewayServer:
             max_message_bytes=config.max_message_bytes,
             default_rtt_us=int(config.default_rtt_ms * 1000),
         )
-        self._groups = {key: _Group(key, backend) for key, backend in backends.items()}
+        self._groups = backends
         self._streams: dict[str, asyncio.Queue[dataplane_pb2.GatewayMessage]] = {}
         self._tasks: list[asyncio.Task[None]] = []
         self._server: grpc.aio.Server | None = None
@@ -105,22 +126,39 @@ class GatewayServer:
         self.bound_port: int | None = None
         self.started_at = time.time()
 
-    @staticmethod
     def _build(
-        config: GatewayConfig, existing: set[str]
-    ) -> tuple[list[Deployment], dict[str, BatchGroup], dict[str, PolicyBackend]]:
-        """Deployments from config, plus batch groups and backends for group keys not yet known."""
+        self, config: GatewayConfig, existing: set[str]
+    ) -> tuple[list[Deployment], dict[str, BatchGroup], dict[str, _Group]]:
+        """Deployments from config, plus batch groups and their backends for group keys not yet
+        known."""
         serving = config.serving
         deployments = []
         groups: dict[str, BatchGroup] = {}
-        backends: dict[str, PolicyBackend] = {}
+        backends: dict[str, _Group] = {}
+        first: dict[str, DeploymentConfig] = {}
         for item in config.deployments:
-            deployment = Deployment(item.revision_id, load_binding(item), frozenset(item.robots))
+            deployment = Deployment(
+                item.revision_id, load_binding(item), frozenset(item.robots), item.device
+            )
             deployments.append(deployment)
             key = deployment.group_key
-            if key in existing or key in groups:
+            if key in first:
+                # One worker serves the group, so its deployments must agree on what it loads.
+                other = first[key]
+                if (item.checkpoint, item.adapter) != (other.checkpoint, other.adapter):
+                    raise ValueError(
+                        f"deployments {other.revision_id} and {item.revision_id} share batch "
+                        f"group {key} but name different checkpoints or adapters"
+                    )
                 continue
-            profile = LatencyProfile(serving.profile_points())
+            first[key] = item
+            if key in existing:
+                continue
+            if item.profile is not None:
+                points, source = load_profile_points(item.profile), "measured_profile"
+            else:
+                points, source = serving.profile_points(), "configured_profile"
+            profile = LatencyProfile(points)
             groups[key] = BatchGroup(
                 key,
                 Scheduler(profile, policy=serving.policy, max_batch=serving.max_batch),
@@ -131,11 +169,38 @@ class GatewayServer:
                     memory_available_mib=serving.memory_available_mib,
                 ),
             )
-            backend: PolicyBackend = MockPolicy(deployment.binding)
-            if serving.simulate_latency:
-                backend = SimulatedLatency(backend, profile)
-            backends[key] = backend
+            backends[key] = _Group(key, self._backend(serving, item, deployment, profile), source)
         return deployments, groups, backends
+
+    def _backend(
+        self,
+        serving: ServingConfig,
+        item: DeploymentConfig,
+        deployment: Deployment,
+        profile: LatencyProfile,
+    ) -> Backend:
+        if serving.backend == "simulated":
+            policy: PolicyBackend = MockPolicy(deployment.binding)
+            if serving.simulate_latency:
+                policy = SimulatedLatency(policy, profile)
+            return InProcessBackend(policy)
+        self._group_seq += 1
+        spec = WorkerSpec(
+            artifact=item.artifact,
+            robot_profile=item.robot_profile,
+            execution_profile=item.execution_profile,
+            device=deployment.device_name,
+            checkpoint=item.checkpoint,
+            adapter=item.adapter,
+            warmup_batches=tuple(profile_batch_sizes(serving.max_batch)),
+        )
+        return WorkerBackend(
+            f"g{self._group_seq}",
+            spec,
+            command=serving.worker_command,
+            socket_dir=self._worker_dir,
+            start_timeout_s=serving.worker_start_timeout_s,
+        )
 
     def reload(self, config: GatewayConfig) -> list[str]:
         """Apply a new configuration in place (devices and deployments). Serving settings and
@@ -143,18 +208,20 @@ class GatewayServer:
         deployments, groups, backends = self._build(config, set(self.core.groups))
         self.devices = DeviceRegistry(config.devices)
         closed = self.core.replace_deployments(deployments, groups)
-        for key, backend in backends.items():
-            group = _Group(key, backend)
-            self._groups[key] = group
+        for group in backends.values():
+            self._groups[group.key] = group
             if self._server is not None:
-                self._tasks.append(
-                    asyncio.create_task(self._dispatch(group), name=f"dispatch-{key[:16]}")
-                )
+                self._launch(group)
         for session_id in closed:
             queue = self._streams.pop(session_id, None)
             if queue is not None:
                 with contextlib.suppress(asyncio.QueueFull):
                     queue.put_nowait(_closed_message(session_id))
+        for key in self.core.unused_groups():
+            self.core.remove_group(key)
+            retired = self._groups.pop(key, None)
+            if retired is not None:
+                self._tasks.append(asyncio.create_task(self._retire(retired)))
         self.config = config
         log.info(
             "configuration reloaded: %d deployments, %d sessions closed",
@@ -162,6 +229,22 @@ class GatewayServer:
             len(closed),
         )
         return closed
+
+    def _launch(self, group: _Group) -> None:
+        async def run() -> None:
+            await group.backend.start()
+            await self._dispatch(group)
+
+        group.task = asyncio.create_task(run(), name=f"dispatch-{group.key[:16]}")
+
+    async def _retire(self, group: _Group) -> None:
+        """Stop a group's dispatcher and worker, freeing its device memory."""
+        if group.task is not None:
+            group.task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await group.task
+        await group.backend.stop()
+        log.info("batch group %s retired", group.key)
 
     # --- lifecycle ----------------------------------------------------------------------------
 
@@ -175,9 +258,7 @@ class GatewayServer:
         self.bound_port = self._server.add_insecure_port(self.config.listen)
         await self._server.start()
         for group in self._groups.values():
-            self._tasks.append(
-                asyncio.create_task(self._dispatch(group), name=f"dispatch-{group.key[:16]}")
-            )
+            self._launch(group)
         self._tasks.append(asyncio.create_task(self._sweep(), name="lease-sweeper"))
         if self.config.status_listen:
             host, _, port = self.config.status_listen.rpartition(":")
@@ -190,13 +271,17 @@ class GatewayServer:
     async def stop(self) -> None:
         if self._status_server is not None:
             self._status_server.should_exit = True
-        for task in self._tasks:
+        tasks = [*self._tasks, *(g.task for g in self._groups.values() if g.task is not None)]
+        for task in tasks:
             task.cancel()
-        for task in self._tasks:
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         if self._server is not None:
             await self._server.stop(grace=0.5)
+        await asyncio.gather(*(g.backend.stop() for g in self._groups.values()))
+        if self._owned_worker_dir is not None:
+            shutil.rmtree(self._owned_worker_dir, ignore_errors=True)
         if self._owned_store is not None:
             self._owned_store.close()
             self._owned_store = None
@@ -236,6 +321,7 @@ class GatewayServer:
             del self._streams[session_id]
 
     async def _dispatch(self, group: _Group) -> None:
+        worker_timeout_us = int(self.config.serving.worker_timeout_ms * 1000)
         while True:
             await group.wake.wait()
             group.wake.clear()
@@ -244,18 +330,26 @@ class GatewayServer:
                 self.route(dropped)
                 if batch is None:
                     break
-                inputs = [r.inputs for r in batch.requests]
-                outputs: list[NDArray[np.float32]] | PolicyError
-                try:
-                    outputs = await asyncio.to_thread(group.backend.infer, inputs)
-                except PolicyError as exc:
-                    outputs = exc
-                except MemoryError as exc:
-                    outputs = PolicyError(str(exc), out_of_memory=True)
-                except Exception as exc:
-                    log.exception("policy backend failed")
-                    outputs = PolicyError(f"{type(exc).__name__}: {exc}")
+                outputs = await self._run(group, batch, worker_timeout_us)
                 self.route(self.core.complete(group.key, batch, outputs, monotonic_us()))
+
+    @staticmethod
+    async def _run(
+        group: _Group, batch: Batch, worker_timeout_us: int
+    ) -> list[NDArray[np.float32]] | PolicyError:
+        # A result after every request's deadline is useless; a worker that takes longer than
+        # that and the configured minimum is treated as hung.
+        latest = max(r.deadline_us for r in batch.requests)
+        timeout_us = max(worker_timeout_us, latest - monotonic_us())
+        try:
+            return await group.backend.infer(
+                batch.batch_id, [r.inputs for r in batch.requests], timeout_s=timeout_us / 1e6
+            )
+        except PolicyError as exc:
+            return exc
+        except Exception as exc:  # a backend bug must never stop the group's dispatcher
+            log.exception("backend %s failed", group.key)
+            return PolicyError(f"{type(exc).__name__}: {exc}")
 
     async def _sweep(self) -> None:
         while True:
@@ -269,6 +363,10 @@ class GatewayServer:
     def status(self) -> dict[str, Any]:
         status = self.core.status()
         status["uptime_s"] = round(time.time() - self.started_at, 1)
+        for key, group in self._groups.items():
+            if key in status["groups"]:
+                status["groups"][key]["profile_source"] = group.profile_source
+                status["groups"][key]["worker"] = group.backend.status()
         status["streams"] = len(self._streams)
         return status
 

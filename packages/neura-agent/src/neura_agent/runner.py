@@ -55,6 +55,12 @@ class AgentRuntime:
             runner=self._runner,
         )
 
+    def cuda_indexes(self) -> list[int]:
+        """GPUs present on this server that the agent may use (design §17.4)."""
+        present = [g.index for g in self.facts().gpus]
+        allowed = self.settings.allowed_gpu_indexes
+        return [i for i in present if allowed is None or i in allowed]
+
     async def enroll(self, endpoint: str, token: str) -> Identity:
         """Enroll this server: generate the key here, send only the public key (design §17.2)."""
         if self.identities.load() is not None:
@@ -116,7 +122,7 @@ class AgentRuntime:
         if identity is None:
             return
         key = self.identities.load_or_create_key()
-        self.core = AgentCore(self.settings, identity, self.gateway)
+        self.core = AgentCore(self.settings, identity, self.gateway, cuda_indexes=self.cuda_indexes)
         self.core.recover()
         await self.core.reconcile()  # resume serving committed state immediately, cloud or not
         self.connection = ControlConnection(

@@ -72,6 +72,9 @@ services:
       NEURA_AGENT_CONTROL_PLANE_INSECURE: "true"
       NEURA_AGENT_GATEWAY_LISTEN: 0.0.0.0:50051
       NEURA_AGENT_GATEWAY_STATUS_LISTEN: 0.0.0.0:8091
+      # DEVELOPMENT ONLY: the mock policy with simulated GPU latency. The example contracts
+      # carry placeholder weight digests; real sites run policy workers (the default).
+      NEURA_AGENT_GATEWAY_BACKEND: simulated
       # DEVELOPMENT ONLY: public credentials. The operator token is
       # "ntop_dev_operator_public_token"; robots use "dev-token-<name>". Real sites issue robot
       # credentials with `neura-agent robot-token` and keep the operator credential private.

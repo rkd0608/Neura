@@ -8,6 +8,8 @@
     neura-agent approve COMMAND_ID --operator NAME
     neura-agent refuse COMMAND_ID --operator NAME [--note TEXT]
     neura-agent robot-token ROBOT_NAME      issue a device credential for a robot (shown once)
+    neura-agent import-weights DIR [--artifact FILE]
+                                            add a checkpoint's files to the site's artifact store
 
 Local commands talk to the agent's local API and read the operator credential from
 NEURA_AGENT_OPERATOR_TOKEN.
@@ -20,14 +22,17 @@ import asyncio
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import httpx
 import uvicorn
 
 from neura_agent.app import create_app
+from neura_agent.artifacts import ArtifactError, ArtifactStore
 from neura_agent.runner import AgentRuntime, EnrollmentError
 from neura_agent.settings import AgentSettings
+from neura_contracts import ModelArtifact, load_document
 
 
 def _local(settings: AgentSettings, method: str, path: str, body: Any = None) -> int:
@@ -39,6 +44,31 @@ def _local(settings: AgentSettings, method: str, path: str, body: Any = None) ->
     )
     print(json.dumps(response.json(), indent=2))
     return 0 if response.status_code < 400 else 1
+
+
+def _import_weights(settings: AgentSettings, directory: Path, manifest: Path | None) -> int:
+    """Hash and store every file of a checkpoint directory. With ``--artifact``, first check that
+    the directory holds exactly the files the manifest declares, with their digests."""
+    if not directory.is_dir():
+        print(f"{directory} is not a directory", file=sys.stderr)
+        return 1
+    store = ArtifactStore(settings.state_dir / "artifacts")
+    if manifest is not None:
+        artifact = load_document(manifest.read_text(encoding="utf-8"))
+        if not isinstance(artifact, ModelArtifact):
+            print(f"{manifest} is not a ModelArtifact", file=sys.stderr)
+            return 1
+        try:
+            for weight in artifact.spec.weights:
+                store.add_file(directory / weight.path, expected=weight.digest)
+        except (ArtifactError, OSError) as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 1
+        print(f"imported the {len(artifact.spec.weights)} files of {artifact.metadata.name}")
+        return 0
+    for item in store.import_directory(directory):
+        print(json.dumps({"path": item.path, "digest": item.digest, "size_bytes": item.size_bytes}))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,6 +92,11 @@ def main(argv: list[str] | None = None) -> int:
         cmd.add_argument("--note", default="")
     robot = sub.add_parser("robot-token")
     robot.add_argument("robot_name")
+    weights = sub.add_parser("import-weights")
+    weights.add_argument("directory", type=Path)
+    weights.add_argument(
+        "--artifact", type=Path, default=None, help="check the files against this manifest"
+    )
     args = parser.parse_args(argv)
     settings = AgentSettings()
 
@@ -96,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "robot-token":
         return _local(settings, "POST", f"/v1/local/robots/{args.robot_name}/credentials")
+    if args.command == "import-weights":
+        return _import_weights(settings, args.directory, args.artifact)
 
     runtime = AgentRuntime(settings)
     uvicorn.run(

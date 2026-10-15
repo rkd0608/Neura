@@ -58,6 +58,9 @@ class ReasonCode(StrEnum):
     WORKER_OUT_OF_MEMORY = "WORKER_OUT_OF_MEMORY"
     WORKER_UNAVAILABLE = "WORKER_UNAVAILABLE"
     WORKER_OUTPUT_INVALID = "WORKER_OUTPUT_INVALID"
+    WORKER_INFERENCE_FAILED = "WORKER_INFERENCE_FAILED"
+    WORKER_LOAD_FAILED = "WORKER_LOAD_FAILED"
+    WORKER_TIMED_OUT = "WORKER_TIMED_OUT"
     CHUNK_LATE = "CHUNK_LATE"
     CHUNK_STALE_OBSERVATION = "CHUNK_STALE_OBSERVATION"
     CHUNK_DUPLICATE = "CHUNK_DUPLICATE"
@@ -80,6 +83,8 @@ class ReasonCode(StrEnum):
     AGENT_PREFLIGHT_FAILED = "AGENT_PREFLIGHT_FAILED"
     AGENT_MANIFEST_SIGNATURE_INVALID = "AGENT_MANIFEST_SIGNATURE_INVALID"
     AGENT_ARTIFACT_DIGEST_MISMATCH = "AGENT_ARTIFACT_DIGEST_MISMATCH"
+    AGENT_ARTIFACT_UNAVAILABLE = "AGENT_ARTIFACT_UNAVAILABLE"
+    AGENT_DEVICE_UNAVAILABLE = "AGENT_DEVICE_UNAVAILABLE"
     AGENT_ENROLLMENT_INVALID = "AGENT_ENROLLMENT_INVALID"
     AGENT_UNAUTHENTICATED = "AGENT_UNAUTHENTICATED"
     AGENT_GENERATION_STALE = "AGENT_GENERATION_STALE"
@@ -414,6 +419,27 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='The policy produced non-finite or wrongly shaped actions.',
     ),
+    ReasonCode.WORKER_INFERENCE_FAILED: ReasonCodeInfo(
+        code=ReasonCode.WORKER_INFERENCE_FAILED,
+        area="worker",
+        severity="error",
+        retryable=False,
+        message='The policy raised an error for this batch.',
+    ),
+    ReasonCode.WORKER_LOAD_FAILED: ReasonCodeInfo(
+        code=ReasonCode.WORKER_LOAD_FAILED,
+        area="worker",
+        severity="error",
+        retryable=False,
+        message='The policy worker could not load the model on its device.',
+    ),
+    ReasonCode.WORKER_TIMED_OUT: ReasonCodeInfo(
+        code=ReasonCode.WORKER_TIMED_OUT,
+        area="worker",
+        severity="error",
+        retryable=False,
+        message='The policy worker did not finish the batch in time and was restarted.',
+    ),
     ReasonCode.CHUNK_LATE: ReasonCodeInfo(
         code=ReasonCode.CHUNK_LATE,
         area="runtime",
@@ -567,6 +593,20 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="error",
         retryable=False,
         message='A downloaded artifact does not match its declared digest.',
+    ),
+    ReasonCode.AGENT_ARTIFACT_UNAVAILABLE: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ARTIFACT_UNAVAILABLE,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message="The model's weights are not available at this site; import them or configure a source.",
+    ),
+    ReasonCode.AGENT_DEVICE_UNAVAILABLE: ReasonCodeInfo(
+        code=ReasonCode.AGENT_DEVICE_UNAVAILABLE,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message='No device this site may use matches the execution profile.',
     ),
     ReasonCode.AGENT_ENROLLMENT_INVALID: ReasonCodeInfo(
         code=ReasonCode.AGENT_ENROLLMENT_INVALID,

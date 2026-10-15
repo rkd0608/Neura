@@ -20,6 +20,8 @@ neura-runtime = { workspace = true }
 neura-server = { workspace = true }
 neura-sim = { workspace = true }
 neura-sdk = { workspace = true }
+neura-adapters = { workspace = true }
+neura-bench = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -31,6 +33,8 @@ dev = [
     "neura-server",
     "neura-sim",
     "neura-sdk",
+    "neura-adapters",
+    "neura-bench",
     "grpcio-tools==1.84.0",
     "httpx2>=0.1",
     "hypothesis>=6.169",
@@ -44,6 +48,8 @@ dev = [
     "types-protobuf>=6.30",
     "types-pyyaml>=6.0.12",
 ]
+# Real models (PyTorch, LeRobot): `uv sync --group models`. Not part of the default setup.
+models = ["neura-adapters[lerobot]"]
 
 [tool.ruff]
 line-length = 100
@@ -72,7 +78,9 @@ extend-immutable-calls = ["fastapi.Depends"]
 [tool.ruff.lint.isort]
 known-first-party = [
     "neura",
+    "neura_adapters",
     "neura_agent",
+    "neura_bench",
     "neura_contracts",
     "neura_control",
     "neura_runtime",
@@ -89,7 +97,7 @@ python_version = "3.13"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:packages/neura-sdk/src:tools"
+mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:packages/neura-sdk/src:packages/neura-adapters/src:packages/neura-bench/src:tools"
 explicit_package_bases = true
 exclude = ["packages/neura-proto/src/neura/"]
 
@@ -114,3 +122,10 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 xfail_strict = true
 filterwarnings = ["error"]
+
+# PyTorch and LeRobot are optional (the models group). LeRobot ships no type information; PyTorch
+# is treated the same so type checking gives the same result with and without the models group.
+[[tool.mypy.overrides]]
+module = ["lerobot.*", "torch", "torch.*"]
+ignore_missing_imports = true
+follow_imports = "skip"

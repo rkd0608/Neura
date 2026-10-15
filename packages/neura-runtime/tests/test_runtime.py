@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
 from neura_contracts import FaultResponse, ReasonCode
@@ -55,7 +56,7 @@ class Harness:
     def chunk_for(
         self,
         observation: dataplane_pb2.Observation,
-        values: np.ndarray | None = None,
+        values: NDArray[np.floating[Any]] | None = None,
         **envelope_overrides: Any,
     ) -> dataplane_pb2.ActionChunk:
         h, d = self.binding.chunk_length, self.binding.action_dim

@@ -36,13 +36,20 @@ def _example(name: str) -> dict[str, Any]:
     return data
 
 
-def revision(revision_id: str, refill: int | None = None) -> dict[str, Any]:
+def revision(
+    revision_id: str,
+    refill: int | None = None,
+    *,
+    artifact: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     profile = _example("act-so101-30hz.profile.yaml")
     if refill is not None:
         profile["metadata"]["version"] = f"refill-{refill}"
         profile["spec"]["chunk"]["refill_threshold_actions"] = refill
+    if artifact is not None:
+        profile["spec"]["binding"]["model_artifact"] = parse_document(artifact).digest()
     raw = {
-        "model_artifact": _example("act-so101.artifact.yaml"),
+        "model_artifact": artifact or _example("act-so101.artifact.yaml"),
         "robot_profile": _example("so101.robot.yaml"),
         "execution_profile": profile,
     }
@@ -105,15 +112,24 @@ class Site:
             manifest_public_key_hex=public.hex(),
             manifest_key_id=KEY_ID,
         )
-        self.settings = AgentSettings(state_dir=tmp_path / "agent", **settings)
+        self.settings = AgentSettings(
+            state_dir=tmp_path / "agent", **{"gateway_backend": "simulated", **settings}
+        )
         self.gateway = FakeGateway()
         self.clock = Clock()
+        self.cuda: list[int] = []  # GPUs the agent may use
         self.generation = 0
         self.commands = 0
         self.core = self.new_core()
 
     def new_core(self) -> AgentCore:
-        return AgentCore(self.settings, self.identity, self.gateway, clock=self.clock)
+        return AgentCore(
+            self.settings,
+            self.identity,
+            self.gateway,
+            clock=self.clock,
+            cuda_indexes=self.cuda.copy,
+        )
 
     def manifest(self, revisions: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
         self.generation += 1
@@ -564,3 +580,116 @@ async def test_a_replayed_manifest_does_not_renew_authorization(site: Site) -> N
     site.clock.now += 600
     assert (await site.core.on_desired_state(site.desired(manifest))).ack.accepted
     assert site.core.state.last_contact_unix == committed_at
+
+
+# --- policy workers: placement, weights and measured profiles (design §9.5, §13) ---------------
+
+
+def fine_tune(version: str, adapter: str = "lerobot-act") -> dict[str, Any]:
+    """Another artifact of the same architecture: a different digest, so its own batch group."""
+    artifact = _example("act-so101.artifact.yaml")
+    artifact["metadata"]["version"] = version
+    artifact["spec"]["adapter"]["name"] = adapter
+    return artifact
+
+
+def last_report(site: Site) -> site_pb2.OperationReport:
+    return site.reports()[-1]
+
+
+async def test_prepare_needs_a_device_of_the_profiles_kind(tmp_path: Path) -> None:
+    site = Site(tmp_path, gateway_backend="workers")  # this server has no usable GPU
+    await site.commit([REV1])
+    await site.core.on_command(site.prepare(REV1["id"]))
+    report = last_report(site)
+    assert (report.state, report.reason.code) == ("Failed", "AGENT_DEVICE_UNAVAILABLE")
+    assert site.core.state.prepared == {}
+
+
+async def test_prepare_needs_the_weights_at_the_site(tmp_path: Path) -> None:
+    site = Site(tmp_path, gateway_backend="workers")
+    site.cuda.append(0)
+    await site.commit([REV1])
+    await site.core.on_command(site.prepare(REV1["id"]))
+    report = last_report(site)
+    assert (report.state, report.reason.code) == ("Failed", "AGENT_ARTIFACT_UNAVAILABLE")
+    assert "neura-agent import-weights" in report.message
+
+
+async def test_imported_weights_are_checked_out_and_the_model_loaded(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "model.safetensors").write_bytes(b"not really weights")
+    site = Site(tmp_path, gateway_backend="workers")
+    site.cuda.append(0)
+    imported = site.core.artifacts.import_directory(checkpoint)
+    artifact = fine_tune("imported")
+    artifact["spec"]["weights"] = [
+        {"path": i.path, "digest": i.digest, "size_bytes": i.size_bytes} for i in imported
+    ]
+    rev = revision("rev_01J0000000000000000000009", artifact=artifact)
+    await site.commit([rev])
+    await site.core.on_command(site.prepare(rev["id"]))
+    report = last_report(site)
+    # The weights were found and verified; loading them on the device is what failed.
+    assert (report.state, report.reason.code) == ("Failed", "WORKER_LOAD_FAILED"), report
+    checkout = site.core.artifacts.checkout_path(parse_document(artifact))  # type: ignore[arg-type]
+    assert (checkout / "model.safetensors").read_bytes() == b"not really weights"
+    assert not os.access(checkout / "model.safetensors", os.W_OK) or os.geteuid() == 0
+
+
+async def test_prepare_measures_the_model_and_reports_its_sharing_case(tmp_path: Path) -> None:
+    site = Site(tmp_path, gateway_backend="workers", dev_adapter_override="mock")
+    site.cuda.extend([0, 1])
+    other = revision("rev_01J0000000000000000000003", artifact=fine_tune("tune-b"))
+    await site.commit([REV1, REV2, other])
+
+    def capacity() -> dict[str, Any]:
+        report = last_report(site)
+        assert report.state == "Succeeded", report
+        estimate: dict[str, Any] = json.loads(report.result_json)["capacity"]
+        return estimate
+
+    await site.core.on_command(site.prepare(REV1["id"]))
+    first = capacity()
+    assert first["source"] == "measured_profile"
+    assert first["sharing_case"] == "same_weights"
+    assert first["assumptions"]["device"] == "cuda:0"
+    assert set(first["assumptions"]["latency_p99_ms_by_batch"]) == {"1", "2", "4", "8"}
+    # Same artifact (only the execution profile differs): the same batch group and device.
+    await site.core.on_command(site.prepare(REV2["id"]))
+    assert capacity()["assumptions"]["device"] == "cuda:0"
+    # A different fine-tune gets the least-loaded GPU to itself.
+    await site.core.on_command(site.prepare(other["id"]))
+    third = capacity()
+    assert (third["assumptions"]["device"], third["sharing_case"]) == ("cuda:1", "same_weights")
+
+    await activated(site, REV1["id"])
+    config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
+    deployment = config["deployments"][0]
+    assert (deployment["device"], deployment["adapter"]) == ("cuda:0", "mock")
+    assert json.loads(Path(deployment["profile"]).read_text())["points"]
+    assert config["serving"]["backend"] == "workers"
+
+
+async def test_fine_tunes_sharing_one_gpu_are_co_located(tmp_path: Path) -> None:
+    site = Site(tmp_path, gateway_backend="workers", dev_adapter_override="mock")
+    site.cuda.append(0)
+    tune = revision("rev_01J0000000000000000000003", artifact=fine_tune("tune-b"))
+    other_arch = revision(
+        "rev_01J0000000000000000000004", artifact=fine_tune("smol", adapter="lerobot-smolvla")
+    )
+    await site.commit([REV1, tune, other_arch])
+    cases = []
+    for rev in (REV1, tune, other_arch):
+        await site.core.on_command(site.prepare(rev["id"]))
+        report = last_report(site)
+        assert report.state == "Succeeded", report
+        estimate = json.loads(report.result_json)["capacity"]
+        cases.append((estimate["sharing_case"], estimate["assumptions"]["co_located_groups"]))
+    assert cases == [
+        ("same_weights", 0),
+        ("co_located_fine_tunes", 1),
+        ("different_architectures", 2),
+    ]
+    assert {p["device"] for p in site.core.state.placements.values()} == {"cuda:0"}

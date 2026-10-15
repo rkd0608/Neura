@@ -22,8 +22,7 @@ def example_data(name: str) -> dict[str, Any]:
 BindingFactory = Callable[..., Any]
 
 
-@pytest.fixture
-def make_binding() -> BindingFactory:
+def make_binding_factory() -> BindingFactory:
     """Build an ExecutionBinding from the ACT (default) or SmolVLA example, with optional edits.
 
     ``edit(artifact, robot, profile)`` mutates the raw dicts before parsing; the profile is
@@ -51,6 +50,19 @@ def make_binding() -> BindingFactory:
         return ExecutionBinding(a, r, p)
 
     return factory
+
+
+@pytest.fixture
+def make_binding() -> BindingFactory:
+    """Build an ExecutionBinding from the ACT (default) or SmolVLA example, with optional edits
+    (see make_binding_factory)."""
+    return make_binding_factory()
+
+
+@pytest.fixture(scope="session")
+def binding_factory() -> BindingFactory:
+    """make_binding for module- and session-scoped fixtures."""
+    return make_binding_factory()
 
 
 # --- raw example documents (contracts tests) ---------------------------------------------

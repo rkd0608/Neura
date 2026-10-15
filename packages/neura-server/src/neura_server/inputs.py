@@ -13,19 +13,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
+from neura_adapters import ModelInputs
 from neura_contracts import ColorOrder, ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
 
 _COLOR = {ColorOrder.RGB: common_pb2.COLOR_ORDER_RGB, ColorOrder.BGR: common_pb2.COLOR_ORDER_BGR}
-
-
-@dataclass(frozen=True, slots=True)
-class ModelInputs:
-    state: dict[str, NDArray[np.float32]]
-    images: dict[str, NDArray[np.uint8]]  # camera role -> H x W x 3
-    instruction: str
-    frozen_prefix: NDArray[np.float32] | None
 
 
 @dataclass(frozen=True, slots=True)

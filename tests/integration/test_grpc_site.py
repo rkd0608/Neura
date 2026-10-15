@@ -38,7 +38,7 @@ def gateway_config(robots: list[str]) -> GatewayConfig:
                 robots=robots,
             )
         ],
-        serving=ServingConfig(simulate_latency=True),
+        serving=ServingConfig(backend="simulated", simulate_latency=True),
     )
 
 

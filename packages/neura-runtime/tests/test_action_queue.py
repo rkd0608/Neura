@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from numpy.typing import NDArray
 
 from neura_contracts import ReasonCode
 from neura_runtime.action_queue import ActionQueue, MergeKind, MergeSettings
@@ -11,7 +12,7 @@ from neura_runtime.action_queue import ActionQueue, MergeKind, MergeSettings
 DIM = 2
 
 
-def chunk(start_value: float, length: int) -> np.ndarray:
+def chunk(start_value: float, length: int) -> NDArray[np.float64]:
     values = np.arange(start_value, start_value + length, dtype=np.float64)
     return np.stack([values, -values], axis=1)
 

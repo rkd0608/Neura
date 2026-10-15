@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from neura.v1 import common_pb2, dataplane_pb2
+from neura_adapters import MockPolicy, ModelInputs, PolicyError
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.runtime import RobotRuntime, RuntimeState, SendObservation
@@ -13,9 +14,8 @@ from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_runtime.testing import FakeController, FakeSensors
 from neura_server.admission import AdmissionController
 from neura_server.gateway import BatchGroup, Deployment, GatewayCore
-from neura_server.inputs import InvalidObservation, ModelInputs, decode_observation
+from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.leases import LeaseTable, MemoryGenerationStore
-from neura_server.policy import MockPolicy, PolicyError
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import Scheduler
 
@@ -172,7 +172,8 @@ def test_worker_failures_become_typed_rejections(make_binding: Any) -> None:
     robot.open(core, GW0)
     robot.runtime.arm(robot.now)
     cases: list[tuple[list[np.ndarray[Any, Any]] | PolicyError, str]] = [
-        (PolicyError("boom"), "WORKER_CRASHED"),
+        (PolicyError("boom"), "WORKER_INFERENCE_FAILED"),
+        (PolicyError("gone", reason=ReasonCode.WORKER_CRASHED), "WORKER_CRASHED"),
         (PolicyError("oom", out_of_memory=True), "WORKER_OUT_OF_MEMORY"),
         (
             [np.full((binding.chunk_length, binding.action_dim), np.nan, dtype=np.float32)],

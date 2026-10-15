@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,6 +99,8 @@ class _CapacityAssumptions(BaseModel):
     reserve_fraction: float = Field(ge=0, le=1)
     latency_p99_ms_by_batch: dict[str, float]
     memory_available_mib: int | None = Field(default=None, ge=0)
+    device: Annotated[str, StringConstraints(max_length=16)] | None = None
+    co_located_groups: int = Field(default=0, ge=0, le=1000)
 
 
 class _Capacity(BaseModel):
@@ -115,6 +117,9 @@ class _Capacity(BaseModel):
         "search_limit",
     ]
     source: Literal["configured_profile", "measured_profile"]
+    sharing_case: Literal[
+        "same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"
+    ] = "same_weights"
     assumptions: _CapacityAssumptions
 
 

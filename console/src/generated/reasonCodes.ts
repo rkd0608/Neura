@@ -270,6 +270,24 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: false,
     message: "The policy produced non-finite or wrongly shaped actions.",
   },
+  WORKER_INFERENCE_FAILED: {
+    area: "worker",
+    severity: "error",
+    retryable: false,
+    message: "The policy raised an error for this batch.",
+  },
+  WORKER_LOAD_FAILED: {
+    area: "worker",
+    severity: "error",
+    retryable: false,
+    message: "The policy worker could not load the model on its device.",
+  },
+  WORKER_TIMED_OUT: {
+    area: "worker",
+    severity: "error",
+    retryable: false,
+    message: "The policy worker did not finish the batch in time and was restarted.",
+  },
   CHUNK_LATE: {
     area: "runtime",
     severity: "warning",
@@ -401,6 +419,18 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     severity: "error",
     retryable: false,
     message: "A downloaded artifact does not match its declared digest.",
+  },
+  AGENT_ARTIFACT_UNAVAILABLE: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "The model's weights are not available at this site; import them or configure a source.",
+  },
+  AGENT_DEVICE_UNAVAILABLE: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "No device this site may use matches the execution profile.",
   },
   AGENT_ENROLLMENT_INVALID: {
     area: "agent",

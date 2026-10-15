@@ -32,8 +32,8 @@ jobs:
           - {model: smolvla, merge: replace, seed: 2}
           - {model: act, merge: blend, seed: 3}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.32"
           python-version: "3.13"
@@ -46,7 +46,7 @@ jobs:
           uv run neura-sim-soak --hours "$HOURS" --model ${{ matrix.model }}
           --merge ${{ matrix.merge }} --seed ${{ matrix.seed }}
           --report soak/${{ matrix.model }}-${{ matrix.merge }}.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: soak-${{ matrix.model }}-${{ matrix.merge }}
@@ -57,8 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.32"
           python-version: "3.13"
@@ -70,7 +70,7 @@ jobs:
         run: >-
           uv run neura-chaos --duration "$SECONDS_OF_CHAOS" --workdir chaos
           --report chaos/report.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: chaos

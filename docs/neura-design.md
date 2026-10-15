@@ -750,6 +750,25 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - *A late rejection addressed to an earlier session could tear down the current one.* A robot now ignores rejections for any session but its own.
   - The simulator's own controller log and route table grew without bound; both are bounded, so a soak runs for days in under 100 MiB.
 
+**Supply chain**
+
+- **Pinned inputs.**
+  - Python and JavaScript dependencies are locked (`uv.lock`, `pnpm-lock.yaml`) and installed frozen.
+  - Base images are pinned by digest in `deploy/docker/Dockerfile`.
+  - Every GitHub Action is pinned to a commit SHA, with its version in a comment.
+  - Dependabot proposes updates for all of them weekly, through CI.
+- **Dependency audit** (`tools/audit_dependencies.py`, the `supply-chain` CI job). It checks every package in `uv.lock` (all groups, PyTorch and LeRobot included) with `pip-audit`, and the console's and docs site's lockfiles with `pnpm audit`. A finding fails CI unless it is fixed or listed in `security/vulnerability-exceptions.yaml` with the reason it does not affect Neura and an expiry date; an expired entry fails too.
+  - The first run found six advisories in the docs site's build toolchain (fixed by overriding to patched versions) and one in the console's `yaml` (upgraded).
+  - Three are accepted until 2027-01-15, each because the latest compatible upstream release cannot take the fix:
+    - `setuptools`: an sdist-building issue; Neura does not build sdists.
+    - `torch`: TorchScript memory corruption. Neura never calls TorchScript, and PyTorch runs only inside the worker sandbox.
+    - `braces`: in the docs build only, on our own glob patterns; no fixed version exists.
+- **Releases** (`.github/workflows/release.yml`, on a `vX.Y.Z` tag, after all of CI passes on it):
+  - Every image is pushed to GHCR and deployed by digest.
+  - Each image is signed keyless with Sigstore (cosign, bound to the release workflow's GitHub identity), with a CycloneDX SBOM as a signed attestation and SLSA build provenance.
+  - The site-agent bundle is signed with Neura's Ed25519 release key (a repository secret). Sites pin that key at install and verify every upgrade against it. The tag must equal the packages' version.
+  - The release notes list every digest and the `cosign verify` and `gh attestation verify` commands.
+
 **Known limits, scheduled**
 
 - Signatures are checked at prepare. A revision prepared before its publisher was distrusted keeps running until it is replaced or prepared again.

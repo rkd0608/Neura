@@ -6,7 +6,8 @@
 #   docker build -f deploy/docker/Dockerfile --target neura-console -t neura-console .
 #   docker build -f deploy/docker/Dockerfile --target neura-worker-gpu -t neura-worker-gpu .
 
-ARG PYTHON_IMAGE=python:3.13-slim
+# Base images are pinned by digest (Dependabot proposes updates); the tag is for readers.
+ARG PYTHON_IMAGE=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 
 # Behind a TLS-intercepting proxy, pass its CA bundle as a build secret:
 #   docker build --secret id=ca_bundle,src=/path/to/ca.pem ...
@@ -115,7 +116,7 @@ FROM runtime-models AS neura-worker-gpu
 CMD ["neura-worker"]
 
 # --- web console --------------------------------------------------------------------------------
-FROM node:22.20-alpine AS console-build
+FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS console-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     corepack enable && corepack prepare pnpm@10.28.0 --activate
@@ -128,7 +129,7 @@ COPY console ./
 COPY api /src/api
 RUN pnpm run build
 
-FROM nginx:1.27-alpine AS neura-console
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS neura-console
 COPY deploy/console/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=console-build /src/console/dist /usr/share/nginx/html
 ENV NEURA_API_UPSTREAM=http://control-plane:8080 \

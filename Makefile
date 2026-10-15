@@ -18,6 +18,7 @@ gen: ## Regenerate code from proto/, catalog/, contract models and the API spec
 	$(UV) run python tools/gen_proto.py
 	$(UV) run python tools/gen_schemas.py
 	$(UV) run python tools/gen_sdk.py
+	cd console && pnpm run gen
 
 .PHONY: examples
 examples: ## Refresh example execution-profile bindings to current digests
@@ -43,7 +44,7 @@ lint: ## Lint and check formatting
 
 .PHONY: typecheck
 typecheck: ## Strict type checking
-	$(UV) run mypy packages tools tests
+	$(UV) run mypy packages tools tests console/e2e
 
 .PHONY: test
 test: ## Run the test suite
@@ -55,9 +56,26 @@ check: lint typecheck check-generated test ## Everything CI runs, except the dev
 .PHONY: dev
 dev: ## Start the local stack (Postgres, control plane, site agent with its data plane, simulated robots)
 	$(COMPOSE) up --build --detach --wait
+	@echo "console:       http://127.0.0.1:3000 (API token: see deploy/compose/compose.yaml)"
 	@echo "control plane: http://127.0.0.1:8080/v1/meta"
 	@echo "site agent:    http://127.0.0.1:8090/v1/local/status (unenrolled until you run tools/smoke_api.py)"
 	@echo "data plane:    http://127.0.0.1:8091/v1/local/dataplane"
+
+.PHONY: console-setup
+console-setup: ## Install the console's dependencies (pnpm)
+	cd console && pnpm install --frozen-lockfile
+
+.PHONY: console-check
+console-check: ## Console: format, lint, strict types, unit tests, generated API types
+	cd console && pnpm run check && pnpm run check:gen
+
+.PHONY: console-dev
+console-dev: ## Console dev server on http://127.0.0.1:5173, against the API on :8080
+	cd console && pnpm run dev
+
+.PHONY: console-e2e
+console-e2e: ## Console end-to-end tests: real backend, site agent and robots in Chromium
+	cd console && pnpm run e2e
 
 .PHONY: dev-down
 dev-down: ## Stop the local stack and delete its data

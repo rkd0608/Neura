@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane) and M4 (site agent) implemented, M5 onward not yet built · October 14, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented, M6 onward not yet built · October 14, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -375,8 +375,8 @@ packages/
   neura-server/            # gateway, leases, scheduler, admission, workers (proprietary) (M2)
   neura-sim/               # simulated arms and networks, deterministic site simulator (M2)
   neura-adapters/          # ACT, SmolVLA, π0 adapters (open) (M6)
-  neura-sdk/               # Python client generated from the OpenAPI spec (open) (M5, with the console client)
-console/                   # web console, TypeScript (proprietary) (M5)
+  neura-sdk/               # Python client generated from the OpenAPI spec (open) (M5)
+console/                   # web console: React + TypeScript, generated API client, e2e tests (proprietary) (M5)
 bench/                     # benchmark harness and reports (M6)
 examples/contracts/        # example contracts for an SO-101-class arm (M1)
 deploy/                    # Dockerfile and Compose dev stack (M1)
@@ -418,7 +418,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M2. Data plane core** ✅ | Robot runtime (§5–§7), gateway with leases and admission (§6, §9.3), scheduler (§9), policy workers, simulator with fault injection (§7). Sans-IO cores shared by a deterministic simulator (every node on its own clock) and the real gRPC adapters; gateway and simulated robots in the dev stack | The full fault suite and property-based invariant tests pass in CI; N simulated robots served by one worker, in simulation and over gRPC |
 | **M3. Control plane** ✅ | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20). Alembic migrations; transactional idempotency keys; `If-Match` concurrency; audit and change events in the same transaction as each change; site-report service that alone writes observed state (used by the agent in M4); `GET /v1/me`; bootstrap CLI and development bootstrap | Every response in the test suite is validated against the OpenAPI spec; every spec operation is implemented; idempotency (including concurrent retries), concurrency, roles, OIDC and audit tests pass; the dev stack onboards a customer through the API |
 | **M4. Site agent** ✅ | Enrollment with one-time tokens and on-host keys, preflight, outbound stream (TLS), signed manifest reconciliation, contract verification at the site, local boundaries, at-most-once commands, local approval, task-boundary revision switches, signed contact proofs for offline authorization, supervised data plane, local site API and CLI (§17, §19.5); implementation notes in §17.6 | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage and reconnects by itself (`make smoke` runs the whole pilot on the Compose stack) |
-| **M5. Web console** | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19) | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests |
+| **M5. Web console** ✅ | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19); members API with invitations; sign-in configuration in `/v1/meta`; site-computed capacity estimates; generated Python SDK; implementation notes in §19.7 | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests (`make console-e2e`, in CI) |
 | **M6. Models and GPU sharing** | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10) | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner |
 | **M7. Production hardening** | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations |
 | **M8. Physical validation** | SO-101-class arms connected through the same platform | Fault suite and parity pass on hardware |
@@ -626,6 +626,60 @@ A small local web UI and CLI served by the site agent, available when the cloud 
 
 TypeScript, React, a typed client generated from the OpenAPI spec, server-state caching with background refresh, and accessibility (WCAG 2.1 AA) as an acceptance criterion. The local site console uses the same components against the agent's local API.
 
+### 19.7 Implementation notes (M5)
+
+**One API, typed end to end**
+
+- The console's client is generated from `api/openapi.yaml` (openapi-typescript and openapi-fetch). So is the Python SDK (`tools/gen_sdk.py`). Both are checked for staleness in CI.
+- The spec is enforced at compile time. For example, the generated types make every POST supply an `Idempotency-Key`: the console creates one per user action, and the SDK reuses one across its retries.
+- Reason codes reach the console from the same catalog as every other component (a generated TypeScript module), so every state and error shows plain-language text and its code.
+
+**Showing observed state honestly**
+
+- Ages are computed as durations: the server's `data_age_seconds` plus the time elapsed in the browser since the fetch. The offline-allowance countdown is a difference of two control-plane timestamps. The browser clock is never compared with a site's.
+- A site whose agent stopped reporting reads as Offline with "last seen …". Its robots' last states are greyed. Liveness comes from report age (§17.6).
+- Release pages show per robot the observed active revision, separately from what was prepared. An activation request shows "Waiting for approval at the site" until the site reports. The console has no approve action: approval happens locally (§19.5).
+
+**Live updates**
+
+- The console follows the project's change events with `fetch`, because `EventSource` cannot send an `Authorization` header.
+- The server starts each stream with an id-only message carrying its position. A client that reconnects before any event resumes from there and misses nothing; the SDK does the same.
+- Events invalidate the cached queries of that project, coalesced over 250 ms. Live views also poll as a fallback.
+
+**Members and sign-in**
+
+- Members are invited by email and bound to their SSO subject the first time they sign in with that email verified by the identity provider. They can also be added by subject.
+- An organization always keeps an active admin: the API refuses to demote or remove the last one.
+- The console uses OIDC authorization code with PKCE as a public client. The issuer and client come from `/v1/meta`. API tokens remain for development and automation.
+- Credentials live in `sessionStorage`. MFA for admin and activation-related actions is enforced by the customer's identity provider.
+
+**Capacity** (§9.3, §19.3)
+
+- When a site prepares a revision, its agent computes "this server can run N robots at this profile" with the admission controller the gateway enforces, so estimate and admission cannot disagree.
+- The estimate reports the limiting factor (deadline, dispatch or acceptance freshness, memory, throughput) and the assumptions it used. The control plane validates the estimate's shape before storing it.
+- Until the profiler measures the GPU (M6), the latency profile is the configured one, and the estimate says so (`source: configured_profile`). The dev stack's estimate, 8 robots limited by dispatch freshness, matches the M2 finding (§9.3).
+
+**Accessibility and quality gates**
+
+- Semantic HTML, labelled controls and named regions throughout. Native `<dialog>` for modals, so focus is trapped and returned. Live regions announce results, and links are underlined so they never rely on color.
+- ESLint runs the strict jsx-a11y rules. The end-to-end journey runs axe on every main screen against WCAG 2.1 AA and fails on serious or critical violations.
+- The journey plays every role with the real components, in Chromium, in CI:
+  1. The customer uses the console.
+  2. A GPU server runs the install command the console shows: a real site agent and gateway.
+  3. Simulated robots run the robot runtime.
+  4. A site operator approves with `neura-agent approve`.
+
+**Serving**
+
+- The production image is nginx with the static build. It proxies `/v1` on the same origin, so no CORS is needed, with buffering off so the event stream flows.
+- It sends a strict Content-Security-Policy, `X-Frame-Options: DENY` and no-referrer. Hashed assets are cached immutably.
+
+**Not in M5**
+
+- The local site console is the agent's local API and CLI (§19.5); a browser UI for it, built from the same components, follows with M7.
+- Telemetry routing and the outbound-ledger view (§18.2) arrive with the ledger in M7.
+- Metrics charts arrive with measured telemetry in M6.
+
 ---
 
 ## 20. Console ↔ backend communication
@@ -682,7 +736,7 @@ Organizations, projects, sites, compute servers, enrollment tokens, robots, robo
 
 ### 20.6.1 Implementation notes (M3)
 
-- Event streams end after a configured lifetime (5 minutes by default) and send `retry:`; clients reconnect with `Last-Event-ID`. This bounds connection age behind load balancers. A cursor older than the retention window returns `410 API_CURSOR_EXPIRED`.
+- Event streams end after a configured lifetime (5 minutes by default) and send `retry:`; clients reconnect with `Last-Event-ID`. Each stream starts with an id-only message carrying its position (M5), so a reconnect never skips events. This bounds connection age behind load balancers. A cursor older than the retention window returns `410 API_CURSOR_EXPIRED`.
 - The rate limiter is per process. Running several control-plane replicas needs a shared limiter (for example Redis) before production scale.
 - Organization memberships for SSO users are managed with the `neura-control bootstrap` CLI until the user-management API lands with the console (M5).
 

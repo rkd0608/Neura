@@ -16,6 +16,8 @@ concurrency:
 env:
   UV_VERSION: "0.11.32"
   PYTHON_VERSION: "3.13"
+  NODE_VERSION: "22.20"
+  PNPM_VERSION: "10.28.0"
 
 jobs:
   checks:
@@ -51,6 +53,57 @@ jobs:
         run: make check-generated
       - name: Tests
         run: uv run pytest
+
+  console:
+    name: Console (lint, types, unit and end-to-end tests)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: neura
+          POSTGRES_PASSWORD: neura
+          POSTGRES_DB: neura
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U neura -d neura"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      NEURA_E2E_DATABASE_URL: postgresql://neura:neura@127.0.0.1:5432/neura
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
+      - name: Install
+        run: |
+          uv sync --frozen
+          make console-setup
+      - name: Format, lint, types, unit tests, generated API types
+        run: make console-check
+      - name: Browser
+        working-directory: console
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end journey
+        run: make console-e2e
+      - name: Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: console/playwright-report
+          retention-days: 7
 
   dev-stack:
     name: Dev stack smoke test

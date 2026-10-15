@@ -24,23 +24,31 @@ design and the build plan (§16.1).
 | `packages/neura-runtime` | Robot runtime: action queue, chunk merging, fencing, state machine, session and gRPC clients |
 | `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy workers (`neura-gateway`) |
 | `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, `neura-sim-robots` |
+| `packages/neura-sdk` | Python client for the management API, generated from the spec |
+| `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
 
 ## Getting started
 
-Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Docker with Compose.
+Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Node 22 with pnpm (console), Docker
+with Compose.
 
 ```bash
 make setup     # install the workspace into .venv
 make check     # lint, strict type checks, generated-file checks, tests
-make dev       # start Postgres, control plane, site agent (with its data plane) and 4 simulated robots
+make dev       # start Postgres, control plane, site agent (with its data plane), 4 simulated
+               # robots, and the web console on http://127.0.0.1:3000
 make smoke     # build, start, run a whole pilot end to end, stop
+
+make console-setup   # pnpm install
+make console-check   # format, lint (incl. accessibility), strict types, unit tests
+make console-e2e     # the whole journey in Chromium against the real backend
 ```
 
 The dev stack bootstraps an organization and an admin API token (development only; see
-`deploy/compose/compose.yaml`). The site agent starts unenrolled and the robots wait for an
+`deploy/compose/compose.yaml`). Sign in to the console with that token. The site agent starts unenrolled and the robots wait for an
 assignment. `uv run python tools/smoke_api.py` then runs a pilot the way a customer would:
 
 1. Onboard through the API: project, site, contracts, robots, deployment, revision.

@@ -1,4 +1,5 @@
-"""Generate the Python reason-code module from catalog/reason_codes.yaml.
+"""Generate the reason-code modules (Python, and TypeScript for the console) from
+catalog/reason_codes.yaml.
 
 Usage:
     python tools/gen_reason_codes.py           # write the generated module
@@ -18,6 +19,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "catalog" / "reason_codes.yaml"
 OUTPUT = ROOT / "packages" / "neura-contracts" / "src" / "neura_contracts" / "reason_codes.py"
+TS_OUTPUT = ROOT / "console" / "src" / "generated" / "reasonCodes.ts"
 
 AREAS = {"contracts", "gateway", "scheduler", "worker", "runtime", "agent", "api"}
 SEVERITIES = {"info", "warning", "error", "fatal"}
@@ -132,22 +134,60 @@ def render(entries: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def render_typescript(entries: list[dict[str, Any]]) -> str:
+    """The catalog for the console, which shows each code's plain-language text (§19.1)."""
+    lines = [
+        "// Reason codes shared by every Neura component (design §20.5).",
+        "// GENERATED FILE: do not edit. Source: catalog/reason_codes.yaml.",
+        "// Regenerate with `make gen`.",
+        "",
+        'export type Severity = "info" | "warning" | "error" | "fatal";',
+        "",
+        "export interface ReasonCodeInfo {",
+        "  readonly area: string;",
+        "  readonly severity: Severity;",
+        "  readonly retryable: boolean;",
+        "  readonly message: string;",
+        "}",
+        "",
+        "export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {",
+    ]
+    for e in entries:
+        message = e["message"].replace("\\", "\\\\").replace('"', '\\"')
+        lines += [
+            f"  {e['code']}: {{",
+            f'    area: "{e["area"]}",',
+            f'    severity: "{e["severity"]}",',
+            f"    retryable: {str(e['retryable']).lower()},",
+            f'    message: "{message}",',
+            "  },",
+        ]
+    lines += ["};", ""]
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if output is stale")
     args = parser.parse_args()
     try:
-        content = render(load_catalog())
+        entries = load_catalog()
     except CatalogError as exc:
         print(f"reason-code catalog error: {exc}", file=sys.stderr)
         return 1
+    outputs = {OUTPUT: render(entries), TS_OUTPUT: render_typescript(entries)}
     if args.check:
-        current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
-        if current != content:
-            print(f"{OUTPUT.relative_to(ROOT)} is stale; run `make gen`", file=sys.stderr)
-            return 1
-        return 0
-    OUTPUT.write_text(content, encoding="utf-8")
+        stale = [
+            path
+            for path, content in outputs.items()
+            if (path.read_text(encoding="utf-8") if path.exists() else "") != content
+        ]
+        for path in stale:
+            print(f"{path.relative_to(ROOT)} is stale; run `make gen`", file=sys.stderr)
+        return 1 if stale else 0
+    for path, content in outputs.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
     return 0
 
 

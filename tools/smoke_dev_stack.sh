@@ -24,6 +24,12 @@ fetch() { python3 -c "import json,sys,urllib.request; print(json.dumps(json.load
 echo "control plane readiness: $(fetch http://127.0.0.1:8080/readyz)"
 echo "control plane meta:      $(fetch http://127.0.0.1:8080/v1/meta)"
 
+# The console serves the app and proxies the API on its own origin, with its security headers.
+headers=$(curl -fsS -D - -o /dev/null http://127.0.0.1:3000/sites)
+grep -qi "^content-security-policy: default-src 'self'" <<<"$headers" || { echo "console: no CSP" >&2; exit 1; }
+grep -qi "^x-frame-options: DENY" <<<"$headers" || { echo "console: no X-Frame-Options" >&2; exit 1; }
+echo "console via its proxy:   $(fetch http://127.0.0.1:3000/v1/meta | head -c 80)..."
+
 # The whole pilot: onboard, enroll, prepare, approve locally, serve robots, survive an outage.
 ${UV:-uv} run python "$(dirname "$0")/smoke_api.py"
 echo "dev stack smoke test passed"

@@ -7,6 +7,7 @@
 #                   serves the local site API
 # - sim-robots:     four simulated arms running the real robot runtime; each asks the agent which
 #                   revision to run and switches revisions at a task boundary
+# - console:        the web console at http://127.0.0.1:3000 (sign in with the development token)
 #
 # Nothing is configured by hand: `make smoke` onboards a customer through the API, enrolls the
 # agent, prepares and activates a revision, approves it locally and checks the robots run it.
@@ -100,6 +101,21 @@ services:
       NEURA_SIM_TASK_SECONDS: "4"
     depends_on:
       site-agent:
+        condition: service_healthy
+
+  console:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: neura-console
+      secrets: [ca_bundle]
+    image: neura-console:dev
+    environment:
+      NEURA_API_UPSTREAM: http://control-plane:8080
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      control-plane:
         condition: service_healthy
 
 volumes:

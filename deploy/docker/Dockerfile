@@ -2,6 +2,7 @@
 # Images for Neura services. Build from the repository root:
 #   docker build -f deploy/docker/Dockerfile --target neura-control -t neura-control .
 #   docker build -f deploy/docker/Dockerfile --target neura-agent -t neura-agent .
+#   docker build -f deploy/docker/Dockerfile --target neura-console -t neura-console .
 
 ARG PYTHON_IMAGE=python:3.13-slim
 
@@ -29,6 +30,7 @@ COPY packages/neura-agent/pyproject.toml packages/neura-agent/README.md packages
 COPY packages/neura-runtime/pyproject.toml packages/neura-runtime/README.md packages/neura-runtime/
 COPY packages/neura-server/pyproject.toml packages/neura-server/README.md packages/neura-server/
 COPY packages/neura-sim/pyproject.toml packages/neura-sim/README.md packages/neura-sim/
+COPY packages/neura-sdk/pyproject.toml packages/neura-sdk/README.md packages/neura-sdk/
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-install-workspace
@@ -74,3 +76,25 @@ CMD ["neura-gateway"]
 FROM runtime AS neura-sim-robots
 WORKDIR /srv/neura
 CMD ["neura-sim-robots"]
+
+# --- web console --------------------------------------------------------------------------------
+FROM node:22.20-alpine AS console-build
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    corepack enable && corepack prepare pnpm@10.28.0 --activate
+WORKDIR /src/console
+COPY console/package.json console/pnpm-lock.yaml ./
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    pnpm install --frozen-lockfile
+COPY console ./
+COPY api /src/api
+RUN pnpm run build
+
+FROM nginx:1.27-alpine AS neura-console
+COPY deploy/console/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=console-build /src/console/dist /usr/share/nginx/html
+ENV NEURA_API_UPSTREAM=http://control-plane:8080 \
+    NEURA_CSP_CONNECT_EXTRA=""
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["wget", "-qO-", "http://127.0.0.1:8080/healthz"]

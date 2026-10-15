@@ -37,6 +37,13 @@ from neura_control.security.principal import Permission, Principal
 
 router = APIRouter()
 
+# Audit actions are snake_case, like every other action (`deployment.update`, ...).
+_ACTION_NAMES = {
+    "ModelArtifact": "model_artifact",
+    "RobotProfile": "robot_profile",
+    "ExecutionProfile": "execution_profile",
+}
+
 COLLECTIONS: dict[str, tuple[str, Kind]] = {
     "robot-profiles": ("RobotProfile", Kind.ROBOT_PROFILE),
     "model-artifacts": ("ModelArtifact", Kind.MODEL_ARTIFACT),
@@ -128,7 +135,7 @@ def _register(collection: str) -> None:
             await ctx.record(
                 session,
                 project,
-                f"{kind}.register",
+                f"{_ACTION_NAMES[kind]}.register",
                 row.id,
                 version=1,
                 event_type="resource.created",

@@ -28,7 +28,14 @@ def small_cameras(artifact: dict[str, Any], robot: dict[str, Any], profile: dict
 @pytest.fixture(scope="module")
 def checkpoint(tmp_path_factory: pytest.TempPathFactory, binding_factory: Any) -> Path:
     binding: ExecutionBinding = binding_factory(edit=small_cameras)
-    return write_act_checkpoint(binding.artifact, tmp_path_factory.mktemp("act"), size="tiny")
+    return write_act_checkpoint(
+        binding.artifact, tmp_path_factory.mktemp("act"), size="tiny", action_ranges=ranges(binding)
+    )
+
+
+def ranges(binding: ExecutionBinding) -> list[tuple[float, float]]:
+    """The example robot's command ranges: its commands are the model's actions."""
+    return [(c.min, c.max) for c in binding.robot.spec.command_interface]
 
 
 def inputs(binding: ExecutionBinding, seed: int) -> ModelInputs:
@@ -62,13 +69,41 @@ def test_act_runs_batches_deterministically(checkpoint: Path, binding_factory: A
     np.testing.assert_allclose(alone, outputs[1], rtol=1e-4, atol=1e-4)
 
 
-def test_postprocessor_unnormalizes_actions(checkpoint: Path, binding_factory: Any) -> None:
+def test_postprocessor_maps_actions_into_the_robots_ranges(
+    checkpoint: Path, binding_factory: Any
+) -> None:
     binding = binding_factory(edit=small_cameras)
     adapter = load_adapter("lerobot-act", binding, checkpoint=checkpoint)
-    # The synthetic checkpoint's action statistics have std 5: unnormalized actions spread wider
-    # than the network's raw outputs.
     out = adapter.infer([inputs(binding, 7)])[0]
-    assert float(np.abs(out).mean()) > 0.5
+    low = np.array([lo for lo, _ in ranges(binding)])
+    high = np.array([hi for _, hi in ranges(binding)])
+    assert ((out >= low) & (out <= high)).all()
+    # Unnormalized around mid-range: the gripper (0..100) sits near 50, not near 0.
+    assert 25 < float(out[:, -1].mean()) < 75
+
+
+def test_reduced_precision_stays_close_to_fp32(checkpoint: Path, binding_factory: Any) -> None:
+    binding = binding_factory(edit=small_cameras)
+    full = load_adapter("lerobot-act", binding, checkpoint=checkpoint)
+    half = load_adapter("lerobot-act", binding, checkpoint=checkpoint, precision="bf16")
+    batch = [inputs(binding, 3), inputs(binding, 4)]
+    for a, b in zip(full.infer(batch), half.infer(batch), strict=True):
+        assert b.dtype == np.float32
+        # bf16 keeps about 3 significant digits; actions span up to 320 degrees.
+        np.testing.assert_allclose(b, a, atol=2.0)
+
+
+def test_diffusion_policy_predicts_chunks_from_one_observation(tmp_path: Path) -> None:
+    from neura_bench.deployments import synthetic
+
+    files = synthetic(tmp_path, model="diffusion", size="tiny", image=(48, 64))
+    adapter = load_adapter("lerobot-diffusion", files.binding, checkpoint=files.checkpoint)
+    assert not adapter.properties.deterministic
+    out = adapter.infer([inputs(files.binding, i) for i in range(3)])
+    assert [o.shape for o in out] == [(8, 6)] * 3
+    low = np.array([lo for lo, _ in ranges(files.binding)])
+    high = np.array([hi for _, hi in ranges(files.binding)])
+    assert all(((o >= low) & (o <= high)).all() for o in out)
 
 
 def test_checkpoints_that_do_not_match_the_contract_are_refused(
@@ -103,11 +138,11 @@ def test_profiler_measures_latency_per_batch_size(checkpoint: Path, binding_fact
     adapter = load_adapter(
         "lerobot-act", binding_factory(edit=small_cameras), checkpoint=checkpoint
     )
-    measured = profile_adapter(adapter, batch_sizes=(1, 4), iterations=5, warmup=1)
+    measured = profile_adapter(adapter, batch_sizes=(1, 4), iterations=9, warmup=2)
     assert [p.batch_size for p in measured.points] == [1, 4]
     for point in measured.points:
         assert 0 < point.p50_us <= point.p99_us <= point.max_us
-        assert point.samples == 5
+        assert point.samples == 9
         assert point.memory_mib > 0
     assert measured.memory_source == "process_peak_rss"
     # Four requests in one pass cost less than four passes of one.

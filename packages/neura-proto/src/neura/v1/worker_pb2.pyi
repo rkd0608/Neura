@@ -73,16 +73,18 @@ class InferRequest(_message.Message):
     def __init__(self, batch_id: _Optional[int] = ..., inputs: _Optional[_Iterable[_Union[WorkerInputs, _Mapping]]] = ...) -> None: ...
 
 class InferResponse(_message.Message):
-    __slots__ = ("batch_id", "chunks", "error", "compute_us")
+    __slots__ = ("batch_id", "chunks", "error", "compute_us", "peak_memory_mib")
     BATCH_ID_FIELD_NUMBER: _ClassVar[int]
     CHUNKS_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     COMPUTE_US_FIELD_NUMBER: _ClassVar[int]
+    PEAK_MEMORY_MIB_FIELD_NUMBER: _ClassVar[int]
     batch_id: int
     chunks: Chunks
     error: WorkerError
     compute_us: int
-    def __init__(self, batch_id: _Optional[int] = ..., chunks: _Optional[_Union[Chunks, _Mapping]] = ..., error: _Optional[_Union[WorkerError, _Mapping]] = ..., compute_us: _Optional[int] = ...) -> None: ...
+    peak_memory_mib: int
+    def __init__(self, batch_id: _Optional[int] = ..., chunks: _Optional[_Union[Chunks, _Mapping]] = ..., error: _Optional[_Union[WorkerError, _Mapping]] = ..., compute_us: _Optional[int] = ..., peak_memory_mib: _Optional[int] = ...) -> None: ...
 
 class Chunks(_message.Message):
     __slots__ = ("chunks",)

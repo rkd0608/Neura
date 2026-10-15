@@ -137,6 +137,7 @@ class WorkerBackend:
         self.restarts = 0
         self.last_error: dict[str, str] | None = None
         self.description: dict[str, Any] | None = None
+        self.peak_memory_mib = 0
         self._process: asyncio.subprocess.Process | None = None
         self._channel: grpc.aio.Channel | None = None
         self._stub: worker_pb2_grpc.PolicyWorkerStub | None = None
@@ -346,6 +347,7 @@ class WorkerBackend:
                 out_of_memory=code is ReasonCode.WORKER_OUT_OF_MEMORY,
                 reason=code,
             )
+        self.peak_memory_mib = max(self.peak_memory_mib, int(response.peak_memory_mib))
         return outputs_from(response)
 
     def status(self) -> dict[str, Any]:
@@ -356,6 +358,7 @@ class WorkerBackend:
             "device": self.spec.device,
             "pid": process.pid if process is not None and process.returncode is None else None,
             "restarts": self.restarts,
+            "peak_memory_mib": self.peak_memory_mib,
             "last_error": self.last_error,
             "worker": self.description,
         }

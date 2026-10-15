@@ -18,7 +18,7 @@ neura-adapters = "neura_adapters.cli:main"
 # Real models. Heavy (PyTorch and its CUDA libraries); installed on GPU servers and for the
 # model tests and benchmarks, not for the control plane or the default development setup.
 lerobot = [
-    "lerobot>=0.6.1,<0.7",
+    "lerobot[diffusion]>=0.6.1,<0.7",
     "torch>=2.6",
 ]
 

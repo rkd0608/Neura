@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import itertools
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -70,6 +70,8 @@ class SchedulerStats:
     deadline_misses: int = 0
     # Requests from robots that were already starved (arming, or waiting) when they asked.
     starved_on_arrival: int = 0
+    # In-flight requests whose batch failed (worker crash, timeout, error).
+    failed: int = 0
     dropped: Counter[str] = field(default_factory=Counter)
 
 
@@ -96,6 +98,9 @@ class Scheduler:
         self._batch_ids = itertools.count(1)
         self._dispatch_counter = itertools.count(1)
         self.stats = SchedulerStats()
+        # Observers for measurement (benchmarks); never on the decision path.
+        self.on_dispatch: Callable[[Batch], None] | None = None
+        self.on_complete: Callable[[Batch, int], None] | None = None
 
     # --- intake -------------------------------------------------------------------------------
 
@@ -190,11 +195,15 @@ class Scheduler:
         self.stats.batches += 1
         self.stats.dispatched_requests += len(members)
         self.stats.batch_sizes[len(members)] += 1
+        if self.on_dispatch is not None:
+            self.on_dispatch(batch)
         return batch, dropped
 
     def complete(self, batch: Batch, now_us: int) -> list[InferenceRequest]:
         """Record a finished batch. Returns the requests whose results are still deliverable."""
         self.profile.observe(len(batch.requests), now_us - batch.dispatched_at_us)
+        if self.on_complete is not None:
+            self.on_complete(batch, now_us)
         deliverable = []
         for request in batch.requests:
             if self._in_flight.get(request.session_id) is request:
@@ -216,6 +225,7 @@ class Scheduler:
             if self._in_flight.get(request.session_id) is request:
                 del self._in_flight[request.session_id]
                 failed.append(request)
+        self.stats.failed += len(failed)
         return failed
 
     def _order(self, requests: Iterable[InferenceRequest]) -> list[InferenceRequest]:

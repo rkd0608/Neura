@@ -14,6 +14,7 @@ Requires the `lerobot` extra (PyTorch and LeRobot).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Sequence
 from pathlib import Path
@@ -85,6 +86,15 @@ class LeRobotAdapter:
             )
         config.device = device
         self._check_contract(config, binding)
+        # Policies that read a history of observations (Diffusion Policy with n_obs_steps > 1)
+        # carry state between requests, which Neura does not serve yet (design §12).
+        self._obs_steps = int(getattr(config, "n_obs_steps", 1) or 1)
+        if self._obs_steps != 1:
+            raise PolicyError(
+                f"the checkpoint reads {self._obs_steps} past observations per prediction; only "
+                "single-observation (stateless) policies are supported"
+            )
+        self._time_axis = config.type == "diffusion"  # expects (batch, time, ...) state inputs
 
         self.binding = binding
         self.chunk_length = binding.chunk_length
@@ -154,7 +164,10 @@ class LeRobotAdapter:
         if action is None or tuple(action.shape) != (binding.action_dim,):
             shape = None if action is None else tuple(action.shape)
             problems.append(f"the checkpoint's action shape {shape} is not ({binding.action_dim},)")
-        chunk = getattr(config, "chunk_size", None)
+        # Diffusion Policy returns its n_action_steps; the others their whole chunk.
+        chunk = getattr(
+            config, "n_action_steps" if config.type == "diffusion" else "chunk_size", None
+        )
         if chunk is not None and chunk < binding.chunk_length:
             problems.append(
                 f"the checkpoint predicts {chunk} actions but the artifact declares "
@@ -185,11 +198,21 @@ class LeRobotAdapter:
         if any(inputs.frozen_prefix is not None for inputs in batch):
             raise PolicyError("this adapter does not support real-time chunking (rtc) yet")
         try:
-            with torch.inference_mode():
+            # Reduced precision runs under autocast too: the policies create float32 tensors of
+            # their own (latents, positional embeddings) that would not match bf16/fp16 weights.
+            autocast = (
+                torch.autocast(device_type=self._device.type, dtype=self._dtype)
+                if self._dtype != torch.float32
+                else contextlib.nullcontext()
+            )
+            with torch.inference_mode(), autocast:
                 processed = self._pre(self._batch(batch))
                 for key, value in processed.items():
                     if isinstance(value, torch.Tensor) and value.is_floating_point():
                         processed[key] = value.to(self._dtype)
+                if self._time_axis:
+                    for state in self._state:
+                        processed[state.name] = processed[state.name].unsqueeze(1)
                 # Stochastic policies draw their noise from a seeded generator, so a batch's
                 # outputs are reproducible for the same inputs and seed.
                 torch.manual_seed(int(torch.randint(0, 2**31 - 1, (1,), generator=self._generator)))

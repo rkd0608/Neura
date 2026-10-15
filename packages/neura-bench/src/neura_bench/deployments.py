@@ -12,11 +12,16 @@ import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
-from neura_adapters.synthetic import Size, weights_manifest, write_act_checkpoint
+from neura_adapters.synthetic import (
+    Size,
+    weights_manifest,
+    write_act_checkpoint,
+    write_diffusion_checkpoint,
+)
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
 from neura_runtime.binding import ExecutionBinding
 
@@ -40,22 +45,35 @@ class DeploymentFiles:
     binding: ExecutionBinding
 
 
+Model = Literal["act", "diffusion"]
+# Diffusion Policy predicts short chunks: 8 actions (about 0.27 s at 30 Hz), refilled at 4.
+DIFFUSION_CHUNK = {"actions_per_chunk": 8, "refill_threshold_actions": 4, "min_useful_actions": 2}
+
+
 def contracts(
     *,
+    model: Model = "act",
     image: tuple[int, int] | None = (96, 128),
     device: str = "cpu",
     precision: str = "fp32",
     version: str = "bench-1",
-    adapter: str = "lerobot-act",
     weights: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """The example ACT/SO-101 documents, edited. ``image`` is (height, width); None keeps the
-    example's 480 x 640. ``device`` is "cpu" or "cuda"."""
+    example's 480 x 640. ``device`` is "cpu" or "cuda". ``model="diffusion"`` turns the artifact
+    into a Diffusion Policy with 8-action chunks."""
     artifact = copy.deepcopy(example("act-so101.artifact.yaml"))
     robot = copy.deepcopy(example("so101.robot.yaml"))
     profile = copy.deepcopy(example("act-so101-30hz.profile.yaml"))
     artifact["metadata"]["version"] = version
-    artifact["spec"]["adapter"]["name"] = adapter
+    if model == "diffusion":
+        artifact["metadata"]["name"] = "diffusion-so101"
+        artifact["spec"]["adapter"]["name"] = "lerobot-diffusion"
+        artifact["spec"]["outputs"]["chunk_length"] = DIFFUSION_CHUNK["actions_per_chunk"]
+        artifact["spec"]["properties"]["deterministic"] = False
+        artifact["spec"]["validated_merge_modes"] = ["replace"]
+        profile["metadata"]["name"] = "diffusion-so101-30hz"
+        profile["spec"]["chunk"] = dict(DIFFUSION_CHUNK)
     if weights is not None:
         artifact["spec"]["weights"] = weights
     if image is not None:
@@ -76,7 +94,7 @@ def contracts(
     return artifact, robot, profile
 
 
-def write(
+def write_files(
     directory: Path,
     documents: tuple[dict[str, Any], dict[str, Any], dict[str, Any]],
     checkpoint: Path | None = None,
@@ -97,9 +115,10 @@ def write(
     )
 
 
-def synthetic_act(
+def synthetic(
     directory: Path,
     *,
+    model: Model = "act",
     size: Size = "small",
     image: tuple[int, int] | None = (96, 128),
     device: str = "cpu",
@@ -107,17 +126,29 @@ def synthetic_act(
     seed: int = 0,
     version: str | None = None,
 ) -> DeploymentFiles:
-    """A synthetic ACT checkpoint and contracts that bind to it. Different seeds give different
+    """A synthetic checkpoint and contracts that bind to it. Different seeds give different
     weights, hence different artifacts: separate fine-tunes of one architecture."""
     version = version or f"synthetic-{size}-{seed}"
-    draft = parse_document(contracts(image=image, device=device, precision=precision)[0])
+    draft = parse_document(
+        contracts(model=model, image=image, device=device, precision=precision)[0]
+    )
     assert isinstance(draft, ModelArtifact)
-    checkpoint = write_act_checkpoint(draft, directory / "checkpoint", size=size, seed=seed)
+    write = write_act_checkpoint if model == "act" else write_diffusion_checkpoint
+    robot = parse_document(contracts(model=model, image=image)[1])
+    assert isinstance(robot, RobotProfile)
+    # The example robot's commands are the model's actions, in the same units and order.
+    ranges = [(c.min, c.max) for c in robot.spec.command_interface]
+    checkpoint = write(draft, directory / "checkpoint", size=size, seed=seed, action_ranges=ranges)
     documents = contracts(
+        model=model,
         image=image,
         device=device,
         precision=precision,
         version=version,
         weights=weights_manifest(checkpoint),
     )
-    return write(directory, documents, checkpoint)
+    return write_files(directory, documents, checkpoint)
+
+
+def synthetic_act(directory: Path, **options: Any) -> DeploymentFiles:
+    return synthetic(directory, model="act", **options)

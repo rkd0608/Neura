@@ -18,6 +18,7 @@ import contextlib
 import json
 import logging
 import os
+import resource
 import sys
 import time
 from collections.abc import Sequence
@@ -202,8 +203,20 @@ class _Servicer(worker_pb2_grpc.PolicyWorkerServicer):  # type: ignore[misc]
             chunks=[tensors.encode(np.ascontiguousarray(o, dtype=np.float32)) for o in outputs]
         )
         return worker_pb2.InferResponse(
-            batch_id=request.batch_id, chunks=chunks, compute_us=compute_us
+            batch_id=request.batch_id,
+            chunks=chunks,
+            compute_us=compute_us,
+            peak_memory_mib=peak_memory_mib(self._adapter.properties.device),
         )
+
+
+def peak_memory_mib(device: str) -> int:
+    """Device memory the model's tensors used at most (CUDA), or the process's peak resident
+    memory (CPU, an upper bound that includes the runtime)."""
+    torch = sys.modules.get("torch")
+    if device.startswith("cuda") and torch is not None:
+        return int(torch.cuda.max_memory_allocated(torch.device(device)) // (1 << 20))
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024)
 
 
 def _release_cached_memory() -> None:

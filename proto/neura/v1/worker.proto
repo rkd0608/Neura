@@ -60,6 +60,9 @@ message InferResponse {
   }
   // Time spent in the forward pass, measured inside the worker.
   uint64 compute_us = 4;
+  // The worker's peak memory so far: device memory its tensors used on CUDA, the process's
+  // peak resident memory on CPU.
+  uint64 peak_memory_mib = 5;
 }
 
 message Chunks {

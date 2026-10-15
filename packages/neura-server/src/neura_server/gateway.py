@@ -450,6 +450,7 @@ class GatewayCore:
                     "batch_sizes": dict(sorted(g.scheduler.stats.batch_sizes.items())),
                     "deadline_misses": g.scheduler.stats.deadline_misses,
                     "starved_on_arrival": g.scheduler.stats.starved_on_arrival,
+                    "failed": g.scheduler.stats.failed,
                     "dropped": dict(g.scheduler.stats.dropped),
                     "admitted_sessions": len(g.admission.admitted),
                 }

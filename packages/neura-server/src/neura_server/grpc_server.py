@@ -358,6 +358,10 @@ class GatewayServer:
             for group in self._groups.values():
                 group.wake.set()  # lets the scheduler expire stale requests promptly
 
+    def backends(self) -> dict[str, Backend]:
+        """Each batch group's backend, by group key."""
+        return {key: group.backend for key, group in self._groups.items()}
+
     # --- status -------------------------------------------------------------------------------
 
     def status(self) -> dict[str, Any]:
@@ -456,6 +460,7 @@ class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]
                 server.wake(env.session_id)
 
         reader = asyncio.create_task(read())
+        getter: asyncio.Task[dataplane_pb2.GatewayMessage] | None = None
         try:
             while True:
                 getter = asyncio.create_task(outbox.get())
@@ -463,8 +468,9 @@ class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]
                 if getter in done:
                     yield getter.result()
                     continue
-                getter.cancel()
                 break
         finally:
-            reader.cancel()
+            for task in (getter, reader):
+                if task is not None and not task.done():
+                    task.cancel()
             server.unbind_stream(outbox)

@@ -1,7 +1,7 @@
 # Neura console
 
 The web console (design §19): onboarding, sites and GPU servers, robots, models and compatibility,
-execution profiles, capacity, releases with prepare, activation and rollback, live sessions,
+execution profiles, capacity, deployments with prepare, activation and rollback, live sessions,
 faults, the audit log, and organization settings.
 
 It uses only the public management API (`api/openapi.yaml`). Its client is generated from the spec

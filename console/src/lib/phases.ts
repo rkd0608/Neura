@@ -1,5 +1,5 @@
 // The console's state vocabulary (design §19.4): every observed phase has one label and one tone.
-export type Tone = "ok" | "warn" | "danger" | "info" | "muted";
+export type Tone = "ok" | "warn" | "danger" | "info" | "muted" | "accent";
 
 const TONES: Record<string, Tone> = {
   // ConsolePhase

@@ -1,7 +1,7 @@
 // The whole customer journey in the browser, against the real backend (design §16.1, M5):
 // sign in, create a project and site, connect a GPU server with the install command the console
-// shows, register contracts, check compatibility, add robots, create a release, prepare it at the
-// site, request activation, approve it at the site, and watch the robots run it. Every main screen
+// shows, register contracts, check compatibility, add robots, create a deployment, prepare it at
+// the site, request activation, approve it at the site, and watch the robots run it. Every main screen
 // is checked for accessibility (WCAG 2.1 AA).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -57,6 +57,10 @@ async function nav(page: Page, name: string): Promise<void> {
     .click();
 }
 
+async function tab(page: Page, name: string): Promise<void> {
+  await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
+}
+
 test.describe.configure({ mode: "serial" });
 
 test("onboard, connect a server, deploy and approve at the site", async ({ page }) => {
@@ -78,7 +82,7 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
 
     // --- add a site and connect its GPU server ------------------------------------------------
     await page.getByRole("link", { name: "Add a site" }).click();
-    await page.getByRole("button", { name: "Add a site" }).click();
+    await page.getByRole("button", { name: "Add a site" }).first().click();
     const dialog = page.getByRole("dialog", { name: "Add a site" });
     await dialog.getByLabel("Site name").fill("Warehouse 3");
     await dialog.getByRole("button", { name: "Add site" }).click();
@@ -94,16 +98,18 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await expect(page.locator(".badge", { hasText: "Ready" }).first()).toBeVisible();
 
     // --- register contracts and check compatibility -------------------------------------------
-    await nav(page, "Models");
+    await nav(page, "Models & contracts");
     await register(page, "Register robot profile", "so101.robot.yaml");
+    await tab(page, "Robot profiles");
     await expect(page.getByRole("link", { name: "so101-follower r1" })).toBeVisible();
     // Signed by the customer's release key, which the site operator trusts on the server.
     const signature = site.publish(path.join(CONTRACTS, "act-so101.artifact.yaml"));
     await register(page, "Register model artifact", "act-so101.artifact.yaml", signature);
+    await tab(page, "Model artifacts");
     await expect(page.getByRole("link", { name: "act-so101 example-1" })).toBeVisible();
     await expect(page.locator(".badge", { hasText: /^Signed$/ })).toBeVisible();
     // A wrong kind is refused before anything is sent.
-    await nav(page, "Execution profiles");
+    await tab(page, "Execution profiles");
     await register(page, "Register execution profile", "so101.robot.yaml");
     await expect(
       page.getByText("This is a robot profile, not an execution profile."),
@@ -115,7 +121,7 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await profileDialog.getByRole("button", { name: "Register", exact: true }).click();
     await expect(page.getByRole("link", { name: "act-so101-30hz example-1" })).toBeVisible();
     await expectAccessible(page, "execution profiles");
-    await nav(page, "Models");
+    await tab(page, "Compatibility");
     await expect(
       page.getByRole("table", { name: /Compatibility/ }).getByText("Compatible"),
     ).toBeVisible();
@@ -123,7 +129,7 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
 
     // --- robots -------------------------------------------------------------------------------
     await nav(page, "Robots");
-    await page.getByRole("button", { name: "Add robots" }).click();
+    await page.getByRole("button", { name: "Add robots" }).first().click();
     const add = page.getByRole("dialog", { name: "Add robots" });
     await add.getByLabel("Name").fill("Arm");
     await add.getByLabel("How many").fill(String(ROBOTS));
@@ -133,23 +139,24 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await expectAccessible(page, "robots");
     site.startRobots();
 
-    // --- release: revision, prepare at the site ------------------------------------------------
-    await nav(page, "Releases");
-    await page.getByRole("button", { name: "New release" }).click();
-    const release = page.getByRole("dialog", { name: "New release" });
+    // --- deployment: revision, prepare at the site ---------------------------------------------
+    await nav(page, "Deployments");
+    await page.getByRole("button", { name: "New deployment" }).first().click();
+    const release = page.getByRole("dialog", { name: "New deployment" });
     await release.getByLabel("Name").fill("Pilot");
-    await release.getByRole("button", { name: "Create release" }).click();
+    await release.getByRole("button", { name: "Create deployment" }).click();
     await expect(page.getByRole("heading", { name: "Pilot" })).toBeVisible();
-    await page.getByRole("button", { name: "New revision" }).click();
+    await page.getByRole("button", { name: "New revision" }).first().click();
     await page
       .getByRole("dialog", { name: "New revision" })
       .getByRole("button", { name: "Create revision" })
       .click();
+    await tab(page, "Revisions");
     await expect(page.getByText("Compatible", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Prepare at site" }).click();
     await expect(page.getByText("Preparing at the site: Succeeded", { exact: true })).toBeVisible();
     await expect(page.getByText(/robots per batch group/)).toBeVisible();
-    await expectAccessible(page, "release");
+    await expectAccessible(page, "deployment");
 
     // --- activation: requested in the cloud, approved at the site --------------------------------
     await page.getByRole("button", { name: "Request activation" }).click();
@@ -157,6 +164,7 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await activation.getByLabel("Note for the site operator").fill("first deployment");
     await activation.getByRole("button", { name: "Request activation" }).click();
     await expect(page.getByText("Waiting for approval at the site", { exact: true })).toBeVisible();
+    await tab(page, "Activations");
     await expect(page.getByText("Awaiting local approval", { exact: true })).toBeVisible();
 
     await expect.poll(() => site.pendingApprovals().length, { timeout: 30_000 }).toBe(1);
@@ -183,17 +191,21 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await expect(page.locator(".badge", { hasText: "Running" })).toHaveCount(ROBOTS, {
       timeout: 60_000,
     });
-    await nav(page, "Home");
-    await expect(page.getByRole("group", { name: "Robots running" })).toContainText(
-      `${ROBOTS} / ${ROBOTS}`,
+    await nav(page, "Overview");
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /Robots running/ }),
+    ).toContainText(`${ROBOTS} / ${ROBOTS}`);
+    await expect(page.getByRole("main").getByRole("link", { name: /Live sessions/ })).toContainText(
+      "on 1 of 1 connected sites",
     );
-    await expect(page.getByRole("group", { name: "Sites connected" })).toContainText("1 / 1");
+    await expectAccessible(page, "overview");
 
     // --- capacity and audit --------------------------------------------------------------------
     await nav(page, "Capacity");
     await expect(page.getByText("Configured latency profile")).toBeVisible();
     await expectAccessible(page, "capacity");
-    await nav(page, "Audit log");
+    await nav(page, "Activity");
+    await tab(page, "Audit log");
     const audit = page.getByRole("table", { name: "Audit records" });
     for (const action of [
       "server.enroll",
@@ -223,6 +235,7 @@ test("administer the organization: members and API tokens", async ({ page }) => 
   await expect(page.getByRole("cell", { name: "ana@customer.example", exact: true })).toBeVisible();
   await expect(page.getByText("Invited", { exact: true })).toBeVisible();
 
+  await page.getByRole("tab", { name: "API tokens" }).click();
   await page.getByRole("button", { name: "Create token" }).click();
   const token = page.getByRole("dialog", { name: "Create an API token" });
   await token.getByLabel("Name").fill("ci-releases");

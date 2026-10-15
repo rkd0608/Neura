@@ -13,20 +13,19 @@ import { Projects, Start, localStorageSet } from "./pages/Start";
 // Screens load on first visit, so the first paint (sign-in, home) stays small.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(async () => ({ default: (await load())[name] }));
-const Home = page(() => import("./pages/Home"), "Home");
+const Overview = page(() => import("./pages/Home"), "Home");
 const Sites = page(() => import("./pages/Sites"), "Sites");
 const SitePage = page(() => import("./pages/Site"), "SitePage");
 const Robots = page(() => import("./pages/Robots"), "Robots");
 const RobotPage = page(() => import("./pages/Robots"), "RobotPage");
 const Models = page(() => import("./pages/Models"), "Models");
 const ContractPage = page(() => import("./pages/Models"), "ContractPage");
-const ExecutionProfiles = page(() => import("./pages/Models"), "ExecutionProfiles");
 const Capacity = page(() => import("./pages/Observe"), "Capacity");
 const Sessions = page(() => import("./pages/Observe"), "Sessions");
 const Faults = page(() => import("./pages/Observe"), "Faults");
-const Audit = page(() => import("./pages/Observe"), "Audit");
-const Releases = page(() => import("./pages/Releases"), "Releases");
-const ReleasePage = page(() => import("./pages/Release"), "ReleasePage");
+const Activity = page(() => import("./pages/Observe"), "Activity");
+const Deployments = page(() => import("./pages/Releases"), "Releases");
+const DeploymentPage = page(() => import("./pages/Release"), "ReleasePage");
 const Settings = page(() => import("./pages/Settings"), "Settings");
 
 export function makeQueryClient(): QueryClient {
@@ -58,6 +57,11 @@ function RememberProject() {
     if (orgId && projectId) localStorageSet(`neura.project.${orgId}`, projectId);
   }, [orgId, projectId]);
   return null;
+}
+
+function RedirectRelease() {
+  const { orgId = "", projectId = "", deploymentId = "" } = useParams();
+  return <Navigate to={`/o/${orgId}/p/${projectId}/deployments/${deploymentId}`} replace />;
 }
 
 /** Each screen sets the document title, so tabs and assistive tech say where you are. */
@@ -102,23 +106,30 @@ export function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={screen("Home", <Home />)} />
-        <Route path="sites" element={screen("Sites", <Sites />)} />
-        <Route path="sites/:siteId" element={screen("Site", <SitePage />)} />
+        <Route index element={screen("Overview", <Overview />)} />
+        <Route path="deployments" element={screen("Deployments", <Deployments />)} />
+        <Route
+          path="deployments/:deploymentId"
+          element={screen("Deployment", <DeploymentPage />)}
+        />
         <Route path="robots" element={screen("Robots", <Robots />)} />
         <Route path="robots/:robotId" element={screen("Robot", <RobotPage />)} />
+        <Route path="sites" element={screen("Sites & servers", <Sites />)} />
+        <Route path="sites/:siteId" element={screen("Site", <SitePage />)} />
         <Route path="sessions" element={screen("Live sessions", <Sessions />)} />
         <Route path="faults" element={screen("Faults", <Faults />)} />
-        <Route path="models" element={screen("Models", <Models />)} />
+        <Route path="models" element={screen("Models & contracts", <Models />)} />
         <Route path="models/:kind/:contractId" element={screen("Contract", <ContractPage />)} />
+        <Route path="capacity" element={screen("Capacity", <Capacity />)} />
+        <Route path="activity" element={screen("Activity", <Activity />)} />
+        {/* Earlier addresses keep working. */}
+        <Route path="releases" element={<Navigate to="../deployments" replace />} />
+        <Route path="releases/:deploymentId" element={<RedirectRelease />} />
         <Route
           path="execution-profiles"
-          element={screen("Execution profiles", <ExecutionProfiles />)}
+          element={<Navigate to="../models?tab=execution-profiles" replace />}
         />
-        <Route path="capacity" element={screen("Capacity", <Capacity />)} />
-        <Route path="releases" element={screen("Releases", <Releases />)} />
-        <Route path="releases/:deploymentId" element={screen("Release", <ReleasePage />)} />
-        <Route path="audit" element={screen("Audit log", <Audit />)} />
+        <Route path="audit" element={<Navigate to="../activity?tab=audit" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

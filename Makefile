@@ -114,6 +114,18 @@ console-check: ## Console: format, lint, strict types, unit tests, generated API
 console-dev: ## Console dev server on http://127.0.0.1:5173, against the API on :8080
 	cd console && pnpm run dev
 
+.PHONY: landing-setup
+landing-setup: ## Install the NucleiLabs site's dependencies (pnpm)
+	cd landing && pnpm install --frozen-lockfile
+
+.PHONY: landing-check
+landing-check: ## NucleiLabs site: format, lint, strict types, build
+	cd landing && pnpm run check
+
+.PHONY: landing-dev
+landing-dev: ## NucleiLabs site dev server on http://127.0.0.1:5174
+	cd landing && pnpm run dev
+
 .PHONY: console-e2e
 console-e2e: ## Console end-to-end tests: real backend, site agent and robots in Chromium
 	cd console && pnpm run e2e

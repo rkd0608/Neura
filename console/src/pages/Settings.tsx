@@ -1,7 +1,8 @@
 // Organization settings: members and roles, API tokens, support access, sign-in (design §19.2,
 // §19.3, §20.7). Admin only; the server enforces it.
+import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 
 import { api, ifMatch, unwrap, type Schemas, idempotent } from "../api/client";
 import {
@@ -10,11 +11,11 @@ import {
   useMe,
   useMembers,
   useProjects,
-  useSites,
   useSupportGrants,
 } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
 import { Dialog } from "../components/Dialog";
+import { GearIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
 import {
   Badge,
@@ -28,7 +29,11 @@ import {
   Loading,
   PageHeader,
   Status,
+  TabPanel,
+  Tabs,
   Time,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { usePermissions } from "../lib/context";
 
@@ -66,17 +71,46 @@ export function Settings() {
       </>
     );
   }
+  return <SettingsTabs orgId={orgId} />;
+}
+
+const SETTINGS_TABS: TabSpec[] = [
+  { id: "members", label: "Members" },
+  { id: "tokens", label: "API tokens" },
+  { id: "support", label: "Support access" },
+  { id: "sign-in", label: "Sign-in" },
+];
+
+function SettingsTabs({ orgId }: { orgId: string }) {
+  const [tab, setTab] = useTab(SETTINGS_TABS);
   return (
     <>
       <PageHeader
-        breadcrumbs={<Link to="/">Back to the console</Link>}
+        icon={<GearIcon />}
         title="Organization settings"
         description="Who can do what. Deploying and approving physical activation are always separate: activation is approved at the site."
       />
-      <Members orgId={orgId} />
-      <ApiTokens orgId={orgId} />
-      <SupportAccess orgId={orgId} />
-      <SignIn />
+      <Tabs label="Settings" tabs={SETTINGS_TABS} value={tab} onChange={setTab} />
+      {tab === "members" ? (
+        <TabPanel label="Members">
+          <Members orgId={orgId} />
+        </TabPanel>
+      ) : null}
+      {tab === "tokens" ? (
+        <TabPanel label="API tokens">
+          <ApiTokens orgId={orgId} />
+        </TabPanel>
+      ) : null}
+      {tab === "support" ? (
+        <TabPanel label="Support access">
+          <SupportAccess orgId={orgId} />
+        </TabPanel>
+      ) : null}
+      {tab === "sign-in" ? (
+        <TabPanel label="Sign-in">
+          <SignIn />
+        </TabPanel>
+      ) : null}
     </>
   );
 }
@@ -516,15 +550,26 @@ function ApiTokens({ orgId }: { orgId: string }) {
 function SupportAccess({ orgId }: { orgId: string }) {
   const grants = useSupportGrants(orgId);
   const projects = useProjects(orgId);
-  const firstProject = projects.data?.[0]?.metadata.id ?? "";
-  const sites = useSites(firstProject);
+  // Support grants are per site; sites belong to projects: list every project's sites.
+  const siteQueries = useQueries({
+    queries: (projects.data ?? []).map((project) => ({
+      queryKey: ["p", project.metadata.id, "sites"],
+      queryFn: async () =>
+        unwrap(
+          await api.GET("/v1/projects/{project_id}/sites", {
+            params: { path: { project_id: project.metadata.id }, query: { page_size: 200 } },
+          }),
+        ).items,
+    })),
+  });
+  const sites = { data: siteQueries.flatMap((q) => q.data ?? []) };
   const toasts = useToasts();
   const [open, setOpen] = useState(false);
   const [siteId, setSiteId] = useState("");
   const [minutes, setMinutes] = useState(60);
   const [justification, setJustification] = useState("");
   const [operations, setOperations] = useState<string[]>(["read_status"]);
-  const site = siteId || sites.data?.[0]?.metadata.id || "";
+  const site = siteId || sites.data[0]?.metadata.id || "";
   const create = useApiMutation(
     async () =>
       unwrap(
@@ -630,7 +675,7 @@ function SupportAccess({ orgId }: { orgId: string }) {
           <div className="dialog-body">
             <Field id="grant-site" label="Site">
               <select id="grant-site" value={site} onChange={(e) => setSiteId(e.target.value)}>
-                {(sites.data ?? []).map((s) => (
+                {sites.data.map((s) => (
                   <option key={s.metadata.id} value={s.metadata.id}>
                     {s.spec.display_name}
                   </option>

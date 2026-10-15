@@ -23,6 +23,7 @@ import {
 } from "../components/Contracts";
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
+import { BotIcon, CubeIcon, PlusIcon, SlidersIcon } from "../components/Icons";
 import {
   Badge,
   Card,
@@ -33,7 +34,11 @@ import {
   Loading,
   PageHeader,
   Reason,
+  TabPanel,
+  Tabs,
   Time,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { shortDigest } from "../lib/format";
@@ -82,143 +87,185 @@ export function Models() {
   const profiles = useExecutionProfiles(projectId);
   const can = usePermissions(orgId);
   const [registering, setRegistering] = useState<Kind | null>(null);
+  const tabs: TabSpec[] = [
+    { id: "artifacts", label: "Model artifacts", count: artifacts.data?.length ?? null },
+    { id: "robot-profiles", label: "Robot profiles", count: robots.data?.length ?? null },
+    { id: "execution-profiles", label: "Execution profiles", count: profiles.data?.length ?? null },
+    { id: "compatibility", label: "Compatibility" },
+  ];
+  const [tab, setTab] = useTab(tabs);
+  const primary: Record<string, Kind> = {
+    artifacts: "ModelArtifact",
+    "robot-profiles": "RobotProfile",
+    "execution-profiles": "ExecutionProfile",
+    compatibility: "ExecutionProfile",
+  };
 
   return (
     <>
       <PageHeader
-        title="Models"
-        description="Model artifacts and robot profiles are immutable contract documents identified by their content digest. An execution profile binds one of each and says how to run them."
+        title="Models & contracts"
+        icon={<CubeIcon />}
+        description="Model artifacts and robot profiles are immutable contract documents identified by their content digest. An execution profile binds one of each and says how to run them. Compatibility is checked by the same code the site runs."
         actions={
           can.deploy ? (
             <>
-              <button
-                type="button"
-                className="button"
-                onClick={() => setRegistering("RobotProfile")}
-              >
-                Register robot profile
-              </button>
+              {(["ModelArtifact", "RobotProfile", "ExecutionProfile"] as Kind[])
+                .filter((k) => k !== primary[tab])
+                .map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="button"
+                    onClick={() => setRegistering(k)}
+                  >
+                    Register {KIND_LABELS[k]}
+                  </button>
+                ))}
               <button
                 type="button"
                 className="button primary"
-                onClick={() => setRegistering("ModelArtifact")}
+                onClick={() => setRegistering(primary[tab] ?? "ModelArtifact")}
               >
-                Register model artifact
+                <PlusIcon /> Register {KIND_LABELS[primary[tab] ?? "ModelArtifact"]}
               </button>
             </>
           ) : null
         }
       />
-      <Card title="Model artifacts" flush>
-        {artifacts.isPending ? (
-          <Loading />
-        ) : artifacts.isError ? (
-          <ErrorState error={artifacts.error} />
-        ) : artifacts.data.length === 0 ? (
-          <Empty title="No model artifacts yet">
-            <p>
-              Register the manifest of your trained policy: weights and image digests, inputs and
-              outputs.
-            </p>
-          </Empty>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Artifact</th>
-                  <th scope="col">Adapter</th>
-                  <th scope="col">Outputs</th>
-                  <th scope="col">Licenses</th>
-                  <th scope="col">Publisher</th>
-                  <th scope="col">Digest</th>
-                </tr>
-              </thead>
-              <tbody>
-                {artifacts.data.map((a) => {
-                  const s = spec<ArtifactSpec>(a);
-                  return (
-                    <tr key={a.metadata.id}>
-                      <td>
-                        <Link to={`${base}/models/ModelArtifact/${a.metadata.id}`}>
-                          {documentTitle(a)}
-                        </Link>
-                        <div className="muted small">{documentMeta(a).description}</div>
-                      </td>
-                      <td>
-                        {s.adapter ? `${s.adapter.name ?? ""} ${s.adapter.version ?? ""}` : "—"}
-                      </td>
-                      <td>
-                        {s.outputs?.chunk_length ?? "—"} actions ×{" "}
-                        {s.outputs?.features?.length ?? "—"} features
-                        <div className="muted small">every {ms(s.outputs?.control_period_us)}</div>
-                      </td>
-                      <td>
-                        code {license(s.licenses?.code)}
-                        <div className="muted small">weights {license(s.licenses?.weights)}</div>
-                      </td>
-                      <td>
-                        <Signed signatures={a.signatures} />
-                      </td>
-                      <td>
-                        <code>{shortDigest(a.digest)}</code>
-                      </td>
+      <Tabs label="Contracts" tabs={tabs} value={tab} onChange={setTab} />
+      {tab === "artifacts" ? (
+        <TabPanel label="Model artifacts">
+          <Card title="Model artifacts" flush>
+            {artifacts.isPending ? (
+              <Loading />
+            ) : artifacts.isError ? (
+              <ErrorState error={artifacts.error} />
+            ) : artifacts.data.length === 0 ? (
+              <Empty title="No model artifacts yet" icon={<CubeIcon />}>
+                <p>
+                  Register the manifest of your trained policy: weights and image digests, inputs
+                  and outputs.
+                </p>
+              </Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Artifact</th>
+                      <th scope="col">Adapter</th>
+                      <th scope="col">Outputs</th>
+                      <th scope="col">Licenses</th>
+                      <th scope="col">Publisher</th>
+                      <th scope="col">Digest</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      <Card title="Robot profiles" flush>
-        {robots.isPending ? (
-          <Loading />
-        ) : robots.isError ? (
-          <ErrorState error={robots.error} />
-        ) : robots.data.length === 0 ? (
-          <Empty title="No robot profiles yet">
-            <p>
-              A robot profile describes the robot's command interface, state features and cameras.
-            </p>
-          </Empty>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Robot profile</th>
-                  <th scope="col">Control period</th>
-                  <th scope="col">Digest</th>
-                </tr>
-              </thead>
-              <tbody>
-                {robots.data.map((r) => (
-                  <tr key={r.metadata.id}>
-                    <td>
-                      <Link to={`${base}/models/RobotProfile/${r.metadata.id}`}>
-                        {documentTitle(r)}
-                      </Link>
-                      <div className="muted small">{documentMeta(r).description}</div>
-                    </td>
-                    <td>{ms(spec<{ control_period_us?: number }>(r).control_period_us)}</td>
-                    <td>
-                      <code>{shortDigest(r.digest)}</code>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      <Compatibility
-        projectId={projectId}
-        base={base}
-        artifacts={artifacts.data ?? []}
-        robots={robots.data ?? []}
-        profiles={profiles.data ?? []}
-      />
+                  </thead>
+                  <tbody>
+                    {artifacts.data.map((a) => {
+                      const s = spec<ArtifactSpec>(a);
+                      return (
+                        <tr key={a.metadata.id}>
+                          <td>
+                            <Link to={`${base}/models/ModelArtifact/${a.metadata.id}`}>
+                              {documentTitle(a)}
+                            </Link>
+                            <div className="muted small">{documentMeta(a).description}</div>
+                          </td>
+                          <td>
+                            {s.adapter ? `${s.adapter.name ?? ""} ${s.adapter.version ?? ""}` : "—"}
+                          </td>
+                          <td>
+                            {s.outputs?.chunk_length ?? "—"} actions ×{" "}
+                            {s.outputs?.features?.length ?? "—"} features
+                            <div className="muted small">
+                              every {ms(s.outputs?.control_period_us)}
+                            </div>
+                          </td>
+                          <td>
+                            code {license(s.licenses?.code)}
+                            <div className="muted small">
+                              weights {license(s.licenses?.weights)}
+                            </div>
+                          </td>
+                          <td>
+                            <Signed signatures={a.signatures} />
+                          </td>
+                          <td>
+                            <code>{shortDigest(a.digest)}</code>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+      {tab === "robot-profiles" ? (
+        <TabPanel label="Robot profiles">
+          <Card title="Robot profiles" flush>
+            {robots.isPending ? (
+              <Loading />
+            ) : robots.isError ? (
+              <ErrorState error={robots.error} />
+            ) : robots.data.length === 0 ? (
+              <Empty title="No robot profiles yet">
+                <p>
+                  A robot profile describes the robot's command interface, state features and
+                  cameras.
+                </p>
+              </Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Robot profile</th>
+                      <th scope="col">Control period</th>
+                      <th scope="col">Digest</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {robots.data.map((r) => (
+                      <tr key={r.metadata.id}>
+                        <td>
+                          <Link to={`${base}/models/RobotProfile/${r.metadata.id}`}>
+                            {documentTitle(r)}
+                          </Link>
+                          <div className="muted small">{documentMeta(r).description}</div>
+                        </td>
+                        <td>{ms(spec<{ control_period_us?: number }>(r).control_period_us)}</td>
+                        <td>
+                          <code>{shortDigest(r.digest)}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+      {tab === "execution-profiles" ? (
+        <TabPanel label="Execution profiles">
+          <ExecutionProfilesTable />
+        </TabPanel>
+      ) : null}
+      {tab === "compatibility" ? (
+        <TabPanel label="Compatibility">
+          <Compatibility
+            projectId={projectId}
+            base={base}
+            artifacts={artifacts.data ?? []}
+            robots={robots.data ?? []}
+            profiles={profiles.data ?? []}
+          />
+        </TabPanel>
+      ) : null}
       {registering ? (
         <RegisterContract
           kind={registering}
@@ -509,36 +556,27 @@ function Compatibility({
   );
 }
 
-export function ExecutionProfiles() {
-  const { orgId, projectId, base } = useScope();
+function ExecutionProfilesTable() {
+  const { projectId, base } = useScope();
   const profiles = useExecutionProfiles(projectId);
   const artifacts = useArtifacts(projectId);
   const robots = useRobotProfiles(projectId);
-  const can = usePermissions(orgId);
-  const [registering, setRegistering] = useState(false);
   const byDigest = (digest: string | undefined) =>
     [...(artifacts.data ?? []), ...(robots.data ?? [])].find((d) => d.digest === digest);
 
   return (
     <>
-      <PageHeader
+      <Card
         title="Execution profiles"
         description="How a model runs on a robot: timing, chunking, how chunks merge, freshness limits and what the robot does if it starves."
-        actions={
-          can.deploy ? (
-            <button type="button" className="button primary" onClick={() => setRegistering(true)}>
-              Register execution profile
-            </button>
-          ) : null
-        }
-      />
-      <Card flush>
+        flush
+      >
         {profiles.isPending ? (
           <Loading />
         ) : profiles.isError ? (
           <ErrorState error={profiles.error} />
         ) : profiles.data.length === 0 ? (
-          <Empty title="No execution profiles yet" />
+          <Empty title="No execution profiles yet" icon={<SlidersIcon />} />
         ) : (
           <div className="table-wrap">
             <table>
@@ -595,12 +633,6 @@ export function ExecutionProfiles() {
           </div>
         )}
       </Card>
-      <RegisterContract
-        kind="ExecutionProfile"
-        open={registering}
-        onClose={() => setRegistering(false)}
-        projectId={projectId}
-      />
     </>
   );
 }
@@ -643,18 +675,36 @@ export function ContractPage() {
       },
     ],
   });
-  const back = k === "ExecutionProfile" ? `${base}/execution-profiles` : `${base}/models`;
+  const back =
+    k === "ExecutionProfile"
+      ? `${base}/models?tab=execution-profiles`
+      : k === "RobotProfile"
+        ? `${base}/models?tab=robot-profiles`
+        : `${base}/models`;
   if (doc.isPending) return <Loading />;
   if (doc.isError) return <ErrorState error={doc.error} />;
   const meta = documentMeta(doc.data);
   return (
     <>
       <PageHeader
-        breadcrumbs={
-          <Link to={back}>{k === "ExecutionProfile" ? "Execution profiles" : "Models"}</Link>
+        breadcrumbs={<Link to={back}>Models & contracts</Link>}
+        icon={
+          k === "ExecutionProfile" ? (
+            <SlidersIcon />
+          ) : k === "RobotProfile" ? (
+            <BotIcon />
+          ) : (
+            <CubeIcon />
+          )
         }
         title={documentTitle(doc.data)}
         description={meta.description}
+        meta={
+          <>
+            <Badge tone="accent">{KIND_LABELS[k]}</Badge>
+            <span className="tag">{shortDigest(doc.data.digest)}</span>
+          </>
+        }
       />
       <Card title={`About this ${KIND_LABELS[k]}`}>
         <KeyValue
@@ -673,9 +723,7 @@ export function ContractPage() {
         title="Document"
         description="Exactly as registered. Changing it means registering a new document with a new digest."
       >
-        <pre className="mono" style={{ margin: 0, overflowX: "auto" }}>
-          {JSON.stringify(doc.data.document, null, 2)}
-        </pre>
+        <pre className="code">{JSON.stringify(doc.data.document, null, 2)}</pre>
       </Card>
     </>
   );

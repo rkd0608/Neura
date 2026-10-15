@@ -29,6 +29,7 @@ design and the build plan (§16.1).
 | `packages/neura-robots` | Real robots: the SO-101 arm over LeRobot, a servo bus emulator, `neura-arm` (serve an arm), `neura-qualify` (hardware fault suite, parity, closed-loop episodes) |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
+| `landing/` | The NucleiLabs site: what Neura is, how it works, how to become a design partner (static) |
 | `site/` | Public developer docs (Docusaurus): every page labeled, references generated from the sources |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
 | `examples/site/` | A development gateway configuration, used by the docs quickstart |
@@ -54,6 +55,9 @@ make smoke     # build, start, run a whole pilot end to end, stop
 make console-setup   # pnpm install
 make console-check   # format, lint (incl. accessibility), strict types, unit tests
 make console-e2e     # the whole journey in Chromium against the real backend
+
+make landing-setup   # the NucleiLabs site (landing/): pnpm install
+make landing-dev     # site dev server on http://127.0.0.1:5174; make landing-check: lint, types, build
 
 make models-setup    # also install PyTorch and LeRobot (about 5 GB), for real models
 make test-models     # LeRobot adapters, real worker processes, a smoke run of the benchmark

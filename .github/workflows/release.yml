@@ -46,6 +46,7 @@ jobs:
           - neura-worker-gpu
           - neura-sim-robots
           - neura-console
+          - neura-landing
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.target }}
     steps:

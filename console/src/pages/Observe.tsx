@@ -13,23 +13,31 @@ import {
   useSessions,
   useSites,
 } from "../api/queries";
+import { useEventFeed } from "../api/events";
+import { ActivityFeed, describe } from "../components/Activity";
 import { documentTitle, sharingCase } from "../components/Contracts";
+import { ActivityIcon, AlertIcon, GaugeIcon, PulseIcon } from "../components/Icons";
+import { AuditTable, FaultTable, SessionTable } from "../components/Tables";
 import {
   Badge,
   Card,
-  DataAge,
   Empty,
   ErrorState,
-  Field,
   Loading,
+  Meter,
   PageHeader,
-  Reason,
-  Status,
+  SearchInput,
+  Segmented,
+  Stat,
+  TabPanel,
+  Tabs,
   Time,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { useScope } from "../lib/context";
-import { shortId } from "../lib/format";
-import { FaultTable } from "./Robots";
+import { ago, secondsSince, shortId } from "../lib/format";
+import { useNow } from "../lib/useNow";
 
 export function Capacity() {
   const { projectId, base } = useScope();
@@ -62,25 +70,54 @@ export function Capacity() {
     <>
       <PageHeader
         title="Capacity"
-        description="How many robots each site's server can serve at each prepared revision's execution profile, from the same admission model the gateway enforces. The estimate states its assumptions."
+        icon={<GaugeIcon />}
+        description="How many robots each site's server can serve at each prepared revision's execution profile, from the same admission model the gateway enforces. Every estimate states its assumptions."
       />
+      {rows.length > 0 ? (
+        <div className="grid cols-3">
+          {rows.slice(0, 3).map(({ deployment, revision, capacity }) => {
+            const used = deployment.spec.robot_ids.length;
+            const share = capacity.max_robots > 0 ? used / capacity.max_robots : 1;
+            return (
+              <div className="card stat" key={revision.metadata.id}>
+                <span className="stat-label">
+                  {deployment.spec.display_name} · <code>{shortId(revision.metadata.id)}</code>
+                </span>
+                <span className="stat-value">
+                  {used}
+                  <span className="of"> / {capacity.max_robots} robots</span>
+                </span>
+                <Meter
+                  value={used}
+                  max={capacity.max_robots}
+                  tone={share > 1 ? "danger" : share > 0.8 ? "warn" : "ok"}
+                  label={`${used} of ${capacity.max_robots} robots used`}
+                />
+                <span className="stat-note">
+                  limited by {capacity.limiting_factor.replaceAll("_", " ")}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <Card flush>
         {rows.length === 0 ? (
-          <Empty title="No estimates yet">
-            <p>A site estimates capacity when it prepares a revision.</p>
+          <Empty title="No estimates yet" icon={<GaugeIcon />}>
+            <p>A site estimates capacity when it prepares a revision, from its measured latency.</p>
           </Empty>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Site · release</th>
+                  <th scope="col">Site · deployment</th>
                   <th scope="col">Execution profile</th>
                   <th scope="col" className="num">
                     Robots it can run
                   </th>
                   <th scope="col" className="num">
-                    In this release
+                    In this deployment
                   </th>
                   <th scope="col">Limited by</th>
                   <th scope="col">Device</th>
@@ -101,7 +138,7 @@ export function Capacity() {
                         {sites.data?.find((s) => s.metadata.id === deployment.spec.site_id)?.spec
                           .display_name ?? "—"}
                         <div className="small">
-                          <Link to={`${base}/releases/${deployment.metadata.id}`}>
+                          <Link to={`${base}/deployments/${deployment.metadata.id}`}>
                             {deployment.spec.display_name}
                           </Link>{" "}
                           <span className="muted mono">{shortId(revision.metadata.id)}</span>
@@ -187,100 +224,64 @@ export function Capacity() {
 }
 
 export function Sessions() {
-  const { projectId, base } = useScope();
+  const { projectId } = useScope();
   const sessions = useSessions(projectId);
   const robots = useRobots(projectId);
-  const [showEnded, setShowEnded] = useState(false);
-  const list = (sessions.data ?? []).filter((s) => showEnded || s.state !== "Disconnected");
+  const [show, setShow] = useState<"live" | "all">("live");
+  const [query, setQuery] = useState("");
+  const all = sessions.data ?? [];
+  const list = all.filter((s) => {
+    if (show === "live" && s.state === "Disconnected") return false;
+    if (!query) return true;
+    const name = robots.data?.find((r) => r.metadata.id === s.robot_id)?.spec.display_name ?? "";
+    return `${name} ${s.robot_id} ${s.revision_id} ${s.state}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+  });
+  const count = (state: string) => all.filter((s) => s.state === state).length;
   return (
     <>
       <PageHeader
         title="Live sessions"
-        description="One row per robot session on a site's gateway, as the site reports it. No video or payloads: only states and aggregates."
-        actions={
-          <label className="row small">
-            <input
-              type="checkbox"
-              checked={showEnded}
-              onChange={(e) => setShowEnded(e.target.checked)}
-            />{" "}
-            Show ended
-          </label>
-        }
+        icon={<PulseIcon />}
+        description="One row per robot session on a site's gateway, as the site reports it, refreshed every few seconds. No video or payloads: only states and aggregates."
       />
+      <div className="grid cols-4">
+        <Stat label="Running" value={count("Running")} />
+        <Stat label="Waiting (starved, holding)" value={count("Waiting")} />
+        <Stat label="Ready or armed" value={count("Ready") + count("Armed")} />
+        <Stat label="Faulted" value={count("Faulted")} />
+      </div>
+      <div className="toolbar">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Filter by robot, revision or state"
+          label="Filter sessions"
+        />
+        <Segmented
+          label="Show"
+          value={show}
+          onChange={setShow}
+          options={[
+            { id: "live", label: "Live" },
+            { id: "all", label: "Include ended" },
+          ]}
+        />
+        <span className="grow" />
+        <span className="muted small">Trends show what this console observed since it opened.</span>
+      </div>
       <Card flush>
         {sessions.isPending ? (
           <Loading />
         ) : sessions.isError ? (
           <ErrorState error={sessions.error} />
-        ) : list.length === 0 ? (
-          <Empty title="No live sessions">
-            <p>Sessions appear when robots connect to their site's gateway.</p>
-          </Empty>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption className="visually-hidden">Live sessions</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Robot</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Revision</th>
-                  <th scope="col" className="num">
-                    Buffer (actions)
-                  </th>
-                  <th scope="col" className="num">
-                    Chunks
-                  </th>
-                  <th scope="col" className="num">
-                    RTT p99
-                  </th>
-                  <th scope="col" className="num">
-                    Task epoch
-                  </th>
-                  <th scope="col">Last report</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((s) => (
-                  <tr key={s.metadata.id}>
-                    <td>
-                      <Link to={`${base}/robots/${s.robot_id}`}>
-                        {robots.data?.find((r) => r.metadata.id === s.robot_id)?.spec
-                          .display_name ?? shortId(s.robot_id)}
-                      </Link>
-                    </td>
-                    <td>
-                      <Status phase={s.state} />
-                      {s.reason ? (
-                        <div className="small">
-                          <Reason code={s.reason} />
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>
-                      <code>{shortId(s.revision_id)}</code>
-                    </td>
-                    <td className="num">{s.metrics?.buffer_actions ?? "—"}</td>
-                    <td className="num">{s.metrics?.chunks ?? "—"}</td>
-                    <td className="num">
-                      {s.metrics?.rtt_p99_ms !== undefined
-                        ? `${s.metrics.rtt_p99_ms.toFixed(1)} ms`
-                        : "—"}
-                    </td>
-                    <td className="num">{s.task_epoch}</td>
-                    <td>
-                      <DataAge
-                        ageSeconds={s.data_age_seconds}
-                        fetchedAt={sessions.dataUpdatedAt}
-                        staleAfter={30}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SessionTable
+            sessions={list}
+            fetchedAt={sessions.dataUpdatedAt}
+            caption="Live sessions"
+          />
         )}
       </Card>
     </>
@@ -290,118 +291,156 @@ export function Sessions() {
 export function Faults() {
   const { projectId } = useScope();
   const faults = useFaults(projectId);
-  const [onlyOpen, setOnlyOpen] = useState(true);
-  const list = (faults.data ?? []).filter((f) => !onlyOpen || !f.cleared_at);
+  const [show, setShow] = useState<"open" | "all">("open");
+  const list = (faults.data ?? []).filter((f) => show === "all" || !f.cleared_at);
   return (
     <>
       <PageHeader
         title="Faults"
-        description="Faults the sites reported, with the response the robot took locally. Latched faults stay until someone resets them at the site."
-        actions={
-          <label className="row small">
-            <input
-              type="checkbox"
-              checked={onlyOpen}
-              onChange={(e) => setOnlyOpen(e.target.checked)}
-            />{" "}
-            Open only
-          </label>
-        }
+        icon={<AlertIcon />}
+        description="Faults the sites reported, with the response the robot took locally. A latched fault stays until a person resets it at the site: nothing here can clear it."
       />
+      <div className="toolbar">
+        <Segmented
+          label="Show"
+          value={show}
+          onChange={setShow}
+          options={[
+            { id: "open", label: "Open" },
+            { id: "all", label: "All" },
+          ]}
+        />
+      </div>
       <Card flush>
         {faults.isPending ? (
           <Loading />
         ) : faults.isError ? (
           <ErrorState error={faults.error} />
         ) : list.length === 0 ? (
-          <Empty title={onlyOpen ? "No open faults" : "No faults reported"} />
+          <Empty
+            title={show === "open" ? "No open faults" : "No faults reported"}
+            icon={<AlertIcon />}
+          >
+            <p>
+              Every robot is running or ready. Faults appear here as soon as a site reports one.
+            </p>
+          </Empty>
         ) : (
-          <FaultTable faults={[...list].reverse()} />
+          <FaultTable faults={[...list].reverse()} showRobot />
         )}
       </Card>
     </>
   );
 }
 
-export function Audit() {
+const ACTIVITY_TABS: TabSpec[] = [
+  { id: "live", label: "Live events" },
+  { id: "audit", label: "Audit log" },
+];
+
+/** Activity: what is changing now (the event stream) and what changed (the audit log). */
+export function Activity() {
   const { projectId } = useScope();
-  const audit = useAudit(projectId);
-  const [filter, setFilter] = useState("");
-  const list = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    const items = [...(audit.data ?? [])].reverse();
-    if (!q) return items;
-    return items.filter((r) =>
-      `${r.action} ${r.actor} ${r.target} ${r.result}`.toLowerCase().includes(q),
-    );
-  }, [audit.data, filter]);
+  const [tab, setTab] = useTab(ACTIVITY_TABS);
   return (
     <>
       <PageHeader
-        title="Audit log"
-        description="Every change and every instruction sent to a site, with who did it and the result. Written in the same transaction as the change."
+        title="Activity"
+        icon={<ActivityIcon />}
+        description="Live events show changes as they happen. The audit log records every change and every instruction sent to a site, with who did it and the result, written in the same transaction as the change."
       />
+      <Tabs label="Activity" tabs={ACTIVITY_TABS} value={tab} onChange={setTab} />
+      {tab === "live" ? <LiveEvents projectId={projectId} /> : <Audit />}
+    </>
+  );
+}
+
+function LiveEvents({ projectId }: { projectId: string }) {
+  const events = useEventFeed(projectId);
+  const { base } = useScope();
+  const now = useNow(5000);
+  return (
+    <TabPanel label="Live events">
+      <Card
+        title="Event stream"
+        description="Received since this console opened; the oldest scroll away after 300."
+        flush
+      >
+        {events.length === 0 ? (
+          <ActivityFeed events={[]} />
+        ) : (
+          <ol className="log" aria-label="Events, newest first">
+            {[...events].reverse().map((event) => {
+              const d = describe(event);
+              return (
+                <li key={event.cursor}>
+                  <span className="ts" title={event.occurred_at}>
+                    {ago(secondsSince(event.occurred_at, now))}
+                  </span>
+                  <span className={`ty ${d.tone}`}>{event.type}</span>
+                  <span>
+                    {d.noun}{" "}
+                    {d.path ? (
+                      <Link to={`${base}/${d.path}`}>{event.resource}</Link>
+                    ) : (
+                      event.resource
+                    )}
+                    {event.resource_version ? (
+                      <span className="muted"> v{event.resource_version}</span>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </Card>
+    </TabPanel>
+  );
+}
+
+function Audit() {
+  const { projectId } = useScope();
+  const audit = useAudit(projectId);
+  const [filter, setFilter] = useState("");
+  const [result, setResult] = useState<"all" | "failed">("all");
+  const list = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return [...(audit.data ?? [])].reverse().filter((r) => {
+      if (result === "failed" && r.result === "succeeded") return false;
+      return !q || `${r.action} ${r.actor} ${r.target} ${r.result}`.toLowerCase().includes(q);
+    });
+  }, [audit.data, filter, result]);
+  return (
+    <TabPanel label="Audit log">
+      <div className="toolbar">
+        <SearchInput
+          value={filter}
+          onChange={setFilter}
+          placeholder="Action, actor, target or result"
+          label="Filter audit records"
+        />
+        <Segmented
+          label="Result"
+          value={result}
+          onChange={setResult}
+          options={[
+            { id: "all", label: "All results" },
+            { id: "failed", label: "Failed or denied" },
+          ]}
+        />
+        <span className="grow" />
+        <span className="muted small">{list.length} records</span>
+      </div>
       <Card flush>
-        <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
-          <Field id="audit-filter" label="Filter" hint="Matches action, actor, target and result.">
-            <input
-              id="audit-filter"
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </Field>
-        </div>
         {audit.isPending ? (
           <Loading />
         ) : audit.isError ? (
           <ErrorState error={audit.error} />
-        ) : list.length === 0 ? (
-          <Empty title="No audit records" />
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption className="visually-hidden">Audit records</caption>
-              <thead>
-                <tr>
-                  <th scope="col">When</th>
-                  <th scope="col">Actor</th>
-                  <th scope="col">Action</th>
-                  <th scope="col">Target</th>
-                  <th scope="col">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((r) => (
-                  <tr key={r.metadata.id}>
-                    <td className="small">
-                      <Time iso={r.occurred_at} />
-                    </td>
-                    <td className="small">
-                      {r.actor}
-                      <div className="muted">{r.actor_kind?.replace("_", " ")}</div>
-                    </td>
-                    <td>
-                      <code>{r.action}</code>
-                    </td>
-                    <td>
-                      <code>{shortId(r.target)}</code>
-                    </td>
-                    <td>
-                      <Badge tone={r.result === "succeeded" ? "ok" : "danger"}>{r.result}</Badge>
-                      {r.reason ? (
-                        <div className="small">
-                          <Reason code={r.reason} />
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AuditTable records={list} />
         )}
       </Card>
-    </>
+    </TabPanel>
   );
 }

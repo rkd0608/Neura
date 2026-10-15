@@ -6,6 +6,7 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { api, ifMatch, unwrap, type Schemas, idempotent } from "../api/client";
 import { useApiMutation, useRobots, useServers, useSite } from "../api/queries";
 import { Dialog } from "../components/Dialog";
+import { BotIcon, BuildingIcon, ServerIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
 import {
   Badge,
@@ -20,8 +21,13 @@ import {
   Loading,
   PageHeader,
   Reason,
+  Stat,
   Status,
+  TabPanel,
+  Tabs,
   Time,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { duration } from "../lib/format";
@@ -40,6 +46,16 @@ export function SitePage() {
   const robots = useRobots(projectId);
   const can = usePermissions(orgId);
   const [editing, setEditing] = useState(false);
+  const tabs: TabSpec[] = [
+    { id: "overview", label: "Overview" },
+    { id: "servers", label: "Servers", count: servers.data?.length ?? null },
+    {
+      id: "robots",
+      label: "Robots",
+      count: (robots.data ?? []).filter((r) => r.spec.site_id === siteId).length,
+    },
+  ];
+  const [tab, setTab] = useTab(tabs, search.has("connect") ? "servers" : "overview");
 
   if (site.isPending) return <Loading />;
   if (site.isError) return <ErrorState error={site.error} />;
@@ -50,17 +66,20 @@ export function SitePage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={<Link to={`${base}/sites`}>Sites</Link>}
+        breadcrumbs={<Link to={`${base}/sites`}>Sites & servers</Link>}
+        icon={<BuildingIcon />}
         title={s.spec.display_name}
-        description={
-          <span className="row">
+        meta={
+          <>
             <Status phase={s.status.phase} />
             <DataAge
               ageSeconds={s.status.data_age_seconds}
               fetchedAt={site.dataUpdatedAt}
               never="The site has never connected"
             />
-          </span>
+            <span>agent {s.status.agent_version ?? "not enrolled"}</span>
+            <span className="tag">{s.metadata.id}</span>
+          </>
         }
         actions={
           <>
@@ -71,7 +90,7 @@ export function SitePage() {
             ) : null}
             {can.admin ? (
               <button type="button" className="button primary" onClick={() => setConnecting(true)}>
-                Connect a server
+                <ServerIcon /> Connect a server
               </button>
             ) : null}
           </>
@@ -86,82 +105,145 @@ export function SitePage() {
       {connecting ? (
         <ConnectServer site={s} servers={servers.data ?? []} onDone={() => setConnecting(false)} />
       ) : null}
-      <div className="grid cols-2">
-        <Card title="Connection">
-          <KeyValue
-            items={[
-              ["Agent connected", s.status.connected ? "Yes" : "No"],
-              ["Agent version", s.status.agent_version ?? "—"],
-              [
-                "Offline allowance",
-                <OfflineAllowance key="offline" site={s} fetchedAt={site.dataUpdatedAt} />,
-              ],
-              ["Identifier", <code key="id">{s.metadata.id}</code>],
-            ]}
-          />
-        </Card>
-        <Card
-          title="Robots at this site"
-          flush
-          actions={<Link to={`${base}/robots`}>Manage robots</Link>}
-        >
-          {atSite.length === 0 ? (
-            <p className="card-body muted">No robots at this site yet.</p>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Robot</th>
-                    <th scope="col">State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {atSite.map((r) => (
-                    <tr key={r.metadata.id}>
-                      <td>
-                        <Link to={`${base}/robots/${r.metadata.id}`}>{r.spec.display_name}</Link>
-                      </td>
-                      <td>
-                        <Status phase={r.status.phase} stale={stale} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
-      <Card
-        title="GPU servers"
-        description="Servers connected to this site, as their agents report them."
-      >
-        {servers.isPending ? (
-          <Loading />
-        ) : servers.isError ? (
-          <ErrorState error={servers.error} />
-        ) : servers.data.length === 0 ? (
-          <Empty title="No server connected yet">
-            <p>Connect the GPU server at this site with one command.</p>
-          </Empty>
-        ) : (
-          <div className="stack" style={{ gap: 20 }}>
-            {servers.data.map((server) => (
-              <ServerDetail
-                key={server.metadata.id}
-                server={server}
-                fetchedAt={servers.dataUpdatedAt}
-                canEdit={can.admin}
-                projectId={projectId}
-                siteId={siteId}
-              />
-            ))}
+      <Tabs label="Site" tabs={tabs} value={tab} onChange={setTab} />
+      {tab === "overview" ? (
+        <TabPanel label="Overview">
+          <div className="grid cols-4">
+            <Stat label="GPU servers" value={servers.data?.length ?? "—"} />
+            <Stat
+              label="GPUs for Neura"
+              value={(servers.data ?? []).reduce(
+                (n, x) => n + x.spec.allocated_gpu_indexes.length,
+                0,
+              )}
+              note={`of ${(servers.data ?? []).reduce((n, x) => n + (x.status.gpus?.length ?? 0), 0)} reported`}
+            />
+            <Stat
+              label="Robots running"
+              value={atSite.filter((r) => r.status.phase === "Running").length}
+              note={`of ${atSite.length} at this site`}
+            />
+            <Stat
+              label="Offline allowance"
+              value={`${s.spec.offline_authorization_hours} h`}
+              note="without reaching Neura"
+            />
           </div>
-        )}
-      </Card>
+          <div className="grid cols-2">
+            <Card title="Connection">
+              <KeyValue
+                items={[
+                  ["Agent connected", s.status.connected ? "Yes" : "No"],
+                  ["Agent version", s.status.agent_version ?? "—"],
+                  [
+                    "Offline allowance",
+                    <OfflineAllowance key="offline" site={s} fetchedAt={site.dataUpdatedAt} />,
+                  ],
+                  ["Identifier", <code key="id">{s.metadata.id}</code>],
+                ]}
+              />
+            </Card>
+            <RobotsHere robots={atSite} stale={stale} base={base} />
+          </div>
+        </TabPanel>
+      ) : null}
+      {tab === "servers" ? (
+        <TabPanel label="Servers">
+          <Card
+            title="GPU servers"
+            description="Servers connected to this site, as their agents report them."
+          >
+            {servers.isPending ? (
+              <Loading />
+            ) : servers.isError ? (
+              <ErrorState error={servers.error} />
+            ) : servers.data.length === 0 ? (
+              <Empty
+                title="No server connected yet"
+                icon={<ServerIcon />}
+                actions={
+                  can.admin ? (
+                    <button
+                      type="button"
+                      className="button primary small"
+                      onClick={() => setConnecting(true)}
+                    >
+                      Connect a server
+                    </button>
+                  ) : null
+                }
+              >
+                <p>Connect the GPU server at this site with one command.</p>
+              </Empty>
+            ) : (
+              <div className="stack" style={{ gap: 28 }}>
+                {servers.data.map((server) => (
+                  <ServerDetail
+                    key={server.metadata.id}
+                    server={server}
+                    fetchedAt={servers.dataUpdatedAt}
+                    canEdit={can.admin}
+                    projectId={projectId}
+                    siteId={siteId}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+      {tab === "robots" ? (
+        <TabPanel label="Robots">
+          <RobotsHere robots={atSite} stale={stale} base={base} />
+        </TabPanel>
+      ) : null}
       <EditSite open={editing} onClose={() => setEditing(false)} site={s} projectId={projectId} />
     </>
+  );
+}
+
+function RobotsHere({
+  robots,
+  stale,
+  base,
+}: {
+  robots: Schemas["Robot"][];
+  stale: boolean;
+  base: string;
+}) {
+  return (
+    <Card
+      title="Robots at this site"
+      flush
+      actions={<Link to={`${base}/robots`}>Manage robots</Link>}
+    >
+      {robots.length === 0 ? (
+        <Empty title="No robots at this site yet" icon={<BotIcon />} />
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Robot</th>
+                <th scope="col">State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {robots.map((r) => (
+                <tr key={r.metadata.id}>
+                  <td>
+                    <Link to={`${base}/robots/${r.metadata.id}`}>{r.spec.display_name}</Link>
+                  </td>
+                  <td>
+                    <Status phase={r.status.phase} stale={stale} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

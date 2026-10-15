@@ -1054,7 +1054,7 @@ TypeScript, React, a typed client generated from the OpenAPI spec, server-state 
 
 **Accessibility and quality gates**
 
-- Semantic HTML, labelled controls and named regions throughout. Native `<dialog>` for modals, so focus is trapped and returned. Live regions announce results, and links are underlined so they never rely on color.
+- Semantic HTML, labelled controls and named regions throughout. Native `<dialog>` for modals, so focus is trapped and returned. Live regions announce results. Links in running text differ from it by at least 3:1 contrast as well as color (axe's `link-in-text-block`); links in tables are the row's bold name.
 - ESLint runs the strict jsx-a11y rules. The end-to-end journey runs axe on every main screen against WCAG 2.1 AA and fails on serious or critical violations.
 - The journey plays every role with the real components, in Chromium, in CI:
   1. The customer uses the console.
@@ -1072,6 +1072,48 @@ TypeScript, React, a typed client generated from the OpenAPI spec, server-state 
 - The local site console is the agent's local API and CLI (§19.5); a browser UI for it, built from the same components, follows with M7.
 - Telemetry routing and the outbound-ledger view (§18.2) arrive with the ledger in M7.
 - Metrics charts arrive with measured telemetry in M6.
+
+### 19.8 The console's structure and the NucleiLabs site
+
+The console was rebuilt in October 2026 after a walkthrough of every screen against the running stack. It takes its structure from developer-infrastructure dashboards such as Modal's: a dark workspace, a sidebar with organization and project switchers, list pages with search and filters, and resource pages with tabs. The behavior of §19.1–§19.4 is unchanged: the same API calls, permissions, state vocabulary and approval at the site.
+
+**How the sections map to the API** (the sidebar, in order)
+
+| Section | Shows | API |
+| --- | --- | --- |
+| Overview | Robots running, live sessions, servers and open faults; what needs attention; the setup checklist; deployments with rollout progress; action-buffer and round-trip charts; deadline misses; a live activity feed | collections, `metrics/query`, `events` |
+| Deployments (was Releases) | List with search and phase filters. A deployment page: lifecycle strip (revision → prepared → requested → approved at the site → running), then tabs: Overview, Revisions, Activations, Sessions, Faults, Activity | `deployments`, `revisions`, `activation-requests`, `rollbacks`, `operations` |
+| Robots | List with search, site filter and state counts. A robot page: Overview, Sessions, Faults | `robots`, `sessions`, `faults` |
+| Sites & servers | Site cards. A site page: Overview, Servers (GPU allocation, preflight), Robots; connecting a server is a guided flow | `sites`, `servers`, `enrollment-tokens` |
+| Live sessions | State counts, filter, per-robot buffer trend | `sessions` (polled every 5 s) |
+| Faults | Open or all, with the robot and its local response | `faults` |
+| Models & contracts | Tabs: Model artifacts, Robot profiles, Execution profiles, Compatibility; a contract page with its document | contract collections, `compatibility-checks`, `signatures` |
+| Capacity | Use against capacity per prepared revision, with assumptions | revisions' `capacity` |
+| Activity | Live events (the stream, as received) and the audit log (search, failed only) | `events`, `audit-records` |
+| Projects, Settings | Organization: members, API tokens, support access, sign-in, as tabs | organization endpoints |
+
+Earlier addresses (`/releases`, `/execution-profiles`, `/audit`) redirect. Tabs live in the URL (`?tab=`), so every view can be linked to.
+
+**What the walkthrough found and fixed**
+
+- Projects and Settings sent requests with empty identifiers (`/v1/organizations//projects`, `/v1/projects//sites`) while the identity loaded. Scoped queries now wait for their identifier.
+- Support access offered only the first project's sites; it now lists every site of the organization.
+- A robot that reconnected can still have an older session reported until it expires. Counts of live sessions now count each robot once.
+
+**New in the console**
+
+- **Command palette** (⌘K or Ctrl+K): jump to any page, deployment, robot, site or contract, switch theme, sign out. It searches what is already loaded and calls no API itself.
+- **Charts.** Aggregate metrics from `metrics/query` (deadline misses), and live series sampled from polled sessions (buffers, round trips). Live series are labeled as what this console observed since it opened; nothing is invented between samples.
+- **Live activity.** The event stream the console already followed for cache invalidation, shown as a feed. Repeated updates of one resource collapse into one line.
+- **Themes.** Dark by default, light, or the operating system's. The brand accent is iris. Amber stays reserved for "waiting", so the brand never reads as a warning.
+
+**The NucleiLabs site** (`landing/`)
+
+- A static site with the same design tokens: hero, what Neura does, how it works, safety, shared serving, the console, security and privacy, and a call for design partners.
+- Every claim on it is something the product does today or is labeled as in progress. The numbers come from the published reports: 13,028 injected faults across three 72-hour soaks with no invariant violation, and 21 hardware fault scenarios passing on the emulated arm.
+- The fleet panel in the hero is a labeled illustration simulated in the browser. The console image is a screenshot of the real console on the development stack.
+- The console, docs and contact links are set at build time (`VITE_CONSOLE_URL`, `VITE_DOCS_URL`, `VITE_CONTACT_URL`).
+- Served by nginx (`neura-landing` image) with a strict content security policy and no third-party requests.
 
 ---
 

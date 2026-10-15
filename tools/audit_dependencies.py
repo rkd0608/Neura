@@ -27,7 +27,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 EXCEPTIONS = ROOT / "security" / "vulnerability-exceptions.yaml"
 PIP_AUDIT = "pip-audit==2.10.1"
-NPM_PROJECTS = ("console", "site")
+NPM_PROJECTS = ("console", "landing", "site")
 
 
 @dataclass(frozen=True, slots=True)

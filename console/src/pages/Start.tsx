@@ -1,9 +1,10 @@
 // The entry point: choose an organization and project, or create the first project.
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate, useParams } from "react-router";
 
 import { api, unwrap, idempotent } from "../api/client";
 import { useApiMutation, useMe, useProjects } from "../api/queries";
+import { FolderIcon } from "../components/Icons";
 import { Card, ErrorState, Field, Loading, PageHeader } from "../components/ui";
 import { slug } from "../lib/format";
 
@@ -121,51 +122,51 @@ export function NewProjectForm({
 }
 
 export function Projects() {
-  const me = useMe();
-  const orgId = me.data?.organizations[0]?.id ?? "";
+  const { orgId = "" } = useParams();
   const projects = useProjects(orgId);
   const first = new URLSearchParams(window.location.search).has("first");
   return (
     <>
       <PageHeader
+        icon={<FolderIcon />}
         title={first ? "Welcome to Neura" : "Projects"}
         description={
           first
-            ? "Start with a project: it groups the sites, robots, models and releases of one robot program."
-            : "Each project groups the sites, robots, models and releases of one robot program."
+            ? "Start with a project: it groups the sites, robots, models and deployments of one robot program."
+            : "Each project groups the sites, robots, models and deployments of one robot program."
         }
       />
-      <div className="grid cols-2">
+      <div className="grid cols-3">
+        {!first
+          ? projects.isPending
+            ? [<Loading key="loading" />]
+            : projects.isError
+              ? [<ErrorState key="error" error={projects.error} />]
+              : projects.data.map((p) => (
+                  <Link
+                    key={p.metadata.id}
+                    to={`/o/${orgId}/p/${p.metadata.id}`}
+                    className="card interactive"
+                    style={{ color: "inherit", textDecoration: "none" }}
+                  >
+                    <div className="card-body stack" style={{ gap: 10 }}>
+                      <span className="icon-tile">
+                        <FolderIcon />
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{p.spec.display_name}</div>
+                        <div className="muted small mono">{p.spec.name}</div>
+                      </div>
+                      <span className="small" style={{ color: "var(--accent)" }}>
+                        Open project →
+                      </span>
+                    </div>
+                  </Link>
+                ))
+          : null}
         <Card title="Create a project">
           <NewProjectForm orgId={orgId} />
         </Card>
-        {!first ? (
-          <Card title="Your projects" flush>
-            {projects.isPending ? (
-              <Loading />
-            ) : projects.isError ? (
-              <ErrorState error={projects.error} />
-            ) : (
-              <ul className="steps">
-                {projects.data.map((p) => (
-                  <li
-                    key={p.metadata.id}
-                    className="step"
-                    style={{ gridTemplateColumns: "1fr auto" }}
-                  >
-                    <div>
-                      <div className="step-title">{p.spec.display_name}</div>
-                      <div className="step-text mono">{p.spec.name}</div>
-                    </div>
-                    <Link className="button small" to={`/o/${orgId}/p/${p.metadata.id}`}>
-                      Open
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        ) : null}
       </div>
     </>
   );

@@ -1,44 +1,61 @@
-import { NavLink, Outlet, useNavigate } from "react-router";
+// The console's frame: the sidebar (organization and project switchers, navigation, docs, theme,
+// account), the top bar (where you are, the live connection, search) and the page.
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 
-import { useProjectEvents } from "../api/events";
+import { useProjectEvents, type LiveState } from "../api/events";
 import { useFaults, useMe, useProjects } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
 import { useScope } from "../lib/context";
-import { Badge } from "./ui";
+import { setTheme, useTheme, type Theme } from "../lib/theme";
+import { CommandPalette } from "./CommandPalette";
+import {
+  BookIcon,
+  CheckIcon,
+  ChevronsIcon,
+  ExternalIcon,
+  FolderIcon,
+  LogOutIcon,
+  Mark,
+  MonitorIcon,
+  MoonIcon,
+  PlusIcon,
+  SearchIcon,
+  SunIcon,
+} from "./Icons";
+import { NAV, sectionOf } from "./nav";
+import { MenuButton } from "./ui";
 
-const SECTIONS: { heading: string; links: { to: string; label: string; end?: boolean }[] }[] = [
-  { heading: "Overview", links: [{ to: "", label: "Home", end: true }] },
-  {
-    heading: "Fleet",
-    links: [
-      { to: "sites", label: "Sites" },
-      { to: "robots", label: "Robots" },
-      { to: "sessions", label: "Live sessions" },
-      { to: "faults", label: "Faults" },
-    ],
-  },
-  {
-    heading: "Deploy",
-    links: [
-      { to: "models", label: "Models" },
-      { to: "execution-profiles", label: "Execution profiles" },
-      { to: "capacity", label: "Capacity" },
-      { to: "releases", label: "Releases" },
-    ],
-  },
-  { heading: "Govern", links: [{ to: "audit", label: "Audit log" }] },
-];
+export const DOCS_URL: string =
+  (import.meta.env.VITE_NEURA_DOCS_URL as string | undefined) ?? "https://rkd0608.github.io/neura/";
+
+function initials(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? "N") + (words[1]?.[0] ?? "")).toUpperCase();
+}
+
+function useShortcut(open: () => void) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        open();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+}
 
 export function Layout() {
   const { orgId, projectId, base } = useScope();
-  const auth = useAuth();
-  const me = useMe();
-  const projects = useProjects(orgId);
   const faults = useFaults(projectId);
   const live = useProjectEvents(projectId);
-  const navigate = useNavigate();
   const latched = (faults.data ?? []).filter((f) => f.latched && !f.cleared_at).length;
-  const org = me.data?.organizations.find((o) => o.id === orgId);
+  const [palette, setPalette] = useState(false);
+  const openPalette = useCallback(() => setPalette(true), []);
+  const closePalette = useCallback(() => setPalette(false), []);
+  useShortcut(openPalette);
 
   return (
     <div className="shell">
@@ -46,21 +63,26 @@ export function Layout() {
         Skip to content
       </a>
       <aside className="sidebar" aria-label="Primary">
-        <NavLink to={base} className="brand">
-          <img src="/favicon.svg" alt="" />
+        <NavLink to={base} className="brand" end>
+          <Mark />
           Neura
         </NavLink>
-        <nav aria-label="Project" className="stack" style={{ gap: 14 }}>
-          {SECTIONS.map((section) => (
+        <div className="switcher">
+          <OrgSwitcher orgId={orgId} />
+          <ProjectSwitcher orgId={orgId} projectId={projectId} />
+        </div>
+        <nav aria-label="Project" style={{ display: "grid", gap: 2 }}>
+          {NAV.map((section) => (
             <div className="nav-section" key={section.heading}>
               <span className="nav-heading">{section.heading}</span>
               {section.links.map((link) => (
                 <NavLink
-                  key={link.to}
-                  to={link.to ? `${base}/${link.to}` : base}
+                  key={link.to + String(link.org)}
+                  to={link.org ? `/o/${orgId}/${link.to}` : link.to ? `${base}/${link.to}` : base}
                   end={link.end}
                   className="nav-link"
                 >
+                  <link.icon />
                   {link.label}
                   {link.to === "faults" && latched > 0 ? (
                     <span className="nav-count" aria-label={`${latched} latched`}>
@@ -71,92 +93,293 @@ export function Layout() {
               ))}
             </div>
           ))}
-          <div className="nav-section">
-            <span className="nav-heading">Organization</span>
-            <NavLink to={`/o/${orgId}/projects`} className="nav-link" end>
-              Projects
-            </NavLink>
-            <NavLink to={`/o/${orgId}/settings`} className="nav-link">
-              Settings
-            </NavLink>
-          </div>
         </nav>
+        <SidebarFooter />
       </aside>
       <div className="main">
-        <header className="topbar">
-          <div className="topbar-left">
-            <span className="secondary">{org?.display_name ?? "Organization"}</span>
-            <span className="muted" aria-hidden="true">
-              /
-            </span>
-            <label className="visually-hidden" htmlFor="project-switcher">
-              Project
-            </label>
-            <select
-              id="project-switcher"
-              value={projectId}
-              style={{ width: "auto", minWidth: 180 }}
-              onChange={(event) => void navigate(`/o/${orgId}/p/${event.target.value}`)}
-            >
-              {(projects.data ?? []).map((p) => (
-                <option key={p.metadata.id} value={p.metadata.id}>
-                  {p.spec.display_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="topbar-right">
-            <span role="status" aria-live="polite">
-              {live === "live" ? (
-                <Badge tone="ok">Live</Badge>
-              ) : (
-                <Badge tone="warn">{live === "connecting" ? "Connecting" : "Reconnecting"}</Badge>
-              )}
-            </span>
-            <span className="muted small" title={me.data?.subject}>
-              {me.data?.kind === "api_token"
-                ? "API token"
-                : (me.data?.subject.split("|").pop() ?? "")}
-            </span>
-            <button type="button" className="button small" onClick={() => void auth.signOut()}>
-              Sign out
-            </button>
-          </div>
-        </header>
+        <Topbar live={live} onSearch={openPalette} />
         <main id="main" className="content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
+      <CommandPalette open={palette} onClose={closePalette} orgId={orgId} projectId={projectId} />
     </div>
   );
 }
 
-/** Pages outside a project (organization settings, project list) share a simpler frame. */
-export function OrgLayout() {
+function OrgSwitcher({ orgId }: { orgId: string }) {
+  const me = useMe();
+  const navigate = useNavigate();
+  const orgs = me.data?.organizations ?? [];
+  const org = orgs.find((o) => o.id === orgId);
+  const name = org?.display_name ?? "Organization";
+  return (
+    <MenuButton
+      label={`Organization: ${name}`}
+      className="switcher-button"
+      button={
+        <>
+          <span className="avatar" aria-hidden="true">
+            {initials(name)}
+          </span>
+          <span className="switcher-text">
+            <span className="switcher-label">Organization</span>
+            <span className="truncate">{name}</span>
+          </span>
+          <ChevronsIcon className="chevron" />
+        </>
+      }
+    >
+      {(close) => (
+        <>
+          <div className="menu-label">Organizations</div>
+          {orgs.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className="menu-item"
+              role="menuitemradio"
+              aria-checked={o.id === orgId}
+              onClick={() => {
+                close();
+                void navigate(`/o/${o.id}/projects`);
+              }}
+            >
+              <span className="avatar" aria-hidden="true">
+                {initials(o.display_name)}
+              </span>
+              <span className="truncate">{o.display_name}</span>
+              {o.id === orgId ? <CheckIcon style={{ marginLeft: "auto" }} /> : null}
+            </button>
+          ))}
+          <div className="menu-sep" />
+          <Link className="menu-item" to={`/o/${orgId}/settings`} onClick={close}>
+            Organization settings
+          </Link>
+        </>
+      )}
+    </MenuButton>
+  );
+}
+
+function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: string }) {
+  const projects = useProjects(orgId);
+  const navigate = useNavigate();
+  const project = projects.data?.find((p) => p.metadata.id === projectId);
+  const name = project?.spec.display_name ?? (projectId ? "Project" : "Choose a project");
+  return (
+    <MenuButton
+      label={`Project: ${name}`}
+      className="switcher-button"
+      button={
+        <>
+          <span className="avatar round" aria-hidden="true">
+            <FolderIcon width={12} height={12} />
+          </span>
+          <span className="switcher-text">
+            <span className="switcher-label">Project</span>
+            <span className="truncate">{name}</span>
+          </span>
+          <ChevronsIcon className="chevron" />
+        </>
+      }
+    >
+      {(close) => (
+        <>
+          <div className="menu-label">Projects</div>
+          {(projects.data ?? []).map((p) => (
+            <button
+              key={p.metadata.id}
+              type="button"
+              className="menu-item"
+              role="menuitemradio"
+              aria-checked={p.metadata.id === projectId}
+              onClick={() => {
+                close();
+                void navigate(`/o/${orgId}/p/${p.metadata.id}`);
+              }}
+            >
+              <span className="truncate">{p.spec.display_name}</span>
+              {p.metadata.id === projectId ? <CheckIcon style={{ marginLeft: "auto" }} /> : null}
+            </button>
+          ))}
+          <div className="menu-sep" />
+          <Link className="menu-item" to={`/o/${orgId}/projects`} onClick={close}>
+            <PlusIcon /> New project
+          </Link>
+        </>
+      )}
+    </MenuButton>
+  );
+}
+
+function SidebarFooter() {
   const auth = useAuth();
   const me = useMe();
+  const theme = useTheme();
+  const who =
+    me.data?.kind === "api_token" ? "API token" : (me.data?.subject.split("|").pop() ?? "Account");
+  const themes: { id: Theme; label: string; icon: ReactNode }[] = [
+    { id: "dark", label: "Dark", icon: <MoonIcon /> },
+    { id: "light", label: "Light", icon: <SunIcon /> },
+    { id: "system", label: "System", icon: <MonitorIcon /> },
+  ];
   return (
-    <div className="main" style={{ minHeight: "100%" }}>
+    <div className="sidebar-footer">
+      <a className="nav-link" href={DOCS_URL} target="_blank" rel="noreferrer">
+        <BookIcon />
+        Documentation
+        <ExternalIcon style={{ marginLeft: "auto", width: 13, height: 13 }} />
+      </a>
+      <MenuButton
+        label="Account and theme"
+        className="switcher-button"
+        placement="above"
+        button={
+          <>
+            <span className="avatar round" aria-hidden="true">
+              {initials(who)}
+            </span>
+            <span className="switcher-text">
+              <span className="truncate small">{who}</span>
+            </span>
+            <ChevronsIcon className="chevron" />
+          </>
+        }
+      >
+        {(close) => (
+          <>
+            <div className="menu-label" title={me.data?.subject}>
+              Signed in as {who}
+            </div>
+            <div className="menu-sep" />
+            <div className="menu-label">Theme</div>
+            {themes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="menu-item"
+                role="menuitemradio"
+                aria-checked={theme === t.id}
+                onClick={() => setTheme(t.id)}
+              >
+                {t.icon}
+                {t.label}
+                {theme === t.id ? <CheckIcon style={{ marginLeft: "auto" }} /> : null}
+              </button>
+            ))}
+            <div className="menu-sep" />
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => {
+                close();
+                void auth.signOut();
+              }}
+            >
+              <LogOutIcon />
+              Sign out
+            </button>
+          </>
+        )}
+      </MenuButton>
+    </div>
+  );
+}
+
+function Topbar({ live, onSearch }: { live?: LiveState; onSearch?: () => void }) {
+  const { orgId, projectId } = useParams();
+  const location = useLocation();
+  const projects = useProjects(orgId ?? "");
+  const project = projects.data?.find((p) => p.metadata.id === projectId);
+  const base = projectId ? `/o/${orgId}/p/${projectId}` : "";
+  const rest =
+    base && location.pathname.startsWith(base) ? location.pathname.slice(base.length + 1) : "";
+  const section = projectId
+    ? (sectionOf(rest) ?? (rest ? undefined : { label: "Overview" }))
+    : undefined;
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+  return (
+    <header className="topbar">
+      <div className="topbar-left">
+        <nav className="crumbs" aria-label="You are here">
+          {project ? (
+            <>
+              <Link to={base}>{project.spec.display_name}</Link>
+              {section ? (
+                <>
+                  <span className="sep" aria-hidden="true">
+                    /
+                  </span>
+                  <span aria-current="page">{section.label}</span>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </nav>
+      </div>
+      <div className="topbar-right">
+        {onSearch ? (
+          <button type="button" className="search-trigger" onClick={onSearch}>
+            <SearchIcon width={15} height={15} />
+            Search
+            <kbd>{mac ? "⌘" : "Ctrl"} K</kbd>
+          </button>
+        ) : null}
+        {live ? (
+          <span
+            role="status"
+            aria-live="polite"
+            className={`live${live === "live" ? "" : " reconnecting"}`}
+            title="Changes appear as they happen: the console follows the project's event stream."
+          >
+            <span className="pulse" aria-hidden="true" />
+            {live === "live" ? "Live" : live === "connecting" ? "Connecting" : "Reconnecting"}
+          </span>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+/** Pages outside a project (projects, organization settings) keep the sidebar, without the
+ *  project's sections. */
+export function OrgLayout() {
+  const { orgId = "" } = useParams();
+  return (
+    <div className="shell">
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header className="topbar">
-        <div className="topbar-left">
-          <NavLink to="/" className="brand">
-            <img src="/favicon.svg" alt="" />
-            Neura
-          </NavLink>
+      <aside className="sidebar" aria-label="Primary">
+        <Link to="/" className="brand">
+          <Mark />
+          Neura
+        </Link>
+        <div className="switcher">
+          <OrgSwitcher orgId={orgId} />
         </div>
-        <div className="topbar-right">
-          <span className="muted small">{me.data?.kind === "api_token" ? "API token" : ""}</span>
-          <button type="button" className="button small" onClick={() => void auth.signOut()}>
-            Sign out
-          </button>
-        </div>
-      </header>
-      <main id="main" className="content" tabIndex={-1} style={{ margin: "0 auto" }}>
-        <Outlet />
-      </main>
+        <nav aria-label="Organization" style={{ display: "grid", gap: 2 }}>
+          <div className="nav-section">
+            <span className="nav-heading">Organization</span>
+            {NAV.flatMap((s) => s.links)
+              .filter((l) => l.org)
+              .map((link) => (
+                <NavLink key={link.to} to={`/o/${orgId}/${link.to}`} className="nav-link">
+                  <link.icon />
+                  {link.label}
+                </NavLink>
+              ))}
+          </div>
+        </nav>
+        <SidebarFooter />
+      </aside>
+      <div className="main">
+        <Topbar />
+        <main id="main" className="content" tabIndex={-1}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

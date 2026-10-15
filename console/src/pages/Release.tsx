@@ -9,7 +9,10 @@ import {
   useActivationRequests,
   useApiMutation,
   useArtifacts,
+  useAudit,
   useDeployment,
+  useFaults,
+  useSessions,
   useExecutionProfiles,
   useOperation,
   useRevisions,
@@ -18,20 +21,31 @@ import {
   useSites,
 } from "../api/queries";
 import { documentTitle, sharingCase } from "../components/Contracts";
+import { LayersIcon, PlayIcon, PlusIcon, RewindIcon, RocketIcon } from "../components/Icons";
+import { AuditTable, FaultTable, SessionTable } from "../components/Tables";
+
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
 import {
   Badge,
   Callout,
   Card,
+  DataAge,
   Empty,
   ErrorState,
   Field,
+  KeyValue,
+  LineChart,
   Loading,
   PageHeader,
   Reason,
   Status,
+  TabPanel,
+  Tabs,
   Time,
+  useLiveSeries,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { shortId } from "../lib/format";
@@ -46,12 +60,51 @@ export function ReleasePage() {
   const requests = useActivationRequests(projectId, deploymentId);
   const robots = useRobots(projectId);
   const sites = useSites(projectId);
+  const sessions = useSessions(projectId);
+  const faults = useFaults(projectId);
+  const audit = useAudit(projectId);
   const artifacts = useArtifacts(projectId);
   const robotProfiles = useRobotProfiles(projectId);
   const executionProfiles = useExecutionProfiles(projectId);
   const can = usePermissions(orgId);
   const [dialog, setDialog] = useState<"revision" | "activate" | "rollback" | null>(null);
   const [tracking, setTracking] = useState<string | null>(null);
+  const robotIds = deployment.data?.spec.robot_ids ?? [];
+  const ourSessions = (sessions.data ?? []).filter((x) => robotIds.includes(x.robot_id));
+  const ourFaults = (faults.data ?? []).filter((f) => robotIds.includes(f.robot_id));
+  const revisionIds = new Set((revisions.data ?? []).map((r) => r.metadata.id));
+  const ourAudit = (audit.data ?? []).filter(
+    (a) =>
+      a.target === deploymentId || revisionIds.has(a.target) || a.target.includes(deploymentId),
+  );
+  const tabs: TabSpec[] = [
+    { id: "overview", label: "Overview" },
+    { id: "revisions", label: "Revisions", count: revisions.data?.length ?? null },
+    { id: "activations", label: "Activations", count: requests.data?.length ?? null },
+    {
+      id: "sessions",
+      label: "Sessions",
+      count: ourSessions.filter((x) => x.state !== "Disconnected").length,
+    },
+    {
+      id: "faults",
+      label: "Faults",
+      count: ourFaults.filter((f) => f.latched && !f.cleared_at).length,
+    },
+    { id: "activity", label: "Activity" },
+  ];
+  const [tab, setTab] = useTab(tabs);
+  const liveBuffer = useLiveSeries(
+    `${deploymentId}:buffer`,
+    sessions.data
+      ? mean(
+          ourSessions
+            .filter((x) => x.state !== "Disconnected")
+            .map((x) => x.metrics?.buffer_actions),
+        )
+      : undefined,
+    sessions.dataUpdatedAt,
+  );
 
   if (deployment.isPending) return <Loading />;
   if (deployment.isError) return <ErrorState error={deployment.error} />;
@@ -64,34 +117,41 @@ export function ReleasePage() {
     documentTitle(list.find((x) => x.metadata.id === id) as never);
   const pending = (requests.data ?? []).filter((r) => r.state === "AwaitingLocalApproval");
   const stale = site ? !site.status.connected : false;
+  const activeCount = Object.values(active).filter(Boolean).length;
 
   return (
     <>
       <PageHeader
-        breadcrumbs={<Link to={`${base}/releases`}>Releases</Link>}
+        breadcrumbs={<Link to={`${base}/deployments`}>Deployments</Link>}
+        icon={<RocketIcon />}
         title={d.spec.display_name}
-        description={
-          <span className="row">
-            <Status phase={d.status.phase} />
-            <span className="secondary">
+        meta={
+          <>
+            <Status phase={d.status.phase} stale={stale} />
+            <span>
               at{" "}
               {site ? (
                 <Link to={`${base}/sites/${site.metadata.id}`}>{site.spec.display_name}</Link>
               ) : (
                 "—"
-              )}{" "}
-              · {d.spec.robot_ids.length} robots ·{" "}
-              {d.spec.rollout.strategy === "single_robot_canary"
-                ? "canary first"
-                : "all at task boundary"}
+              )}
             </span>
-          </span>
+            <span>
+              {activeCount} / {d.spec.robot_ids.length} robots on the active revision
+            </span>
+            <span>
+              {d.spec.rollout.strategy === "single_robot_canary"
+                ? "Canary first"
+                : "All at task boundary"}
+            </span>
+            <span className="tag">{d.metadata.id}</span>
+          </>
         }
         actions={
           can.deploy ? (
             <>
               <button type="button" className="button" onClick={() => setDialog("revision")}>
-                New revision
+                <PlusIcon /> New revision
               </button>
               <button
                 type="button"
@@ -99,7 +159,7 @@ export function ReleasePage() {
                 disabled={revisionList.length < 2}
                 onClick={() => setDialog("rollback")}
               >
-                Roll back
+                <RewindIcon /> Roll back
               </button>
               <button
                 type="button"
@@ -107,7 +167,7 @@ export function ReleasePage() {
                 disabled={prepared.length === 0}
                 onClick={() => setDialog("activate")}
               >
-                Request activation
+                <PlayIcon /> Request activation
               </button>
             </>
           ) : null
@@ -134,147 +194,271 @@ export function ReleasePage() {
         />
       ) : null}
 
-      <Card
-        title="Robots"
-        description="Observed per robot. A request never shows as running until the site reports it."
-        flush
-      >
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Robot</th>
-                <th scope="col">State</th>
-                <th scope="col">Active revision (observed)</th>
-                <th scope="col">Prepared at the site</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.spec.robot_ids.map((robotId) => {
-                const robot = robots.data?.find((r) => r.metadata.id === robotId);
-                const activeId = active[robotId] ?? null;
-                return (
-                  <tr key={robotId}>
-                    <td>
-                      <Link to={`${base}/robots/${robotId}`}>
-                        {robot?.spec.display_name ?? shortId(robotId)}
-                      </Link>
-                      {d.spec.rollout.canary_robot_id === robotId ? (
-                        <span style={{ marginLeft: 6 }}>
-                          <Badge tone="info">Canary</Badge>
+      <Lifecycle
+        latest={revisionList[0]}
+        pending={pending.length > 0}
+        activeOn={
+          revisionList[0]
+            ? Object.values(active).filter((id) => id === revisionList[0]?.metadata.id).length
+            : 0
+        }
+        robots={d.spec.robot_ids.length}
+      />
+
+      <Tabs label="Deployment" tabs={tabs} value={tab} onChange={setTab} />
+
+      {tab === "overview" ? (
+        <TabPanel label="Overview">
+          <div className="grid main-side">
+            <Card
+              title="Robots"
+              description="Observed per robot. A request never shows as running until the site reports it."
+              flush
+            >
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Robot</th>
+                      <th scope="col">State</th>
+                      <th scope="col">Active revision (observed)</th>
+                      <th scope="col">Prepared at the site</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.spec.robot_ids.map((robotId) => {
+                      const robot = robots.data?.find((r) => r.metadata.id === robotId);
+                      const activeId = active[robotId] ?? null;
+                      return (
+                        <tr key={robotId}>
+                          <td>
+                            <Link to={`${base}/robots/${robotId}`}>
+                              {robot?.spec.display_name ?? shortId(robotId)}
+                            </Link>
+                            {d.spec.rollout.canary_robot_id === robotId ? (
+                              <span style={{ marginLeft: 6 }}>
+                                <Badge tone="info">Canary</Badge>
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>
+                            <Status phase={robot?.status.phase} stale={stale} />
+                          </td>
+                          <td>
+                            {activeId ? (
+                              <span className="tag">{shortId(activeId)}</span>
+                            ) : (
+                              <span className="muted">None</span>
+                            )}
+                          </td>
+                          <td>
+                            {d.status.prepared_revision_id ? (
+                              <span className="tag">{shortId(d.status.prepared_revision_id)}</span>
+                            ) : (
+                              <span className="muted">None</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+            <div className="stack" style={{ gap: 16 }}>
+              <Card
+                title="Action buffer"
+                description="Mean actions queued on this deployment's live robots."
+              >
+                <LineChart
+                  label="Mean actions queued"
+                  points={liveBuffer}
+                  height={110}
+                  format={(v) => v.toFixed(0)}
+                  empty="Appears while robots are served"
+                />
+              </Card>
+              <Card title="Details">
+                <KeyValue
+                  items={[
+                    ["Identifier", <code key="id">{d.spec.name}</code>],
+                    ["Created", <Time key="c" iso={d.metadata.created_at} />],
+                    [
+                      "Prepared revision",
+                      d.status.prepared_revision_id ? (
+                        <code key="p">{shortId(d.status.prepared_revision_id)}</code>
+                      ) : (
+                        <span key="p" className="muted">
+                          None
                         </span>
-                      ) : null}
-                    </td>
-                    <td>
-                      <Status phase={robot?.status.phase} stale={stale} />
-                    </td>
-                    <td>
-                      {activeId ? (
-                        <code>{shortId(activeId)}</code>
-                      ) : (
-                        <span className="muted">None</span>
-                      )}
-                    </td>
-                    <td>
-                      {d.status.prepared_revision_id ? (
-                        <code>{shortId(d.status.prepared_revision_id)}</code>
-                      ) : (
-                        <span className="muted">None</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card
-        title="Revisions"
-        description="Immutable: a model artifact, a robot profile and an execution profile."
-        flush
-      >
-        {revisions.isPending ? (
-          <Loading />
-        ) : revisionList.length === 0 ? (
-          <Empty title="No revisions yet">
-            <p>Add a revision with the model and profiles to run.</p>
-          </Empty>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Revision</th>
-                  <th scope="col">Runs</th>
-                  <th scope="col">Compatibility</th>
-                  <th scope="col">Phase</th>
-                  <th scope="col">Capacity at the site</th>
-                  <th scope="col">
-                    <span className="visually-hidden">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {revisionList.map((rev) => (
-                  <RevisionRow
-                    key={rev.metadata.id}
-                    revision={rev}
-                    activeCount={
-                      Object.values(active).filter((id) => id === rev.metadata.id).length
-                    }
-                    artifact={name(rev.spec.model_artifact_id, artifacts.data ?? [])}
-                    profile={name(rev.spec.execution_profile_id, executionProfiles.data ?? [])}
-                    robot={name(rev.spec.robot_profile_id, robotProfiles.data ?? [])}
-                    canDeploy={can.deploy}
-                    projectId={projectId}
-                    deploymentId={deploymentId}
-                    onOperation={setTracking}
-                  />
-                ))}
-              </tbody>
-            </table>
+                      ),
+                    ],
+                    [
+                      "Site data",
+                      <DataAge
+                        key="age"
+                        ageSeconds={d.status.data_age_seconds}
+                        fetchedAt={deployment.dataUpdatedAt}
+                        never="Not reported yet"
+                      />,
+                    ],
+                  ]}
+                />
+              </Card>
+            </div>
           </div>
-        )}
-      </Card>
+        </TabPanel>
+      ) : null}
 
-      <Card title="Activation requests" flush>
-        {(requests.data ?? []).length === 0 ? (
-          <p className="card-body muted">No activations requested yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Requested</th>
-                  <th scope="col">Revision</th>
-                  <th scope="col">Robots</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Approved by (at the site)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...(requests.data ?? [])].reverse().map((r) => (
-                  <tr key={r.metadata.id}>
-                    <td>
-                      <Time iso={r.metadata.created_at} />
-                    </td>
-                    <td>
-                      <code>{shortId(r.revision_id)}</code>
-                    </td>
-                    <td>{r.robot_ids.length}</td>
-                    <td>
-                      <Status phase={r.state} />
-                    </td>
-                    <td>{r.approved_by ?? <span className="muted">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      {tab === "revisions" ? (
+        <TabPanel label="Revisions">
+          <Card
+            title="Revisions"
+            description="Immutable: a model artifact, a robot profile and an execution profile. Newest first."
+            flush
+          >
+            {revisions.isPending ? (
+              <Loading />
+            ) : revisionList.length === 0 ? (
+              <Empty
+                title="No revisions yet"
+                icon={<LayersIcon />}
+                actions={
+                  can.deploy ? (
+                    <button
+                      type="button"
+                      className="button primary small"
+                      onClick={() => setDialog("revision")}
+                    >
+                      New revision
+                    </button>
+                  ) : null
+                }
+              >
+                <p>Add a revision with the model and profiles to run.</p>
+              </Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Revision</th>
+                      <th scope="col">Runs</th>
+                      <th scope="col">Compatibility</th>
+                      <th scope="col">Phase</th>
+                      <th scope="col">Capacity at the site</th>
+                      <th scope="col">
+                        <span className="visually-hidden">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {revisionList.map((rev) => (
+                      <RevisionRow
+                        key={rev.metadata.id}
+                        revision={rev}
+                        activeCount={
+                          Object.values(active).filter((id) => id === rev.metadata.id).length
+                        }
+                        artifact={name(rev.spec.model_artifact_id, artifacts.data ?? [])}
+                        profile={name(rev.spec.execution_profile_id, executionProfiles.data ?? [])}
+                        robot={name(rev.spec.robot_profile_id, robotProfiles.data ?? [])}
+                        canDeploy={can.deploy}
+                        projectId={projectId}
+                        deploymentId={deploymentId}
+                        onOperation={setTracking}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+
+      {tab === "activations" ? (
+        <TabPanel label="Activations">
+          <Card
+            title="Activation requests"
+            description="Requested here, approved or refused by a person at the site."
+            flush
+          >
+            {(requests.data ?? []).length === 0 ? (
+              <Empty title="No activations requested yet" icon={<PlayIcon />}>
+                <p>Prepare a revision at the site, then request its activation.</p>
+              </Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Requested</th>
+                      <th scope="col">Revision</th>
+                      <th scope="col">Robots</th>
+                      <th scope="col">State</th>
+                      <th scope="col">Approved by (at the site)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(requests.data ?? [])].reverse().map((r) => (
+                      <tr key={r.metadata.id}>
+                        <td>
+                          <Time iso={r.metadata.created_at} />
+                        </td>
+                        <td>
+                          <span className="tag">{shortId(r.revision_id)}</span>
+                        </td>
+                        <td>{r.robot_ids.length}</td>
+                        <td>
+                          <Status phase={r.state} />
+                        </td>
+                        <td>{r.approved_by ?? <span className="muted">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+
+      {tab === "sessions" ? (
+        <TabPanel label="Sessions">
+          <Card
+            title="Sessions"
+            description="This deployment's robots on the site's gateway."
+            flush
+          >
+            <SessionTable sessions={ourSessions} fetchedAt={sessions.dataUpdatedAt} />
+          </Card>
+        </TabPanel>
+      ) : null}
+
+      {tab === "faults" ? (
+        <TabPanel label="Faults">
+          <Card
+            title="Faults"
+            description="Latched on this deployment's robots; reset only at the site."
+            flush
+          >
+            <FaultTable faults={ourFaults} />
+          </Card>
+        </TabPanel>
+      ) : null}
+
+      {tab === "activity" ? (
+        <TabPanel label="Activity">
+          <Card
+            title="Audit trail"
+            description="Every change to this deployment and its revisions."
+            flush
+          >
+            <AuditTable records={ourAudit} />
+          </Card>
+        </TabPanel>
+      ) : null}
 
       {dialog === "revision" ? (
         <NewRevision
@@ -306,6 +490,78 @@ export function ReleasePage() {
         />
       ) : null}
     </>
+  );
+}
+
+function mean(values: (number | undefined)[]): number | null {
+  const present = values.filter((v): v is number => typeof v === "number");
+  return present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
+}
+
+/** Where the newest revision is on its way to the robots (design §20.9). */
+function Lifecycle({
+  latest,
+  pending,
+  activeOn,
+  robots,
+}: {
+  latest: Revision | undefined;
+  pending: boolean;
+  activeOn: number;
+  robots: number;
+}) {
+  const phase = latest?.status.phase;
+  const preparedOrLater = phase === "Prepared" || activeOn > 0;
+  const stages: { label: string; state: "done" | "now" | "blocked" | "todo"; text: string }[] = [
+    {
+      label: "Revision",
+      state: latest ? "done" : "now",
+      text: latest ? shortId(latest.metadata.id) : "Add the model to run",
+    },
+    {
+      label: "Prepared at the site",
+      state: preparedOrLater
+        ? "done"
+        : phase === "Preparing"
+          ? "now"
+          : phase === "Failed"
+            ? "blocked"
+            : "todo",
+      text: preparedOrLater
+        ? "Verified, warmed, profiled"
+        : phase === "Preparing"
+          ? "Pulling and verifying"
+          : phase === "Failed"
+            ? "Failed: see the revision"
+            : "Not yet",
+    },
+    {
+      label: "Activation requested",
+      state: activeOn > 0 ? "done" : pending ? "done" : preparedOrLater ? "now" : "todo",
+      text: activeOn > 0 || pending ? "Requested" : "Not yet",
+    },
+    {
+      label: "Approved at the site",
+      state: activeOn > 0 ? "done" : pending ? "blocked" : "todo",
+      text: activeOn > 0 ? "Approved" : pending ? "Waiting for a person at the site" : "—",
+    },
+    {
+      label: "Running on robots",
+      state: activeOn > 0 && activeOn === robots ? "done" : activeOn > 0 ? "now" : "todo",
+      text: `${activeOn} of ${robots} robots`,
+    },
+  ];
+  return (
+    <section className="card" aria-label="Rollout of the newest revision">
+      <ol className="pipeline" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {stages.map((stage) => (
+          <li key={stage.label} className={`pipeline-stage ${stage.state}`}>
+            <span className="label">{stage.label}</span>
+            <span className={stage.state === "todo" ? "muted small" : "small"}>{stage.text}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

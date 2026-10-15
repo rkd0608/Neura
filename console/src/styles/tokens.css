@@ -1,25 +1,91 @@
-/* Design tokens. Status colors meet WCAG 2.1 AA against their backgrounds; status is never
-   conveyed by color alone (every badge has a text label). */
+/* Design tokens (NucleiLabs design system, shared with the landing page).
+   Dark first, with a light theme. The brand accent is iris; amber stays reserved for "waiting",
+   so the brand never reads as a warning. Text and status colors meet WCAG 2.1 AA against their
+   backgrounds, and status is never conveyed by color alone (every status has a text label). */
 :root {
+  --font-sans:
+    "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Berkeley Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --sidebar: 244px;
+  --topbar: 52px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Dark: the default, and what "system" resolves to on a dark OS. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --bg-elevated: #0e0e11;
+  --surface: #111114;
+  --surface-2: #17171b;
+  --surface-3: #1f1f24;
+  --hover: rgb(255 255 255 / 4.5%);
+  --border: #26262c;
+  --border-strong: #36363e;
+  --text: #ededf0;
+  --text-2: #b0b0bb;
+  --text-3: #8a8a96;
+
+  --accent: #a595ff;
+  --accent-strong: #c4b9ff;
+  --accent-soft: rgb(165 149 255 / 13%);
+  --accent-line: rgb(165 149 255 / 38%);
+  --on-accent: #0d0a1f;
+  --focus: #b8abff;
+  --glow: 0 0 0 1px rgb(165 149 255 / 30%), 0 8px 32px rgb(124 99 255 / 22%);
+
+  --ok: #5ad48f;
+  --ok-soft: rgb(90 212 143 / 12%);
+  --warn: #f2b84b;
+  --warn-soft: rgb(242 184 75 / 12%);
+  --danger: #ff7a72;
+  --danger-soft: rgb(255 122 114 / 12%);
+  --info: #7fb2ff;
+  --info-soft: rgb(127 178 255 / 12%);
+  --muted: #9a9aa6;
+  --muted-soft: rgb(255 255 255 / 6%);
+
+  --chart-1: #a595ff;
+  --chart-2: #5ad48f;
+  --chart-3: #7fb2ff;
+  --chart-4: #f2b84b;
+  --chart-grid: rgb(255 255 255 / 6%);
+
+  --shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 60%), 0 0 0 1px var(--border);
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
-
-  --bg: #f6f7f9;
+  --bg: #fafafb;
+  --bg-elevated: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #dde1e7;
-  --border-strong: #c3c9d3;
-  --text: #121722;
-  --text-2: #4a5466;
-  --text-3: #636d7e;
-  --accent: #1f5eff;
-  --accent-strong: #1747c8;
-  --accent-soft: #e8efff;
-  --on-accent: #ffffff;
-  --focus: #1f5eff;
+  --surface-2: #f5f5f7;
+  --surface-3: #ececf0;
+  --hover: rgb(15 15 30 / 4%);
+  --border: #e5e5ea;
+  --border-strong: #d0d0d8;
+  --text: #121216;
+  --text-2: #4d4d58;
+  --text-3: #63636e;
 
-  --ok: #0e7a43;
+  --accent: #5a41d8;
+  --accent-strong: #4630b8;
+  --accent-soft: #efecff;
+  --accent-line: rgb(90 65 216 / 35%);
+  --on-accent: #ffffff;
+  --focus: #5a41d8;
+  --glow: 0 0 0 1px rgb(90 65 216 / 25%), 0 8px 28px rgb(90 65 216 / 14%);
+
+  --ok: #0c7a42;
   --ok-soft: #e3f6ec;
   --warn: #8a5a00;
   --warn-soft: #fff3d6;
@@ -27,44 +93,57 @@
   --danger-soft: #fdecea;
   --info: #1d55c9;
   --info-soft: #e8efff;
-  --muted: #5d6676;
-  --muted-soft: #eceef2;
+  --muted: #5d5d68;
+  --muted-soft: #ededf1;
 
-  --radius-sm: 6px;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
-  --shadow-lg: 0 12px 32px rgb(16 24 40 / 18%);
-  --sidebar: 232px;
+  --chart-1: #5a41d8;
+  --chart-2: #0c7a42;
+  --chart-3: #1d55c9;
+  --chart-4: #a86c00;
+  --chart-grid: rgb(15 15 30 / 7%);
+
+  --shadow: 0 1px 2px rgb(16 16 40 / 6%), 0 1px 3px rgb(16 16 40 / 6%);
+  --shadow-lg: 0 24px 64px rgb(16 16 40 / 18%), 0 0 0 1px var(--border);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0d1117;
-    --surface: #151b24;
-    --surface-2: #1b2330;
-    --border: #2a3342;
-    --border-strong: #3a4558;
-    --text: #e8ecf2;
-    --text-2: #b4bdcb;
-    --text-3: #98a2b3;
-    --accent: #6b9bff;
-    --accent-strong: #8fb3ff;
-    --accent-soft: #1b2a4a;
-    --on-accent: #0b1220;
-    --focus: #8fb3ff;
-
-    --ok: #4cc38a;
-    --ok-soft: #12291f;
-    --warn: #f0b443;
-    --warn-soft: #2e2410;
-    --danger: #ff7b72;
-    --danger-soft: #3a1714;
-    --info: #79a6ff;
-    --info-soft: #172442;
-    --muted: #a3acba;
-    --muted-soft: #222a36;
-    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+/* "System" follows the OS when no theme was chosen. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #fafafb;
+    --bg-elevated: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f5f5f7;
+    --surface-3: #ececf0;
+    --hover: rgb(15 15 30 / 4%);
+    --border: #e5e5ea;
+    --border-strong: #d0d0d8;
+    --text: #121216;
+    --text-2: #4d4d58;
+    --text-3: #63636e;
+    --accent: #5a41d8;
+    --accent-strong: #4630b8;
+    --accent-soft: #efecff;
+    --accent-line: rgb(90 65 216 / 35%);
+    --on-accent: #ffffff;
+    --focus: #5a41d8;
+    --glow: 0 0 0 1px rgb(90 65 216 / 25%), 0 8px 28px rgb(90 65 216 / 14%);
+    --ok: #0c7a42;
+    --ok-soft: #e3f6ec;
+    --warn: #8a5a00;
+    --warn-soft: #fff3d6;
+    --danger: #b42318;
+    --danger-soft: #fdecea;
+    --info: #1d55c9;
+    --info-soft: #e8efff;
+    --muted: #5d5d68;
+    --muted-soft: #ededf1;
+    --chart-1: #5a41d8;
+    --chart-2: #0c7a42;
+    --chart-3: #1d55c9;
+    --chart-4: #a86c00;
+    --chart-grid: rgb(15 15 30 / 7%);
+    --shadow: 0 1px 2px rgb(16 16 40 / 6%), 0 1px 3px rgb(16 16 40 / 6%);
+    --shadow-lg: 0 24px 64px rgb(16 16 40 / 18%), 0 0 0 1px var(--border);
   }
 }

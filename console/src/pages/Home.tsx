@@ -1,22 +1,46 @@
-// Home: the project at a glance, items needing attention first (design §19.3), and the steps
-// from an empty project to robots running a model.
+// Overview: the project at a glance (design §19.3). What needs attention comes first; then the
+// steps from an empty project to robots running a model; then deployments, how the fleet is
+// being served right now, and what just changed.
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router";
 
 import { api, unwrap } from "../api/client";
+import { useEventFeed } from "../api/events";
 import {
   useArtifacts,
   useDeployments,
   useExecutionProfiles,
   useFaults,
+  useMetric,
   useProject,
   useRobotProfiles,
   useRobots,
   useSessions,
   useSites,
 } from "../api/queries";
-import { Card, Loading, PageHeader, Reason, Stat, Status } from "../components/ui";
-import { useScope } from "../lib/context";
+import { ActivityFeed } from "../components/Activity";
+import {
+  AlertIcon,
+  BotIcon,
+  BuildingIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  PulseIcon,
+  RocketIcon,
+} from "../components/Icons";
+import {
+  Card,
+  Empty,
+  LineChart,
+  Loading,
+  Meter,
+  PageHeader,
+  Reason,
+  Sparkline,
+  Status,
+  useLiveSeries,
+} from "../components/ui";
+import { usePermissions, useScope } from "../lib/context";
 
 interface Step {
   title: string;
@@ -27,7 +51,8 @@ interface Step {
 }
 
 export function Home() {
-  const { projectId, base } = useScope();
+  const { orgId, projectId, base } = useScope();
+  const can = usePermissions(orgId);
   const project = useProject(projectId);
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
@@ -37,6 +62,8 @@ export function Home() {
   const artifacts = useArtifacts(projectId);
   const robotProfiles = useRobotProfiles(projectId);
   const executionProfiles = useExecutionProfiles(projectId);
+  const events = useEventFeed(projectId);
+  const missRate = useMetric(projectId, "deadline_miss_rate");
   const servers = useQueries({
     queries: (sites.data ?? []).map((site) => ({
       queryKey: ["p", projectId, "servers", site.metadata.id],
@@ -49,6 +76,41 @@ export function Home() {
     })),
   });
 
+  const sessionList = sessions.data ?? [];
+  // A robot that reconnected can still have an older session reported until it expires: count
+  // each robot's newest live session once.
+  const live = [
+    ...new Map(
+      sessionList.filter((s) => s.state !== "Disconnected").map((s) => [s.robot_id, s]),
+    ).values(),
+  ];
+  const running = (robots.data ?? []).filter((r) => r.status.phase === "Running").length;
+  const at = sessions.dataUpdatedAt;
+  const avg = (pick: (s: (typeof live)[number]) => number | undefined) => {
+    const values = live.map(pick).filter((v): v is number => typeof v === "number");
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  };
+  const runningSeries = useLiveSeries(
+    `${projectId}:running`,
+    sessions.data ? live.filter((s) => s.state === "Running").length : undefined,
+    at,
+  );
+  const liveSeries = useLiveSeries(
+    `${projectId}:live`,
+    sessions.data ? live.length : undefined,
+    at,
+  );
+  const bufferSeries = useLiveSeries(
+    `${projectId}:buffer`,
+    sessions.data ? avg((s) => s.metrics?.buffer_actions) : undefined,
+    at,
+  );
+  const rttSeries = useLiveSeries(
+    `${projectId}:rtt`,
+    sessions.data ? avg((s) => s.metrics?.rtt_p99_ms) : undefined,
+    at,
+  );
+
   if (sites.isPending || robots.isPending || deployments.isPending) return <Loading />;
 
   const siteList = sites.data ?? [];
@@ -56,9 +118,7 @@ export function Home() {
   const deploymentList = deployments.data ?? [];
   const serverCount = servers.reduce((n, q) => n + (q.data?.length ?? 0), 0);
   const connected = siteList.filter((s) => s.status.connected).length;
-  const running = robotList.filter((r) => r.status.phase === "Running").length;
   const latched = (faults.data ?? []).filter((f) => f.latched && !f.cleared_at);
-  const live = (sessions.data ?? []).filter((s) => s.state !== "Disconnected");
   const contracts =
     (artifacts.data?.length ?? 0) > 0 &&
     (robotProfiles.data?.length ?? 0) > 0 &&
@@ -80,7 +140,7 @@ export function Home() {
       title: "Connect a GPU server",
       text: "Run one command on the server. It dials out to Neura; no inbound ports.",
       done: serverCount > 0,
-      to: siteList[0] ? `${base}/sites/${siteList[0].metadata.id}` : `${base}/sites`,
+      to: siteList[0] ? `${base}/sites/${siteList[0].metadata.id}?connect=1` : `${base}/sites`,
       action: "Connect a server",
     },
     {
@@ -98,17 +158,17 @@ export function Home() {
       action: "Add robots",
     },
     {
-      title: "Create a release and prepare it",
+      title: "Create a deployment and prepare it",
       text: "The site verifies the contracts and estimates how many robots it can serve.",
       done: prepared,
-      to: `${base}/releases`,
-      action: "Open releases",
+      to: `${base}/deployments`,
+      action: "Open deployments",
     },
     {
       title: "Activate, with approval at the site",
       text: "The cloud requests activation; a person at the site approves it. Robots switch at a task boundary.",
       done: active,
-      to: `${base}/releases`,
+      to: `${base}/deployments`,
       action: "Request activation",
     },
   ];
@@ -143,20 +203,64 @@ export function Home() {
     })),
   ];
 
+  const spark = (series: [number, number | null][]) =>
+    series.map((p) => p[1]).filter((v): v is number => v !== null);
+
   return (
     <>
       <PageHeader
         title={project.data?.spec.display_name ?? "Project"}
         description="What is running, what needs attention, and what to do next."
+        actions={
+          can.deploy ? (
+            <>
+              <Link className="button" to={`${base}/robots`}>
+                <BotIcon /> Robots
+              </Link>
+              <Link className="button primary" to={`${base}/deployments?new=1`}>
+                <PlusIcon /> New deployment
+              </Link>
+            </>
+          ) : null
+        }
       />
+
       <div className="grid cols-4">
-        <Stat label="Sites connected" value={`${connected} / ${siteList.length}`} />
-        <Stat label="GPU servers" value={serverCount} />
-        <Stat label="Robots running" value={`${running} / ${robotList.length}`} />
-        <Stat label="Live sessions" value={live.length} note={`${latched.length} latched faults`} />
+        <Tile
+          label="Robots running"
+          icon={<BotIcon />}
+          value={running}
+          of={robotList.length}
+          to={`${base}/robots`}
+          trend={spark(runningSeries)}
+        />
+        <Tile
+          label="Live sessions"
+          icon={<PulseIcon />}
+          value={live.length}
+          to={`${base}/sessions`}
+          trend={spark(liveSeries)}
+          note={`on ${connected} of ${siteList.length} connected sites`}
+        />
+        <Tile
+          label="GPU servers"
+          icon={<BuildingIcon />}
+          value={serverCount}
+          to={`${base}/sites`}
+          note={`${siteList.length} ${siteList.length === 1 ? "site" : "sites"}`}
+        />
+        <Tile
+          label="Open faults"
+          icon={<AlertIcon />}
+          value={latched.length}
+          to={`${base}/faults`}
+          tone={latched.length > 0 ? "danger" : undefined}
+          note={latched.length > 0 ? "latched: reset at the site" : "none latched"}
+        />
       </div>
+
       {attention.length > 0 ? (
-        <Card title="Needs attention" flush>
+        <Card title="Needs attention" description="Faulted robots and offline sites first." flush>
           <div className="table-wrap">
             <table>
               <thead>
@@ -179,6 +283,7 @@ export function Home() {
           </div>
         </Card>
       ) : null}
+
       {current !== -1 ? (
         <Card
           title="Get to robots running a model"
@@ -211,43 +316,182 @@ export function Home() {
           </ol>
         </Card>
       ) : null}
-      <Card title="Releases" flush actions={<Link to={`${base}/releases`}>All releases</Link>}>
-        {deploymentList.length === 0 ? (
-          <p className="card-body muted">No releases yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Release</th>
-                  <th scope="col">Phase</th>
-                  <th scope="col" className="num">
-                    Robots on the active revision
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {deploymentList.map((d) => {
-                  const actives = Object.values(d.status.active_revision_ids ?? {}).filter(Boolean);
-                  return (
-                    <tr key={d.metadata.id}>
-                      <td>
-                        <Link to={`${base}/releases/${d.metadata.id}`}>{d.spec.display_name}</Link>
-                      </td>
-                      <td>
-                        <Status phase={d.status.phase} />
-                      </td>
-                      <td className="num">
-                        {actives.length} / {d.spec.robot_ids.length}
-                      </td>
+
+      <div className="grid main-side">
+        <div className="stack" style={{ gap: 16 }}>
+          <Card
+            title="Deployments"
+            flush
+            actions={<Link to={`${base}/deployments`}>All deployments</Link>}
+          >
+            {deploymentList.length === 0 ? (
+              <Empty
+                title="No deployments yet"
+                icon={<RocketIcon />}
+                actions={
+                  can.deploy ? (
+                    <Link className="button primary small" to={`${base}/deployments?new=1`}>
+                      New deployment
+                    </Link>
+                  ) : null
+                }
+              >
+                <p>A deployment runs one model on a set of robots at a site.</p>
+              </Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Deployment</th>
+                      <th scope="col">Phase</th>
+                      <th scope="col">On the active revision</th>
+                      <th scope="col">
+                        <span className="visually-hidden">Open</span>
+                      </th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {deploymentList.map((d) => {
+                      const actives = Object.values(d.status.active_revision_ids ?? {}).filter(
+                        Boolean,
+                      );
+                      const site = siteList.find((s) => s.metadata.id === d.spec.site_id);
+                      return (
+                        <tr key={d.metadata.id}>
+                          <td>
+                            <Link to={`${base}/deployments/${d.metadata.id}`}>
+                              {d.spec.display_name}
+                            </Link>
+                            <span className="sub">{site?.spec.display_name ?? "—"}</span>
+                          </td>
+                          <td>
+                            <Status phase={d.status.phase} />
+                          </td>
+                          <td style={{ minWidth: 160 }}>
+                            <div className="spread small" style={{ marginBottom: 4 }}>
+                              <span className="secondary">robots</span>
+                              <span className="num">
+                                {actives.length} / {d.spec.robot_ids.length}
+                              </span>
+                            </div>
+                            <Meter
+                              value={actives.length}
+                              max={d.spec.robot_ids.length}
+                              tone="ok"
+                              label={`${actives.length} of ${d.spec.robot_ids.length} robots on the active revision`}
+                            />
+                          </td>
+                          <td className="num">
+                            <Link
+                              to={`${base}/deployments/${d.metadata.id}`}
+                              aria-label={`Open ${d.spec.display_name}`}
+                              className="button ghost small icon"
+                            >
+                              <ChevronRightIcon />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+          <div className="grid cols-2">
+            <Card
+              title="Action buffer"
+              description="Mean actions queued per live robot, as sites report."
+              actions={<Link to={`${base}/sessions`}>Sessions</Link>}
+            >
+              <LineChart
+                label="Mean actions queued"
+                points={bufferSeries}
+                format={(v) => v.toFixed(0)}
+                empty="Appears once robots are served"
+              />
+            </Card>
+            <Card title="Round trip, p99" description="Mean over live robots, milliseconds.">
+              <LineChart
+                label="Round trip p99"
+                points={rttSeries}
+                color="var(--chart-3)"
+                format={(v) => v.toFixed(0)}
+                empty="Appears once robots are served"
+              />
+            </Card>
           </div>
-        )}
-      </Card>
+          <Card
+            title="Deadline misses"
+            description="Share of inference requests that missed their deadline, last hour, from site telemetry."
+          >
+            <LineChart
+              label="Deadline miss rate"
+              points={missRate.data ?? []}
+              color="var(--chart-4)"
+              format={(v) => `${(v * 100).toFixed(1)}%`}
+              empty={
+                missRate.isPending
+                  ? "Loading…"
+                  : "No telemetry in the last hour (sites may run minimal telemetry)"
+              }
+            />
+          </Card>
+        </div>
+        <Card
+          title="Live activity"
+          description="Changes as they happen."
+          flush
+          actions={<Link to={`${base}/activity`}>All activity</Link>}
+        >
+          <ActivityFeed events={events.slice(-80).reverse()} compact />
+        </Card>
+      </div>
     </>
+  );
+}
+
+function Tile({
+  label: text,
+  icon,
+  value,
+  of,
+  note,
+  to,
+  trend,
+  tone,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  value: number;
+  of?: number;
+  note?: string;
+  to: string;
+  trend?: number[];
+  tone?: "danger";
+}) {
+  return (
+    <Link
+      to={to}
+      className="card stat interactive"
+      style={{ color: "inherit", textDecoration: "none" }}
+    >
+      <span className="stat-label">
+        {icon}
+        {text}
+      </span>
+      <span
+        className="stat-value"
+        style={tone === "danger" ? { color: "var(--danger)" } : undefined}
+      >
+        {value}
+        {of !== undefined ? <span className="of"> / {of}</span> : null}
+      </span>
+      <span className="spread">
+        <span className="stat-note">{note ?? " "}</span>
+        {trend && trend.length > 1 ? <Sparkline values={trend} label={`${text} trend`} /> : null}
+      </span>
+    </Link>
   );
 }

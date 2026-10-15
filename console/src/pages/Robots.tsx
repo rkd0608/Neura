@@ -13,6 +13,8 @@ import {
   useSites,
 } from "../api/queries";
 import { Dialog } from "../components/Dialog";
+import { BotIcon, PlusIcon } from "../components/Icons";
+import { FaultTable } from "../components/Tables";
 import { useToasts } from "../components/Toasts";
 import {
   Card,
@@ -24,11 +26,17 @@ import {
   Loading,
   PageHeader,
   Reason,
+  SearchInput,
+  Stat,
   Status,
-  Time,
+  TabPanel,
+  Tabs,
+  useTab,
+  type TabSpec,
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { shortId, slug } from "../lib/format";
+import { label, tone } from "../lib/phases";
 
 function profileName(profile: Schemas["RobotProfile"] | undefined): string {
   const meta = profile?.document.metadata as { name?: string; version?: string } | undefined;
@@ -40,33 +48,101 @@ export function Robots() {
   const robots = useRobots(projectId);
   const sites = useSites(projectId);
   const profiles = useRobotProfiles(projectId);
+  const sessions = useSessions(projectId);
   const can = usePermissions(orgId);
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [siteFilter, setSiteFilter] = useState("all");
   const siteName = (id: string) =>
     sites.data?.find((s) => s.metadata.id === id)?.spec.display_name ?? shortId(id);
   const connected = (id: string) => sites.data?.find((s) => s.metadata.id === id)?.status.connected;
+  const list = (robots.data ?? []).filter((r) => {
+    if (siteFilter !== "all" && r.spec.site_id !== siteFilter) return false;
+    if (!query) return true;
+    return `${r.spec.display_name} ${r.spec.name} ${r.status.phase} ${siteName(r.spec.site_id)}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+  });
+  const phases = (robots.data ?? []).reduce<Record<string, number>>((acc, r) => {
+    const key = r.status.phase;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <>
       <PageHeader
         title="Robots"
-        description="Each robot belongs to a site and has a robot profile. States are what the site last observed."
+        icon={<BotIcon />}
+        description="Each robot belongs to a site and has a robot profile. States are what the site last observed; an offline site's robots show their last known state, greyed."
         actions={
           can.admin ? (
             <button type="button" className="button primary" onClick={() => setOpen(true)}>
-              Add robots
+              <PlusIcon /> Add robots
             </button>
           ) : null
         }
       />
+      {robots.data && robots.data.length > 0 ? (
+        <div className="row" aria-label="Robots by state" role="group">
+          {Object.entries(phases).map(([phase, n]) => (
+            <span key={phase} className={`badge ${tone(phase)}`}>
+              {n} {label(phase).toLowerCase()}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="toolbar">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Filter by name, state or site"
+          label="Filter robots"
+        />
+        <label className="visually-hidden" htmlFor="robot-site-filter">
+          Site
+        </label>
+        <select
+          id="robot-site-filter"
+          value={siteFilter}
+          onChange={(e) => setSiteFilter(e.target.value)}
+          style={{ width: "auto", minWidth: 160 }}
+        >
+          <option value="all">All sites</option>
+          {(sites.data ?? []).map((s) => (
+            <option key={s.metadata.id} value={s.metadata.id}>
+              {s.spec.display_name}
+            </option>
+          ))}
+        </select>
+        <span className="grow" />
+        <span className="muted small">
+          {list.length} of {robots.data?.length ?? 0}
+        </span>
+      </div>
       <Card flush>
         {robots.isPending ? (
           <Loading />
         ) : robots.isError ? (
           <ErrorState error={robots.error} />
         ) : robots.data.length === 0 ? (
-          <Empty title="No robots yet">
-            <p>Register a robot profile under Models first, then add your robots.</p>
+          <Empty
+            title="No robots yet"
+            icon={<BotIcon />}
+            actions={
+              can.admin ? (
+                <button
+                  type="button"
+                  className="button primary small"
+                  onClick={() => setOpen(true)}
+                >
+                  Add robots
+                </button>
+              ) : null
+            }
+          >
+            <p>Register a robot profile under Models & contracts first, then add your robots.</p>
           </Empty>
         ) : (
           <div className="table-wrap">
@@ -75,24 +151,35 @@ export function Robots() {
               <thead>
                 <tr>
                   <th scope="col">Robot</th>
-                  <th scope="col">Site</th>
                   <th scope="col">State</th>
+                  <th scope="col">Site</th>
                   <th scope="col">Active revision</th>
+                  <th scope="col" className="num">
+                    Buffer
+                  </th>
                   <th scope="col">Last report</th>
                 </tr>
               </thead>
               <tbody>
-                {robots.data.map((robot) => {
+                {list.map((robot) => {
                   const stale = connected(robot.spec.site_id) === false;
+                  const session = sessions.data?.find(
+                    (x) => x.robot_id === robot.metadata.id && x.state !== "Disconnected",
+                  );
+                  const to = `${base}/robots/${robot.metadata.id}`;
                   return (
-                    <tr key={robot.metadata.id}>
+                    <tr
+                      key={robot.metadata.id}
+                      className="clickable"
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest("a")) return;
+                        void navigate(to);
+                      }}
+                    >
                       <td>
-                        <Link to={`${base}/robots/${robot.metadata.id}`}>
-                          {robot.spec.display_name}
-                        </Link>
-                        <div className="muted small mono">{robot.spec.name}</div>
+                        <Link to={to}>{robot.spec.display_name}</Link>
+                        <span className="sub mono">{robot.spec.name}</span>
                       </td>
-                      <td>{siteName(robot.spec.site_id)}</td>
                       <td>
                         <Status phase={robot.status.phase} stale={stale} />
                         {robot.status.reason ? (
@@ -102,11 +189,19 @@ export function Robots() {
                         ) : null}
                       </td>
                       <td>
+                        <Link to={`${base}/sites/${robot.spec.site_id}`}>
+                          {siteName(robot.spec.site_id)}
+                        </Link>
+                      </td>
+                      <td>
                         {robot.status.active_revision_id ? (
-                          <code>{shortId(robot.status.active_revision_id)}</code>
+                          <span className="tag">{shortId(robot.status.active_revision_id)}</span>
                         ) : (
                           <span className="muted">None</span>
                         )}
+                      </td>
+                      <td className="num">
+                        {session?.metrics?.buffer_actions ?? <span className="muted">—</span>}
                       </td>
                       <td>
                         <DataAge
@@ -293,6 +388,16 @@ export function RobotPage() {
   const deployments = useDeployments(projectId);
   const can = usePermissions(orgId);
   const [confirming, setConfirming] = useState(false);
+  const mineCount = (sessions.data ?? []).filter((x) => x.robot_id === robotId).length;
+  const faultCount = (faults.data ?? []).filter(
+    (f) => f.robot_id === robotId && f.latched && !f.cleared_at,
+  ).length;
+  const tabs: TabSpec[] = [
+    { id: "overview", label: "Overview" },
+    { id: "sessions", label: "Sessions", count: mineCount },
+    { id: "faults", label: "Faults", count: faultCount },
+  ];
+  const [tab, setTab] = useTab(tabs);
   const remove = useApiMutation(
     async (version: string) => {
       await api.DELETE("/v1/robots/{robot_id}", {
@@ -311,17 +416,28 @@ export function RobotPage() {
   const myFaults = (faults.data ?? []).filter((f) => f.robot_id === robotId);
   const inDeployments = (deployments.data ?? []).filter((d) => d.spec.robot_ids.includes(robotId));
   const stale = site ? !site.status.connected : false;
+  const live = mine.find((x) => x.state !== "Disconnected");
 
   return (
     <>
       <PageHeader
         breadcrumbs={<Link to={`${base}/robots`}>Robots</Link>}
+        icon={<BotIcon />}
         title={r.spec.display_name}
-        description={
-          <span className="row">
+        meta={
+          <>
             <Status phase={r.status.phase} stale={stale} />
+            <span>
+              at{" "}
+              {site ? (
+                <Link to={`${base}/sites/${site.metadata.id}`}>{site.spec.display_name}</Link>
+              ) : (
+                "—"
+              )}
+            </span>
             <DataAge ageSeconds={r.status.data_age_seconds} fetchedAt={robot.dataUpdatedAt} />
-          </span>
+            <span className="tag">{r.metadata.id}</span>
+          </>
         }
         actions={
           can.admin ? (
@@ -331,118 +447,156 @@ export function RobotPage() {
           ) : null
         }
       />
-      <div className="grid cols-2">
-        <Card title="Robot">
-          <KeyValue
-            items={[
-              ["Name", <code key="n">{r.spec.name}</code>],
-              [
-                "Site",
-                site ? (
-                  <Link to={`${base}/sites/${site.metadata.id}`}>{site.spec.display_name}</Link>
-                ) : (
-                  "—"
-                ),
-              ],
-              ["Robot profile", profileName(profile)],
-              [
-                "Releases",
-                inDeployments.length
-                  ? inDeployments.map((d) => (
-                      <Link
-                        key={d.metadata.id}
-                        to={`${base}/releases/${d.metadata.id}`}
-                        style={{ marginRight: 8 }}
-                      >
-                        {d.spec.display_name}
-                      </Link>
-                    ))
-                  : "None",
-              ],
-            ]}
-          />
-        </Card>
-        <Card title="Observed">
-          <KeyValue
-            items={[
-              ["State", <Status key="s" phase={r.status.phase} stale={stale} />],
-              [
-                "Reason",
-                r.status.reason ? <Reason code={r.status.reason} detail={r.status.message} /> : "—",
-              ],
-              [
-                "Active revision",
-                r.status.active_revision_id ? <code>{r.status.active_revision_id}</code> : "None",
-              ],
-              [
-                "Lease holder",
-                r.status.lease_holder_session_id ? (
-                  <code>{r.status.lease_holder_session_id}</code>
-                ) : (
-                  "None"
-                ),
-              ],
-              ["Task epoch", r.status.task_epoch ?? "—"],
-            ]}
-          />
-        </Card>
-      </div>
-      <Card
-        title="Sessions"
-        flush
-        description="Each session is one lease on the gateway; a new one starts when the robot reconnects or switches revision."
-      >
-        {mine.length === 0 ? (
-          <p className="card-body muted">No sessions reported.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Session</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Revision</th>
-                  <th scope="col" className="num">
-                    Lease generation
-                  </th>
-                  <th scope="col" className="num">
-                    Buffer
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {mine.map((s) => (
-                  <tr key={s.metadata.id}>
-                    <td>
-                      <code>{shortId(s.metadata.id)}</code>
-                    </td>
-                    <td>
-                      <Status phase={s.state} />
-                    </td>
-                    <td>
-                      <code>{shortId(s.revision_id)}</code>
-                    </td>
-                    <td className="num">{s.lease_generation}</td>
-                    <td className="num">{s.metrics?.buffer_actions ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Tabs label="Robot" tabs={tabs} value={tab} onChange={setTab} />
+      {tab === "overview" ? (
+        <TabPanel label="Overview">
+          <div className="grid cols-4">
+            <Stat label="Buffer (actions)" value={live?.metrics?.buffer_actions ?? "—"} />
+            <Stat
+              label="RTT p99"
+              value={
+                live?.metrics?.rtt_p99_ms !== undefined
+                  ? `${live.metrics.rtt_p99_ms.toFixed(1)} ms`
+                  : "—"
+              }
+            />
+            <Stat label="Chunks" value={live?.metrics?.chunks ?? "—"} />
+            <Stat label="Task epoch" value={r.status.task_epoch ?? "—"} />
           </div>
-        )}
-      </Card>
-      <Card title="Faults" flush>
-        {myFaults.length === 0 ? (
-          <p className="card-body muted">No faults reported.</p>
-        ) : (
-          <FaultTable faults={myFaults} />
-        )}
-      </Card>
+          <div className="grid cols-2">
+            <Card title="Robot">
+              <KeyValue
+                items={[
+                  ["Name", <code key="n">{r.spec.name}</code>],
+                  [
+                    "Site",
+                    site ? (
+                      <Link to={`${base}/sites/${site.metadata.id}`}>{site.spec.display_name}</Link>
+                    ) : (
+                      "—"
+                    ),
+                  ],
+                  [
+                    "Robot profile",
+                    profile ? (
+                      <Link key="p" to={`${base}/models/RobotProfile/${profile.metadata.id}`}>
+                        {profileName(profile)}
+                      </Link>
+                    ) : (
+                      "—"
+                    ),
+                  ],
+                  [
+                    "Deployments",
+                    inDeployments.length
+                      ? inDeployments.map((d) => (
+                          <Link
+                            key={d.metadata.id}
+                            to={`${base}/deployments/${d.metadata.id}`}
+                            style={{ marginRight: 8 }}
+                          >
+                            {d.spec.display_name}
+                          </Link>
+                        ))
+                      : "None",
+                  ],
+                ]}
+              />
+            </Card>
+            <Card title="Observed">
+              <KeyValue
+                items={[
+                  ["State", <Status key="s" phase={r.status.phase} stale={stale} />],
+                  [
+                    "Reason",
+                    r.status.reason ? (
+                      <Reason code={r.status.reason} detail={r.status.message} />
+                    ) : (
+                      "—"
+                    ),
+                  ],
+                  [
+                    "Active revision",
+                    r.status.active_revision_id ? (
+                      <code>{r.status.active_revision_id}</code>
+                    ) : (
+                      "None"
+                    ),
+                  ],
+                  [
+                    "Lease holder",
+                    r.status.lease_holder_session_id ? (
+                      <code>{r.status.lease_holder_session_id}</code>
+                    ) : (
+                      "None"
+                    ),
+                  ],
+                ]}
+              />
+            </Card>
+          </div>
+        </TabPanel>
+      ) : null}
+      {tab === "sessions" ? (
+        <TabPanel label="Sessions">
+          <Card
+            title="Sessions"
+            flush
+            description="Each session is one lease on the gateway; a new one starts when the robot reconnects or switches revision."
+          >
+            {mine.length === 0 ? (
+              <Empty title="No sessions reported" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Session</th>
+                      <th scope="col">State</th>
+                      <th scope="col">Revision</th>
+                      <th scope="col" className="num">
+                        Lease generation
+                      </th>
+                      <th scope="col" className="num">
+                        Buffer
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mine.map((x) => (
+                      <tr key={x.metadata.id}>
+                        <td>
+                          <code>{shortId(x.metadata.id)}</code>
+                        </td>
+                        <td>
+                          <Status phase={x.state} />
+                        </td>
+                        <td>
+                          <span className="tag">{shortId(x.revision_id)}</span>
+                        </td>
+                        <td className="num">{x.lease_generation}</td>
+                        <td className="num">{x.metrics?.buffer_actions ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </TabPanel>
+      ) : null}
+      {tab === "faults" ? (
+        <TabPanel label="Faults">
+          <Card title="Faults" flush>
+            <FaultTable faults={myFaults} />
+          </Card>
+        </TabPanel>
+      ) : null}
       <Dialog
         open={confirming}
         onClose={() => setConfirming(false)}
         title={`Remove ${r.spec.display_name}?`}
-        description="The robot leaves every release; the site stops serving it from its next desired state."
+        description="The robot leaves every deployment; the site stops serving it from its next desired state."
       >
         <div className="dialog-body">
           {remove.isError ? (
@@ -474,48 +628,4 @@ export function RobotPage() {
   );
 }
 
-export function FaultTable({ faults }: { faults: Schemas["Fault"][] }) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Fault</th>
-            <th scope="col">State</th>
-            <th scope="col">Local response</th>
-            <th scope="col">When</th>
-          </tr>
-        </thead>
-        <tbody>
-          {faults.map((f) => (
-            <tr key={f.metadata.id}>
-              <td>
-                <Reason code={f.reason} detail={f.message} />
-              </td>
-              <td>
-                {f.cleared_at ? (
-                  <Status phase="Ready" />
-                ) : f.latched ? (
-                  <Status phase="Faulted" />
-                ) : (
-                  <Status phase="Waiting" />
-                )}
-                <div className="muted small">
-                  {f.cleared_at
-                    ? "Cleared"
-                    : f.latched
-                      ? "Latched until reset at the site"
-                      : "Recovering"}
-                </div>
-              </td>
-              <td>{f.local_response ?? <span className="muted">—</span>}</td>
-              <td>
-                <Time iso={f.occurred_at} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+export { FaultTable };

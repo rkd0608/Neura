@@ -37,7 +37,16 @@ function useApiQuery<T>(
   fn: () => Promise<T>,
   options: Partial<UseQueryOptions<T>> = {},
 ) {
-  return useQuery<T>({ queryKey: key, queryFn: fn, ...options });
+  // A query scoped to an organization, project or resource waits for its identifier: never a
+  // request with an empty path segment while the identity or the route is still loading.
+  const scoped = key.length > 1 && (key[0] === "org" || key[0] === "p");
+  const ready = !scoped || (typeof key[1] === "string" && key[1] !== "");
+  return useQuery<T>({
+    queryKey: key,
+    queryFn: fn,
+    ...options,
+    enabled: ready && (options.enabled ?? true),
+  });
 }
 
 // --- identity and organizations ------------------------------------------------------------
@@ -249,6 +258,42 @@ export const useCompatibility = (
         }),
       ),
     { enabled: request !== null, staleTime: 60_000 },
+  );
+
+export type MetricName = S["MetricsQuery"]["metric"];
+
+/** An aggregate metric over the last `windowSeconds`, refreshed every minute (design §18: only
+ *  aggregates ever leave a site). Points are [epoch ms, value | null]. */
+export const useMetric = (
+  projectId: string,
+  metric: MetricName,
+  windowSeconds = 3600,
+  filters: S["MetricsQuery"]["filters"] = {},
+) =>
+  useApiQuery(
+    ["p", projectId, "metric", metric, windowSeconds, filters],
+    async () => {
+      const end = new Date();
+      const start = new Date(end.getTime() - windowSeconds * 1000);
+      const step = Math.max(10, Math.round(windowSeconds / 60));
+      const result = unwrap(
+        await api.POST("/v1/projects/{project_id}/metrics/query", {
+          params: { path: { project_id: projectId } },
+          body: {
+            metric,
+            start: start.toISOString().replace(/\.\d+Z$/, "Z"),
+            end: end.toISOString().replace(/\.\d+Z$/, "Z"),
+            step_seconds: step,
+            filters,
+          },
+        }),
+      );
+      return (result.series[0]?.points ?? []).map(
+        ([t, v]) =>
+          [new Date(t as string).getTime(), v as number | null] as [number, number | null],
+      );
+    },
+    { enabled: Boolean(projectId), refetchInterval: 60_000, staleTime: 30_000 },
   );
 
 // --- mutations ------------------------------------------------------------------------------------

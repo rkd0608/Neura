@@ -115,6 +115,32 @@ CMD ["neura-worker"]
 FROM runtime-models AS neura-worker-gpu
 CMD ["neura-worker"]
 
+# --- NucleiLabs site (static) -------------------------------------------------------------------
+FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS landing-build
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    corepack enable && corepack prepare pnpm@10.28.0 --activate
+WORKDIR /src/landing
+COPY landing/package.json landing/pnpm-lock.yaml ./
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    pnpm install --frozen-lockfile
+COPY landing ./
+# The site shares the console's design tokens.
+COPY console/src/styles/tokens.css /src/console/src/styles/tokens.css
+ARG VITE_CONSOLE_URL VITE_DOCS_URL VITE_CONTACT_URL
+RUN pnpm run build
+
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS neura-landing
+COPY deploy/landing/default.conf /etc/nginx/conf.d/default.conf
+COPY deploy/landing/security-headers.inc /etc/nginx/conf.d/security-headers.inc
+COPY --from=landing-build /src/landing/dist /usr/share/nginx/html
+RUN sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d
+USER nginx
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+
 # --- web console --------------------------------------------------------------------------------
 FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS console-build
 RUN --mount=type=secret,id=ca_bundle,required=false \

@@ -17,6 +17,12 @@ updates:
       console-minor:
         update-types: [minor, patch]
   - package-ecosystem: npm
+    directory: /landing
+    schedule: {interval: weekly}
+    groups:
+      landing-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
     directory: /site
     schedule: {interval: weekly}
     groups:

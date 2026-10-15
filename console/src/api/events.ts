@@ -4,9 +4,54 @@
 // id the server sent, including the starting position it sends first, so nothing is missed
 // across reconnects.
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { currentToken } from "./client";
+import { currentToken, type Schemas } from "./client";
+
+export type ChangeEvent = Schemas["Event"];
+
+// The events this console received, per project, newest last: the live activity feed. Bounded,
+// and only what arrived while the console was open; the audit log is the durable record.
+const FEED_LIMIT = 300;
+const feeds = new Map<string, ChangeEvent[]>();
+const feedListeners = new Set<() => void>();
+const EMPTY: ChangeEvent[] = [];
+
+export function recordEvent(projectId: string, data: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return;
+  }
+  if (!isEvent(parsed)) return;
+  const event = parsed;
+  const feed = [...(feeds.get(projectId) ?? []), event].slice(-FEED_LIMIT);
+  feeds.set(projectId, feed);
+  feedListeners.forEach((l) => l());
+}
+
+function isEvent(value: unknown): value is ChangeEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.type === "string" &&
+    typeof v.resource === "string" &&
+    typeof v.cursor === "string" &&
+    typeof v.occurred_at === "string"
+  );
+}
+
+export function useEventFeed(projectId: string): ChangeEvent[] {
+  return useSyncExternalStore(
+    (listener) => {
+      feedListeners.add(listener);
+      return () => feedListeners.delete(listener);
+    },
+    () => feeds.get(projectId) ?? EMPTY,
+    () => EMPTY,
+  );
+}
 
 export type LiveState = "connecting" | "live" | "reconnecting";
 
@@ -80,7 +125,10 @@ export function useProjectEvents(projectId: string | undefined): LiveState {
             buffer = parsed.rest;
             for (const message of parsed.messages) {
               if (message.id !== null) lastId = message.id;
-              if (message.data !== null) refresh();
+              if (message.data !== null) {
+                recordEvent(projectId, message.data);
+                refresh();
+              }
             }
           }
         } catch {

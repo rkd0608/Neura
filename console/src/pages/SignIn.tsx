@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 
 import { useAuth } from "../auth/AuthProvider";
+import { Mark } from "../components/Icons";
 import { Callout, ErrorState, Field, Loading } from "../components/ui";
 
 export function SignIn() {
@@ -17,11 +18,13 @@ export function SignIn() {
     <div className="center-page">
       <main className="card sign-in" aria-labelledby="sign-in-title">
         <div className="card-body stack" style={{ gap: 18, padding: 28 }}>
-          <div className="row" style={{ gap: 10 }}>
-            <img src="/favicon.svg" alt="" width={32} height={32} />
+          <div className="stack" style={{ gap: 14, alignItems: "center", textAlign: "center" }}>
+            <Mark size={40} />
             <div>
               <h1 id="sign-in-title">Sign in to Neura</h1>
-              <p className="secondary small">Robot AI serving infrastructure</p>
+              <p className="secondary small" style={{ marginTop: 4 }}>
+                Deploy and operate robot policies on your own GPU servers.
+              </p>
             </div>
           </div>
           {!auth.meta ? (
@@ -74,7 +77,7 @@ export function SignIn() {
             </button>
           </form>
           {auth.meta ? (
-            <p className="muted small">
+            <p className="muted small" style={{ textAlign: "center" }}>
               Control plane {auth.meta.service_version} · API {auth.meta.api_spec_version}
               {auth.meta.environment && auth.meta.environment !== "production"
                 ? ` · ${auth.meta.environment}`

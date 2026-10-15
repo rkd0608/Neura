@@ -8,9 +8,9 @@
   "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
   "torch": "2.11.0",
   "lerobot": "0.6.1",
-  "git_commit": "9f7cebb",
+  "git_commit": "184b221",
   "command": "neura-bench run --preset cpu",
-  "generated_at": "2026-10-15T04:50:58+00:00"
+  "generated_at": "2026-10-15T05:07:49+00:00"
  },
  "config": {
   "device": "cpu",
@@ -55,31 +55,31 @@
     "points": [
      {
       "batch_size": 1,
-      "p50_ms": 78.577,
-      "p99_ms": 106.871,
-      "memory_mib": 814,
-      "samples": 102
+      "p50_ms": 78.787,
+      "p99_ms": 105.941,
+      "memory_mib": 816,
+      "samples": 101
      },
      {
       "batch_size": 2,
-      "p50_ms": 105.611,
-      "p99_ms": 139.48,
-      "memory_mib": 831,
-      "samples": 76
+      "p50_ms": 103.073,
+      "p99_ms": 127.159,
+      "memory_mib": 835,
+      "samples": 77
      },
      {
       "batch_size": 4,
-      "p50_ms": 132.102,
-      "p99_ms": 169.836,
-      "memory_mib": 839,
-      "samples": 61
+      "p50_ms": 144.104,
+      "p99_ms": 167.215,
+      "memory_mib": 846,
+      "samples": 56
      },
      {
       "batch_size": 8,
-      "p50_ms": 207.245,
-      "p99_ms": 233.435,
-      "memory_mib": 848,
-      "samples": 39
+      "p50_ms": 192.241,
+      "p99_ms": 227.515,
+      "memory_mib": 856,
+      "samples": 42
      }
     ]
    },
@@ -87,29 +87,29 @@
     "points": [
      {
       "batch_size": 1,
-      "p50_ms": 248.092,
-      "p99_ms": 290.575,
+      "p50_ms": 244.302,
+      "p99_ms": 271.729,
       "memory_mib": 901,
       "samples": 33
      },
      {
       "batch_size": 2,
-      "p50_ms": 420.261,
-      "p99_ms": 458.299,
+      "p50_ms": 367.241,
+      "p99_ms": 400.607,
       "memory_mib": 901,
-      "samples": 20
+      "samples": 22
      },
      {
       "batch_size": 4,
-      "p50_ms": 439.22,
-      "p99_ms": 501.452,
+      "p50_ms": 415.618,
+      "p99_ms": 476.073,
       "memory_mib": 901,
       "samples": 20
      },
      {
       "batch_size": 8,
-      "p50_ms": 516.735,
-      "p99_ms": 553.075,
+      "p50_ms": 498.872,
+      "p99_ms": 558.22,
       "memory_mib": 901,
       "samples": 20
      }
@@ -117,29 +117,29 @@
    }
   },
   "contention": {
-   "alone_p50_ms": 77.954,
+   "alone_p50_ms": 74.932,
    "slowdown": {
     "1": 1.0,
-    "2": 1.459,
-    "3": 1.692
+    "2": 1.426,
+    "3": 1.625
    },
-   "background_slowdown": 3.921,
+   "background_slowdown": 4.167,
    "by_workers": {
     "1": {
-     "p50_ms": 77.954,
-     "p99_ms": 95.954
+     "p50_ms": 74.932,
+     "p99_ms": 98.455
     },
     "2": {
-     "p50_ms": 113.747,
-     "p99_ms": 135.735
+     "p50_ms": 106.864,
+     "p99_ms": 134.079
     },
     "3": {
-     "p50_ms": 131.907,
-     "p99_ms": 163.848
+     "p50_ms": 121.742,
+     "p99_ms": 151.626
     },
     "0": {
-     "p50_ms": 305.624,
-     "p99_ms": 439.021
+     "p50_ms": 312.235,
+     "p99_ms": 369.197
     }
    }
   },
@@ -148,22 +148,22 @@
    "rank": 16,
    "adapted_layers": 9,
    "base_p50_ms": {
-    "1": 80.133,
-    "2": 106.319,
-    "4": 126.804,
-    "8": 198.497
+    "1": 70.086,
+    "2": 97.675,
+    "4": 125.472,
+    "8": 176.91
    },
    "mixed_p50_ms": {
-    "1": 84.666,
-    "2": 111.213,
-    "4": 132.374,
-    "8": 209.468
+    "1": 78.072,
+    "2": 104.695,
+    "4": 133.794,
+    "8": 185.75
    },
    "overhead": {
-    "1": 1.057,
-    "2": 1.046,
-    "4": 1.044,
-    "8": 1.055
+    "1": 1.114,
+    "2": 1.072,
+    "4": 1.066,
+    "8": 1.05
    },
    "parity": {
     "max_rel_error": 3.346657428816169e-07,
@@ -172,10 +172,10 @@
    }
   },
   "calibration": {
-   "real_age_at_dispatch_p50_ms": 2.062,
-   "real_age_at_dispatch_p99_ms": 2.94,
-   "link_base_ms": 1.166,
-   "link_jitter_ms": 1.792
+   "real_age_at_dispatch_p50_ms": 2.095,
+   "real_age_at_dispatch_p99_ms": 4.647,
+   "link_base_ms": 0.419,
+   "link_jitter_ms": 3.352
   }
  },
  "admission_estimate": {
@@ -194,10 +194,10 @@
    "batch_window_ms": 2.0,
    "reserve_fraction": 0.2,
    "latency_p99_ms_by_batch": {
-    "1": 106.871,
-    "2": 139.48,
-    "4": 169.836,
-    "8": 233.435
+    "1": 105.941,
+    "2": 127.159,
+    "4": 167.215,
+    "8": 227.515
    },
    "memory_available_mib": null,
    "device": "cpu",
@@ -222,18 +222,18 @@
     "late_trimmed_actions": 244,
     "late_trimmed_per_1000_actions": 67.778,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -253,18 +253,18 @@
     "late_trimmed_actions": 244,
     "late_trimmed_per_1000_actions": 67.778,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -284,18 +284,18 @@
     "late_trimmed_actions": 482,
     "late_trimmed_per_1000_actions": 66.944,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.045,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.948,
+    "age_at_dispatch_p50_ms": 1.983,
+    "age_at_dispatch_p99_ms": 3.714,
+    "age_at_dispatch_max_ms": 3.753,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1587
+     "dev-0": 0.1584
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 1628
+    "peak_memory_mib": 1632
    }
   },
   {
@@ -312,21 +312,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 975,
-    "late_trimmed_per_1000_actions": 67.708,
+    "late_trimmed_actions": 974,
+    "late_trimmed_per_1000_actions": 67.639,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.064,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.957,
+    "age_at_dispatch_p50_ms": 2.024,
+    "age_at_dispatch_p99_ms": 3.734,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3181
+     "dev-0": 0.3189
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 480
     },
-    "peak_memory_mib": 3256
+    "peak_memory_mib": 3264
    }
   },
   {
@@ -346,18 +346,18 @@
     "late_trimmed_actions": 1938,
     "late_trimmed_per_1000_actions": 67.292,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 1.994,
-    "age_at_dispatch_p99_ms": 2.941,
-    "age_at_dispatch_max_ms": 2.958,
+    "age_at_dispatch_p50_ms": 2.164,
+    "age_at_dispatch_p99_ms": 3.738,
+    "age_at_dispatch_max_ms": 3.771,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6342
+     "dev-0": 0.633
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 960
     },
-    "peak_memory_mib": 6512
+    "peak_memory_mib": 6528
    }
   },
   {
@@ -369,26 +369,26 @@
     "robots": 12,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1440,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "requests": 1449,
+    "deadline_misses": 11,
+    "misses_per_1000": 7.591,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 3099,
-    "late_trimmed_per_1000_actions": 71.736,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.074,
-    "age_at_dispatch_p99_ms": 2.935,
-    "age_at_dispatch_max_ms": 2.957,
+    "late_trimmed_actions": 3285,
+    "late_trimmed_per_1000_actions": 76.042,
+    "chunks_rejected_at_robot": 11,
+    "age_at_dispatch_p50_ms": 2.167,
+    "age_at_dispatch_p99_ms": 3.727,
+    "age_at_dispatch_max_ms": 3.771,
     "gpu_hours_per_robot_hour": 0.0833,
     "utilization": {
-     "dev-0": 0.9137
+     "dev-0": 0.8735
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 1440
+     "1": 1449
     },
-    "peak_memory_mib": 9768
+    "peak_memory_mib": 9792
    }
   },
   {
@@ -400,57 +400,26 @@
     "robots": 16,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 7772,
-    "deadline_misses": 2971,
-    "misses_per_1000": 382.27,
+    "requests": 2673,
+    "deadline_misses": 920,
+    "misses_per_1000": 344.183,
     "starvations_per_robot_hour": 213.75,
-    "faults_per_robot_hour": 198.75,
-    "late_trimmed_actions": 397,
-    "late_trimmed_per_1000_actions": 42.587,
-    "chunks_rejected_at_robot": 4223,
-    "age_at_dispatch_p50_ms": 2.429,
-    "age_at_dispatch_p99_ms": 96.006,
-    "age_at_dispatch_max_ms": 98.9,
+    "faults_per_robot_hour": 185.625,
+    "late_trimmed_actions": 4293,
+    "late_trimmed_per_1000_actions": 85.044,
+    "chunks_rejected_at_robot": 719,
+    "age_at_dispatch_p50_ms": 2.456,
+    "age_at_dispatch_p99_ms": 88.247,
+    "age_at_dispatch_max_ms": 97.893,
     "gpu_hours_per_robot_hour": 0.0625,
     "utilization": {
-     "dev-0": 0.9871
+     "dev-0": 0.9475
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 4572
+     "1": 2424
     },
-    "peak_memory_mib": 13024
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 24,
-   "result": {
-    "robots": 24,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 12927,
-    "deadline_misses": 2726,
-    "misses_per_1000": 210.876,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 5490,
-    "age_at_dispatch_p50_ms": 2.958,
-    "age_at_dispatch_p99_ms": 96.267,
-    "age_at_dispatch_max_ms": 99.198,
-    "gpu_hours_per_robot_hour": 0.0417,
-    "utilization": {
-     "dev-0": 1.0
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 5489
-    },
-    "peak_memory_mib": 19536
+    "peak_memory_mib": 13056
    }
   },
   {
@@ -467,21 +436,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -498,21 +467,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 479,
-    "late_trimmed_per_1000_actions": 66.528,
+    "late_trimmed_actions": 493,
+    "late_trimmed_per_1000_actions": 68.472,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.67,
-    "age_at_dispatch_p99_ms": 4.942,
-    "age_at_dispatch_max_ms": 4.948,
+    "age_at_dispatch_p50_ms": 3.976,
+    "age_at_dispatch_p99_ms": 5.714,
+    "age_at_dispatch_max_ms": 5.753,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1577
+     "dev-0": 0.1582
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -529,21 +498,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 985,
-    "late_trimmed_per_1000_actions": 68.403,
+    "late_trimmed_actions": 984,
+    "late_trimmed_per_1000_actions": 68.333,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.572,
-    "age_at_dispatch_p99_ms": 4.94,
-    "age_at_dispatch_max_ms": 4.957,
+    "age_at_dispatch_p50_ms": 4.083,
+    "age_at_dispatch_p99_ms": 5.736,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3165
+     "dev-0": 0.3196
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 480
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -560,21 +529,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1962,
-    "late_trimmed_per_1000_actions": 68.125,
+    "late_trimmed_actions": 1978,
+    "late_trimmed_per_1000_actions": 68.681,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.516,
-    "age_at_dispatch_p99_ms": 6.033,
-    "age_at_dispatch_max_ms": 21.259,
+    "age_at_dispatch_p50_ms": 4.107,
+    "age_at_dispatch_p99_ms": 5.721,
+    "age_at_dispatch_max_ms": 5.767,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6341
+     "dev-0": 0.6352
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 960
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -586,233 +555,233 @@
     "robots": 12,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 3727,
-    "deadline_misses": 1173,
-    "misses_per_1000": 314.73,
-    "starvations_per_robot_hour": 507.5,
-    "faults_per_robot_hour": 352.5,
-    "late_trimmed_actions": 1184,
-    "late_trimmed_per_1000_actions": 46.658,
-    "chunks_rejected_at_robot": 1746,
-    "age_at_dispatch_p50_ms": 59.396,
-    "age_at_dispatch_p99_ms": 96.563,
-    "age_at_dispatch_max_ms": 98.793,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9708
-    },
-    "mean_batch": 2.25,
-    "batch_sizes": {
-     "1": 704,
-     "2": 109,
-     "3": 62,
-     "4": 72,
-     "5": 61,
-     "6": 48,
-     "7": 44,
-     "8": 31
-    },
-    "peak_memory_mib": 848
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_fifo",
-   "robots": 16,
-   "result": {
-    "robots": 16,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 7234,
-    "deadline_misses": 2841,
-    "misses_per_1000": 392.729,
-    "starvations_per_robot_hour": 451.875,
-    "faults_per_robot_hour": 386.25,
-    "late_trimmed_actions": 143,
-    "late_trimmed_per_1000_actions": 10.449,
-    "chunks_rejected_at_robot": 3409,
-    "age_at_dispatch_p50_ms": 62.785,
-    "age_at_dispatch_p99_ms": 97.389,
-    "age_at_dispatch_max_ms": 98.87,
-    "gpu_hours_per_robot_hour": 0.0625,
-    "utilization": {
-     "dev-0": 0.9953
-    },
-    "mean_batch": 4.727,
-    "batch_sizes": {
-     "1": 182,
-     "2": 104,
-     "3": 43,
-     "4": 58,
-     "5": 42,
-     "6": 50,
-     "7": 54,
-     "8": 269
-    },
-    "peak_memory_mib": 848
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_round_robin",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0788
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_round_robin",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 479,
-    "late_trimmed_per_1000_actions": 66.528,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.67,
-    "age_at_dispatch_p99_ms": 4.942,
-    "age_at_dispatch_max_ms": 4.948,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.1577
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_round_robin",
-   "robots": 4,
-   "result": {
-    "robots": 4,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 985,
-    "late_trimmed_per_1000_actions": 68.403,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.572,
-    "age_at_dispatch_p99_ms": 4.94,
-    "age_at_dispatch_max_ms": 4.957,
-    "gpu_hours_per_robot_hour": 0.25,
-    "utilization": {
-     "dev-0": 0.3165
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 480
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_round_robin",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 960,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1962,
-    "late_trimmed_per_1000_actions": 68.125,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.516,
-    "age_at_dispatch_p99_ms": 6.033,
-    "age_at_dispatch_max_ms": 21.259,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 0.6341
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 960
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "phased",
-   "configuration": "neura_round_robin",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 3397,
-    "deadline_misses": 1089,
-    "misses_per_1000": 320.577,
-    "starvations_per_robot_hour": 542.5,
+    "requests": 3835,
+    "deadline_misses": 2885,
+    "misses_per_1000": 752.282,
+    "starvations_per_robot_hour": 685.0,
     "faults_per_robot_hour": 320.0,
-    "late_trimmed_actions": 1412,
-    "late_trimmed_per_1000_actions": 48.688,
-    "chunks_rejected_at_robot": 1429,
-    "age_at_dispatch_p50_ms": 57.649,
-    "age_at_dispatch_p99_ms": 97.014,
-    "age_at_dispatch_max_ms": 99.222,
+    "late_trimmed_actions": 1145,
+    "late_trimmed_per_1000_actions": 41.52,
+    "chunks_rejected_at_robot": 1690,
+    "age_at_dispatch_p50_ms": 62.62,
+    "age_at_dispatch_p99_ms": 97.816,
+    "age_at_dispatch_max_ms": 99.377,
     "gpu_hours_per_robot_hour": 0.0833,
     "utilization": {
-     "dev-0": 0.9631
+     "dev-0": 0.971
     },
-    "mean_batch": 1.983,
+    "mean_batch": 2.31,
     "batch_sizes": {
-     "1": 801,
-     "2": 109,
-     "3": 73,
-     "4": 65,
-     "5": 48,
-     "6": 52,
-     "7": 26,
-     "8": 16
+     "1": 494,
+     "2": 276,
+     "3": 99,
+     "4": 94,
+     "5": 65,
+     "6": 39,
+     "7": 18,
+     "8": 18
     },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 856
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_fifo",
+   "robots": 16,
+   "result": {
+    "robots": 16,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 6997,
+    "deadline_misses": 6039,
+    "misses_per_1000": 863.084,
+    "starvations_per_robot_hour": 600.0,
+    "faults_per_robot_hour": 435.0,
+    "late_trimmed_actions": 141,
+    "late_trimmed_per_1000_actions": 7.963,
+    "chunks_rejected_at_robot": 3058,
+    "age_at_dispatch_p50_ms": 69.585,
+    "age_at_dispatch_p99_ms": 97.865,
+    "age_at_dispatch_max_ms": 99.941,
+    "gpu_hours_per_robot_hour": 0.0625,
+    "utilization": {
+     "dev-0": 0.9949
+    },
+    "mean_batch": 3.989,
+    "batch_sizes": {
+     "1": 233,
+     "2": 180,
+     "3": 58,
+     "4": 66,
+     "5": 46,
+     "6": 66,
+     "7": 63,
+     "8": 185
+    },
+    "peak_memory_mib": 856
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_round_robin",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0805
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 120
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_round_robin",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 493,
+    "late_trimmed_per_1000_actions": 68.472,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 3.976,
+    "age_at_dispatch_p99_ms": 5.714,
+    "age_at_dispatch_max_ms": 5.753,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.1582
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_round_robin",
+   "robots": 4,
+   "result": {
+    "robots": 4,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 480,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 984,
+    "late_trimmed_per_1000_actions": 68.333,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.083,
+    "age_at_dispatch_p99_ms": 5.736,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 0.25,
+    "utilization": {
+     "dev-0": 0.3196
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 480
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_round_robin",
+   "robots": 8,
+   "result": {
+    "robots": 8,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 960,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 1978,
+    "late_trimmed_per_1000_actions": 68.681,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.107,
+    "age_at_dispatch_p99_ms": 5.721,
+    "age_at_dispatch_max_ms": 5.767,
+    "gpu_hours_per_robot_hour": 0.125,
+    "utilization": {
+     "dev-0": 0.6352
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 960
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "same_weights",
+   "workload": "phased",
+   "configuration": "neura_round_robin",
+   "robots": 12,
+   "result": {
+    "robots": 12,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 3542,
+    "deadline_misses": 2562,
+    "misses_per_1000": 723.32,
+    "starvations_per_robot_hour": 602.5,
+    "faults_per_robot_hour": 342.5,
+    "late_trimmed_actions": 1425,
+    "late_trimmed_per_1000_actions": 50.042,
+    "chunks_rejected_at_robot": 1480,
+    "age_at_dispatch_p50_ms": 60.432,
+    "age_at_dispatch_p99_ms": 97.618,
+    "age_at_dispatch_max_ms": 100.705,
+    "gpu_hours_per_robot_hour": 0.0833,
+    "utilization": {
+     "dev-0": 0.9633
+    },
+    "mean_batch": 2.087,
+    "batch_sizes": {
+     "1": 576,
+     "2": 290,
+     "3": 82,
+     "4": 70,
+     "5": 63,
+     "6": 28,
+     "7": 16,
+     "8": 12
+    },
+    "peak_memory_mib": 856
    }
   },
   {
@@ -824,33 +793,33 @@
     "robots": 16,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 7159,
-    "deadline_misses": 3200,
-    "misses_per_1000": 446.99,
-    "starvations_per_robot_hour": 485.625,
-    "faults_per_robot_hour": 354.375,
-    "late_trimmed_actions": 356,
-    "late_trimmed_per_1000_actions": 20.904,
-    "chunks_rejected_at_robot": 3032,
-    "age_at_dispatch_p50_ms": 61.935,
-    "age_at_dispatch_p99_ms": 97.186,
-    "age_at_dispatch_max_ms": 99.012,
+    "requests": 6754,
+    "deadline_misses": 5810,
+    "misses_per_1000": 860.231,
+    "starvations_per_robot_hour": 594.375,
+    "faults_per_robot_hour": 436.875,
+    "late_trimmed_actions": 454,
+    "late_trimmed_per_1000_actions": 21.38,
+    "chunks_rejected_at_robot": 2689,
+    "age_at_dispatch_p50_ms": 66.576,
+    "age_at_dispatch_p99_ms": 97.878,
+    "age_at_dispatch_max_ms": 99.975,
     "gpu_hours_per_robot_hour": 0.0625,
     "utilization": {
-     "dev-0": 0.9966
+     "dev-0": 0.9963
     },
-    "mean_batch": 3.913,
+    "mean_batch": 3.431,
     "batch_sizes": {
-     "1": 350,
-     "2": 88,
-     "3": 38,
-     "4": 48,
-     "5": 41,
-     "6": 66,
-     "7": 67,
-     "8": 203
+     "1": 293,
+     "2": 245,
+     "3": 70,
+     "4": 59,
+     "5": 54,
+     "6": 48,
+     "7": 58,
+     "8": 141
     },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 856
    }
   },
   {
@@ -867,21 +836,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -898,21 +867,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 479,
-    "late_trimmed_per_1000_actions": 66.528,
+    "late_trimmed_actions": 493,
+    "late_trimmed_per_1000_actions": 68.472,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.67,
-    "age_at_dispatch_p99_ms": 4.942,
-    "age_at_dispatch_max_ms": 4.948,
+    "age_at_dispatch_p50_ms": 3.976,
+    "age_at_dispatch_p99_ms": 5.714,
+    "age_at_dispatch_max_ms": 5.753,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1577
+     "dev-0": 0.1582
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -929,21 +898,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 985,
-    "late_trimmed_per_1000_actions": 68.403,
+    "late_trimmed_actions": 984,
+    "late_trimmed_per_1000_actions": 68.333,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.572,
-    "age_at_dispatch_p99_ms": 4.94,
-    "age_at_dispatch_max_ms": 4.957,
+    "age_at_dispatch_p50_ms": 4.083,
+    "age_at_dispatch_p99_ms": 5.736,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3165
+     "dev-0": 0.3196
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 480
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -960,21 +929,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1962,
-    "late_trimmed_per_1000_actions": 68.125,
+    "late_trimmed_actions": 1978,
+    "late_trimmed_per_1000_actions": 68.681,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.516,
-    "age_at_dispatch_p99_ms": 6.033,
-    "age_at_dispatch_max_ms": 21.259,
+    "age_at_dispatch_p50_ms": 4.107,
+    "age_at_dispatch_p99_ms": 5.721,
+    "age_at_dispatch_max_ms": 5.767,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6341
+     "dev-0": 0.6352
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 960
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -986,33 +955,33 @@
     "robots": 12,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 3757,
-    "deadline_misses": 1120,
-    "misses_per_1000": 298.11,
-    "starvations_per_robot_hour": 560.0,
+    "requests": 3804,
+    "deadline_misses": 2825,
+    "misses_per_1000": 742.639,
+    "starvations_per_robot_hour": 770.0,
     "faults_per_robot_hour": 342.5,
-    "late_trimmed_actions": 1101,
-    "late_trimmed_per_1000_actions": 43.256,
-    "chunks_rejected_at_robot": 1833,
-    "age_at_dispatch_p50_ms": 60.552,
-    "age_at_dispatch_p99_ms": 96.488,
-    "age_at_dispatch_max_ms": 98.772,
+    "late_trimmed_actions": 1022,
+    "late_trimmed_per_1000_actions": 36.966,
+    "chunks_rejected_at_robot": 1709,
+    "age_at_dispatch_p50_ms": 62.266,
+    "age_at_dispatch_p99_ms": 97.605,
+    "age_at_dispatch_max_ms": 99.95,
     "gpu_hours_per_robot_hour": 0.0833,
     "utilization": {
-     "dev-0": 0.9735
+     "dev-0": 0.9729
     },
-    "mean_batch": 2.377,
+    "mean_batch": 2.333,
     "batch_sizes": {
-     "1": 682,
-     "2": 87,
-     "3": 77,
-     "4": 60,
-     "5": 66,
-     "6": 60,
-     "7": 48,
-     "8": 38
+     "1": 478,
+     "2": 279,
+     "3": 106,
+     "4": 94,
+     "5": 65,
+     "6": 45,
+     "7": 23,
+     "8": 10
     },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 856
    }
   },
   {
@@ -1024,33 +993,33 @@
     "robots": 16,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 7482,
-    "deadline_misses": 2802,
-    "misses_per_1000": 374.499,
-    "starvations_per_robot_hour": 412.5,
-    "faults_per_robot_hour": 331.875,
-    "late_trimmed_actions": 65,
-    "late_trimmed_per_1000_actions": 5.54,
-    "chunks_rejected_at_robot": 3553,
-    "age_at_dispatch_p50_ms": 63.495,
-    "age_at_dispatch_p99_ms": 97.265,
-    "age_at_dispatch_max_ms": 99.101,
+    "requests": 6980,
+    "deadline_misses": 6059,
+    "misses_per_1000": 868.052,
+    "starvations_per_robot_hour": 633.75,
+    "faults_per_robot_hour": 446.25,
+    "late_trimmed_actions": 123,
+    "late_trimmed_per_1000_actions": 6.696,
+    "chunks_rejected_at_robot": 3139,
+    "age_at_dispatch_p50_ms": 68.526,
+    "age_at_dispatch_p99_ms": 97.639,
+    "age_at_dispatch_max_ms": 100.206,
     "gpu_hours_per_robot_hour": 0.0625,
     "utilization": {
-     "dev-0": 0.9974
+     "dev-0": 0.9954
     },
-    "mean_batch": 4.768,
+    "mean_batch": 4.081,
     "batch_sizes": {
-     "1": 225,
-     "2": 67,
-     "3": 39,
-     "4": 34,
-     "5": 53,
-     "6": 41,
-     "7": 53,
-     "8": 293
+     "1": 200,
+     "2": 205,
+     "3": 54,
+     "4": 58,
+     "5": 66,
+     "6": 54,
+     "7": 58,
+     "8": 197
     },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 856
    }
   },
   {
@@ -1070,18 +1039,18 @@
     "late_trimmed_actions": 244,
     "late_trimmed_per_1000_actions": 67.778,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1101,18 +1070,18 @@
     "late_trimmed_actions": 244,
     "late_trimmed_per_1000_actions": 67.778,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1125,25 +1094,25 @@
     "devices": 1,
     "duration_s": 120.0,
     "requests": 241,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "deadline_misses": 1,
+    "misses_per_1000": 4.149,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 576,
-    "late_trimmed_per_1000_actions": 80.0,
+    "late_trimmed_actions": 655,
+    "late_trimmed_per_1000_actions": 90.972,
     "chunks_rejected_at_robot": 1,
-    "age_at_dispatch_p50_ms": 2.075,
-    "age_at_dispatch_p99_ms": 2.948,
-    "age_at_dispatch_max_ms": 2.957,
+    "age_at_dispatch_p50_ms": 2.285,
+    "age_at_dispatch_p99_ms": 3.725,
+    "age_at_dispatch_max_ms": 3.766,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1469
+     "dev-0": 0.1279
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 241
     },
-    "peak_memory_mib": 1628
+    "peak_memory_mib": 1632
    }
   },
   {
@@ -1156,87 +1125,25 @@
     "devices": 1,
     "duration_s": 120.0,
     "requests": 481,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "deadline_misses": 1,
+    "misses_per_1000": 2.079,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1054,
-    "late_trimmed_per_1000_actions": 73.194,
+    "late_trimmed_actions": 1259,
+    "late_trimmed_per_1000_actions": 87.431,
     "chunks_rejected_at_robot": 1,
-    "age_at_dispatch_p50_ms": 2.151,
-    "age_at_dispatch_p99_ms": 2.938,
-    "age_at_dispatch_max_ms": 2.957,
+    "age_at_dispatch_p50_ms": 2.205,
+    "age_at_dispatch_p99_ms": 3.73,
+    "age_at_dispatch_max_ms": 3.77,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3067
+     "dev-0": 0.2615
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 481
     },
-    "peak_memory_mib": 3256
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "synchronized",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 4202,
-    "deadline_misses": 51,
-    "misses_per_1000": 12.137,
-    "starvations_per_robot_hour": 11.25,
-    "faults_per_robot_hour": 11.25,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 4146,
-    "age_at_dispatch_p50_ms": 2.79,
-    "age_at_dispatch_p99_ms": 88.887,
-    "age_at_dispatch_max_ms": 98.261,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 1.0003
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 4151
-    },
-    "peak_memory_mib": 6512
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "synchronized",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 6830,
-    "deadline_misses": 2054,
-    "misses_per_1000": 300.732,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 4766,
-    "age_at_dispatch_p50_ms": 20.123,
-    "age_at_dispatch_p99_ms": 96.446,
-    "age_at_dispatch_max_ms": 98.538,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 1.0003
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 4766
-    },
-    "peak_memory_mib": 9768
+    "peak_memory_mib": 3264
    }
   },
   {
@@ -1253,21 +1160,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1287,18 +1194,18 @@
     "late_trimmed_actions": 494,
     "late_trimmed_per_1000_actions": 68.611,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.771,
-    "age_at_dispatch_p99_ms": 4.916,
-    "age_at_dispatch_max_ms": 4.943,
+    "age_at_dispatch_p50_ms": 4.079,
+    "age_at_dispatch_p99_ms": 5.711,
+    "age_at_dispatch_max_ms": 5.743,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1606
+     "dev-0": 0.1617
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1310,26 +1217,27 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "requests": 482,
+    "deadline_misses": 2,
+    "misses_per_1000": 4.149,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 994,
-    "late_trimmed_per_1000_actions": 69.028,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.651,
-    "age_at_dispatch_p99_ms": 4.939,
-    "age_at_dispatch_max_ms": 13.064,
+    "late_trimmed_actions": 1014,
+    "late_trimmed_per_1000_actions": 70.417,
+    "chunks_rejected_at_robot": 2,
+    "age_at_dispatch_p50_ms": 4.098,
+    "age_at_dispatch_p99_ms": 54.614,
+    "age_at_dispatch_max_ms": 83.408,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.318
+     "dev-0": 0.3129
     },
-    "mean_batch": 1.0,
+    "mean_batch": 1.026,
     "batch_sizes": {
-     "1": 480
+     "1": 458,
+     "2": 12
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 840
    }
   },
   {
@@ -1341,67 +1249,29 @@
     "robots": 8,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1114,
-    "deadline_misses": 53,
-    "misses_per_1000": 47.576,
-    "starvations_per_robot_hour": 56.25,
+    "requests": 1090,
+    "deadline_misses": 147,
+    "misses_per_1000": 134.862,
+    "starvations_per_robot_hour": 63.75,
     "faults_per_robot_hour": 15.0,
-    "late_trimmed_actions": 2245,
-    "late_trimmed_per_1000_actions": 78.935,
-    "chunks_rejected_at_robot": 144,
-    "age_at_dispatch_p50_ms": 4.314,
-    "age_at_dispatch_p99_ms": 90.72,
-    "age_at_dispatch_max_ms": 94.932,
+    "late_trimmed_actions": 2192,
+    "late_trimmed_per_1000_actions": 77.418,
+    "chunks_rejected_at_robot": 97,
+    "age_at_dispatch_p50_ms": 4.219,
+    "age_at_dispatch_p99_ms": 91.275,
+    "age_at_dispatch_max_ms": 97.63,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6473
+     "dev-0": 0.5998
     },
-    "mean_batch": 1.143,
+    "mean_batch": 1.201,
     "batch_sizes": {
-     "1": 821,
-     "2": 109,
-     "3": 7,
-     "4": 1,
+     "1": 709,
+     "2": 139,
+     "3": 4,
+     "4": 6,
      "5": 2
     },
-    "peak_memory_mib": 843
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "synchronized",
-   "configuration": "neura_fifo",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 4184,
-    "deadline_misses": 1473,
-    "misses_per_1000": 352.055,
-    "starvations_per_robot_hour": 727.5,
-    "faults_per_robot_hour": 422.5,
-    "late_trimmed_actions": 743,
-    "late_trimmed_per_1000_actions": 32.087,
-    "chunks_rejected_at_robot": 2034,
-    "age_at_dispatch_p50_ms": 61.386,
-    "age_at_dispatch_p99_ms": 96.871,
-    "age_at_dispatch_max_ms": 98.569,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9521
-    },
-    "mean_batch": 2.673,
-    "batch_sizes": {
-     "1": 471,
-     "2": 198,
-     "3": 60,
-     "4": 67,
-     "5": 74,
-     "6": 69,
-     "7": 47,
-     "8": 39
-    },
     "peak_memory_mib": 848
    }
   },
@@ -1419,21 +1289,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1453,18 +1323,18 @@
     "late_trimmed_actions": 494,
     "late_trimmed_per_1000_actions": 68.611,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.771,
-    "age_at_dispatch_p99_ms": 4.916,
-    "age_at_dispatch_max_ms": 4.943,
+    "age_at_dispatch_p50_ms": 4.079,
+    "age_at_dispatch_p99_ms": 5.711,
+    "age_at_dispatch_max_ms": 5.743,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1606
+     "dev-0": 0.1617
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1476,26 +1346,27 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "requests": 482,
+    "deadline_misses": 2,
+    "misses_per_1000": 4.149,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 994,
-    "late_trimmed_per_1000_actions": 69.028,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.651,
-    "age_at_dispatch_p99_ms": 4.939,
-    "age_at_dispatch_max_ms": 13.064,
+    "late_trimmed_actions": 1014,
+    "late_trimmed_per_1000_actions": 70.417,
+    "chunks_rejected_at_robot": 2,
+    "age_at_dispatch_p50_ms": 4.098,
+    "age_at_dispatch_p99_ms": 54.614,
+    "age_at_dispatch_max_ms": 83.408,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.318
+     "dev-0": 0.3129
     },
-    "mean_batch": 1.0,
+    "mean_batch": 1.026,
     "batch_sizes": {
-     "1": 480
+     "1": 458,
+     "2": 12
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 840
    }
   },
   {
@@ -1507,67 +1378,27 @@
     "robots": 8,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1032,
-    "deadline_misses": 27,
-    "misses_per_1000": 26.163,
-    "starvations_per_robot_hour": 22.5,
-    "faults_per_robot_hour": 7.5,
-    "late_trimmed_actions": 2163,
-    "late_trimmed_per_1000_actions": 75.59,
-    "chunks_rejected_at_robot": 61,
-    "age_at_dispatch_p50_ms": 4.044,
-    "age_at_dispatch_p99_ms": 85.595,
-    "age_at_dispatch_max_ms": 97.932,
+    "requests": 963,
+    "deadline_misses": 4,
+    "misses_per_1000": 4.154,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 2073,
+    "late_trimmed_per_1000_actions": 71.979,
+    "chunks_rejected_at_robot": 2,
+    "age_at_dispatch_p50_ms": 4.49,
+    "age_at_dispatch_p99_ms": 39.789,
+    "age_at_dispatch_max_ms": 97.178,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6337
+     "dev-0": 0.6268
     },
-    "mean_batch": 1.063,
+    "mean_batch": 1.017,
     "batch_sizes": {
-     "1": 897,
-     "2": 46,
-     "3": 1,
-     "4": 4
+     "1": 929,
+     "2": 16
     },
-    "peak_memory_mib": 843
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "synchronized",
-   "configuration": "neura_round_robin",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 3853,
-    "deadline_misses": 1442,
-    "misses_per_1000": 374.254,
-    "starvations_per_robot_hour": 780.0,
-    "faults_per_robot_hour": 400.0,
-    "late_trimmed_actions": 1015,
-    "late_trimmed_per_1000_actions": 36.892,
-    "chunks_rejected_at_robot": 1625,
-    "age_at_dispatch_p50_ms": 59.405,
-    "age_at_dispatch_p99_ms": 96.739,
-    "age_at_dispatch_max_ms": 99.104,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.94
-    },
-    "mean_batch": 2.282,
-    "batch_sizes": {
-     "1": 532,
-     "2": 241,
-     "3": 80,
-     "4": 77,
-     "5": 51,
-     "6": 48,
-     "7": 26,
-     "8": 21
-    },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 835
    }
   },
   {
@@ -1584,21 +1415,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1618,18 +1449,18 @@
     "late_trimmed_actions": 494,
     "late_trimmed_per_1000_actions": 68.611,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.771,
-    "age_at_dispatch_p99_ms": 4.916,
-    "age_at_dispatch_max_ms": 4.943,
+    "age_at_dispatch_p50_ms": 4.079,
+    "age_at_dispatch_p99_ms": 5.711,
+    "age_at_dispatch_max_ms": 5.743,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.1606
+     "dev-0": 0.1617
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 240
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1641,26 +1472,27 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "requests": 482,
+    "deadline_misses": 2,
+    "misses_per_1000": 4.149,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 994,
-    "late_trimmed_per_1000_actions": 69.028,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.651,
-    "age_at_dispatch_p99_ms": 4.939,
-    "age_at_dispatch_max_ms": 13.064,
+    "late_trimmed_actions": 1014,
+    "late_trimmed_per_1000_actions": 70.417,
+    "chunks_rejected_at_robot": 2,
+    "age_at_dispatch_p50_ms": 4.098,
+    "age_at_dispatch_p99_ms": 54.614,
+    "age_at_dispatch_max_ms": 83.408,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.318
+     "dev-0": 0.3129
     },
-    "mean_batch": 1.0,
+    "mean_batch": 1.026,
     "batch_sizes": {
-     "1": 480
+     "1": 458,
+     "2": 12
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 840
    }
   },
   {
@@ -1672,66 +1504,29 @@
     "robots": 8,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1026,
-    "deadline_misses": 29,
-    "misses_per_1000": 28.265,
-    "starvations_per_robot_hour": 26.25,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 2191,
-    "late_trimmed_per_1000_actions": 76.235,
-    "chunks_rejected_at_robot": 53,
-    "age_at_dispatch_p50_ms": 4.296,
-    "age_at_dispatch_p99_ms": 85.707,
-    "age_at_dispatch_max_ms": 98.041,
+    "requests": 1020,
+    "deadline_misses": 68,
+    "misses_per_1000": 66.667,
+    "starvations_per_robot_hour": 37.5,
+    "faults_per_robot_hour": 11.25,
+    "late_trimmed_actions": 2138,
+    "late_trimmed_per_1000_actions": 74.905,
+    "chunks_rejected_at_robot": 47,
+    "age_at_dispatch_p50_ms": 4.506,
+    "age_at_dispatch_p99_ms": 81.756,
+    "age_at_dispatch_max_ms": 93.801,
     "gpu_hours_per_robot_hour": 0.125,
     "utilization": {
-     "dev-0": 0.6464
+     "dev-0": 0.6162
     },
-    "mean_batch": 1.045,
+    "mean_batch": 1.097,
     "batch_sizes": {
-     "1": 924,
-     "2": 33,
-     "3": 5
+     "1": 831,
+     "2": 71,
+     "3": 4,
+     "4": 3
     },
-    "peak_memory_mib": 843
-   }
-  },
-  {
-   "case": "same_weights",
-   "workload": "synchronized",
-   "configuration": "neura_deadline_fairness",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 4440,
-    "deadline_misses": 1457,
-    "misses_per_1000": 328.153,
-    "starvations_per_robot_hour": 735.0,
-    "faults_per_robot_hour": 465.0,
-    "late_trimmed_actions": 452,
-    "late_trimmed_per_1000_actions": 22.619,
-    "chunks_rejected_at_robot": 2387,
-    "age_at_dispatch_p50_ms": 65.94,
-    "age_at_dispatch_p99_ms": 95.919,
-    "age_at_dispatch_max_ms": 98.865,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9722
-    },
-    "mean_batch": 3.021,
-    "batch_sizes": {
-     "1": 433,
-     "2": 123,
-     "3": 78,
-     "4": 67,
-     "5": 102,
-     "6": 87,
-     "7": 62,
-     "8": 46
-    },
-    "peak_memory_mib": 848
+    "peak_memory_mib": 846
    }
   },
   {
@@ -1743,26 +1538,26 @@
     "robots": 1,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 194,
-    "misses_per_1000": 337.979,
+    "requests": 579,
+    "deadline_misses": 573,
+    "misses_per_1000": 989.637,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 371,
-    "age_at_dispatch_p50_ms": 2.848,
-    "age_at_dispatch_p99_ms": 96.388,
-    "age_at_dispatch_max_ms": 98.307,
+    "chunks_rejected_at_robot": 349,
+    "age_at_dispatch_p50_ms": 3.0,
+    "age_at_dispatch_p99_ms": 96.362,
+    "age_at_dispatch_max_ms": 97.882,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.9632
+     "dev-0": 0.9586
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 371
+     "1": 349
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1774,26 +1569,26 @@
     "robots": 1,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 194,
-    "misses_per_1000": 337.979,
+    "requests": 579,
+    "deadline_misses": 573,
+    "misses_per_1000": 989.637,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 371,
-    "age_at_dispatch_p50_ms": 2.848,
-    "age_at_dispatch_p99_ms": 96.388,
-    "age_at_dispatch_max_ms": 98.307,
+    "chunks_rejected_at_robot": 349,
+    "age_at_dispatch_p50_ms": 3.0,
+    "age_at_dispatch_p99_ms": 96.362,
+    "age_at_dispatch_max_ms": 97.882,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.9632
+     "dev-0": 0.9586
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 371
+     "1": 349
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1805,26 +1600,26 @@
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1076,
-    "deadline_misses": 309,
-    "misses_per_1000": 287.175,
+    "requests": 1063,
+    "deadline_misses": 745,
+    "misses_per_1000": 700.847,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 521,
-    "age_at_dispatch_p50_ms": 2.689,
-    "age_at_dispatch_p99_ms": 93.854,
-    "age_at_dispatch_max_ms": 98.008,
+    "chunks_rejected_at_robot": 502,
+    "age_at_dispatch_p50_ms": 4.607,
+    "age_at_dispatch_p99_ms": 94.584,
+    "age_at_dispatch_max_ms": 97.124,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9988
+     "dev-0": 0.9996
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 521
+     "1": 502
     },
-    "peak_memory_mib": 1628
+    "peak_memory_mib": 1632
    }
   },
   {
@@ -1836,26 +1631,26 @@
     "robots": 1,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 202,
-    "misses_per_1000": 351.916,
+    "requests": 579,
+    "deadline_misses": 572,
+    "misses_per_1000": 987.91,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 369,
-    "age_at_dispatch_p50_ms": 4.725,
-    "age_at_dispatch_p99_ms": 95.757,
-    "age_at_dispatch_max_ms": 97.275,
+    "chunks_rejected_at_robot": 343,
+    "age_at_dispatch_p50_ms": 5.077,
+    "age_at_dispatch_p99_ms": 96.504,
+    "age_at_dispatch_max_ms": 98.611,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.9596
+     "dev-0": 0.9568
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 369
+     "1": 343
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1867,27 +1662,27 @@
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1104,
-    "deadline_misses": 430,
-    "misses_per_1000": 389.493,
+    "requests": 1078,
+    "deadline_misses": 854,
+    "misses_per_1000": 792.208,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 556,
-    "age_at_dispatch_p50_ms": 3.858,
-    "age_at_dispatch_p99_ms": 89.331,
-    "age_at_dispatch_max_ms": 96.3,
+    "chunks_rejected_at_robot": 510,
+    "age_at_dispatch_p50_ms": 4.552,
+    "age_at_dispatch_p99_ms": 93.973,
+    "age_at_dispatch_max_ms": 95.519,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9589
+     "dev-0": 0.9719
     },
-    "mean_batch": 1.986,
+    "mean_batch": 1.815,
     "batch_sizes": {
-     "1": 4,
-     "2": 277
+     "1": 52,
+     "2": 229
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 835
    }
   },
   {
@@ -1899,26 +1694,26 @@
     "robots": 1,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 202,
-    "misses_per_1000": 351.916,
+    "requests": 579,
+    "deadline_misses": 572,
+    "misses_per_1000": 987.91,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 369,
-    "age_at_dispatch_p50_ms": 4.725,
-    "age_at_dispatch_p99_ms": 95.757,
-    "age_at_dispatch_max_ms": 97.275,
+    "chunks_rejected_at_robot": 343,
+    "age_at_dispatch_p50_ms": 5.077,
+    "age_at_dispatch_p99_ms": 96.504,
+    "age_at_dispatch_max_ms": 98.611,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.9596
+     "dev-0": 0.9568
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 369
+     "1": 343
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -1930,27 +1725,27 @@
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1104,
-    "deadline_misses": 430,
-    "misses_per_1000": 389.493,
+    "requests": 1080,
+    "deadline_misses": 846,
+    "misses_per_1000": 783.333,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 556,
-    "age_at_dispatch_p50_ms": 3.858,
-    "age_at_dispatch_p99_ms": 89.331,
-    "age_at_dispatch_max_ms": 96.3,
+    "chunks_rejected_at_robot": 509,
+    "age_at_dispatch_p50_ms": 4.579,
+    "age_at_dispatch_p99_ms": 94.06,
+    "age_at_dispatch_max_ms": 95.633,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9589
+     "dev-0": 0.973
     },
-    "mean_batch": 1.986,
+    "mean_batch": 1.811,
     "batch_sizes": {
-     "1": 4,
-     "2": 277
+     "1": 53,
+     "2": 228
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 835
    }
   },
   {
@@ -1962,1108 +1757,1046 @@
     "robots": 1,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 202,
-    "misses_per_1000": 351.916,
+    "requests": 579,
+    "deadline_misses": 572,
+    "misses_per_1000": 987.91,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 369,
-    "age_at_dispatch_p50_ms": 4.725,
-    "age_at_dispatch_p99_ms": 95.757,
-    "age_at_dispatch_max_ms": 97.275,
+    "chunks_rejected_at_robot": 343,
+    "age_at_dispatch_p50_ms": 5.077,
+    "age_at_dispatch_p99_ms": 96.504,
+    "age_at_dispatch_max_ms": 98.611,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.9596
+     "dev-0": 0.9568
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 369
+     "1": 343
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
    "case": "same_weights",
    "workload": "background",
    "configuration": "neura_deadline_fairness",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 1104,
-    "deadline_misses": 430,
-    "misses_per_1000": 389.493,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 556,
-    "age_at_dispatch_p50_ms": 3.858,
-    "age_at_dispatch_p99_ms": 89.331,
-    "age_at_dispatch_max_ms": 96.3,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.9589
-    },
-    "mean_batch": 1.986,
-    "batch_sizes": {
-     "1": 4,
-     "2": 277
-    },
-    "peak_memory_mib": 831
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_gpu",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 244,
-    "late_trimmed_per_1000_actions": 67.778,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0788
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 244,
-    "late_trimmed_per_1000_actions": 67.778,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0788
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 482,
-    "late_trimmed_per_1000_actions": 66.944,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.045,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.948,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.1587
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 4,
-   "result": {
-    "robots": 4,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 975,
-    "late_trimmed_per_1000_actions": 67.708,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.064,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.957,
-    "gpu_hours_per_robot_hour": 0.25,
-    "utilization": {
-     "dev-0": 0.3181
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 480
-    },
-    "peak_memory_mib": 3256
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 960,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1938,
-    "late_trimmed_per_1000_actions": 67.292,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 1.994,
-    "age_at_dispatch_p99_ms": 2.941,
-    "age_at_dispatch_max_ms": 2.958,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 0.6342
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 960
-    },
-    "peak_memory_mib": 6512
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 1440,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 3099,
-    "late_trimmed_per_1000_actions": 71.736,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.074,
-    "age_at_dispatch_p99_ms": 2.935,
-    "age_at_dispatch_max_ms": 2.957,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9137
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 1440
-    },
-    "peak_memory_mib": 9768
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 16,
-   "result": {
-    "robots": 16,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 7772,
-    "deadline_misses": 2971,
-    "misses_per_1000": 382.27,
-    "starvations_per_robot_hour": 213.75,
-    "faults_per_robot_hour": 198.75,
-    "late_trimmed_actions": 397,
-    "late_trimmed_per_1000_actions": 42.587,
-    "chunks_rejected_at_robot": 4223,
-    "age_at_dispatch_p50_ms": 2.429,
-    "age_at_dispatch_p99_ms": 96.006,
-    "age_at_dispatch_max_ms": 98.9,
-    "gpu_hours_per_robot_hour": 0.0625,
-    "utilization": {
-     "dev-0": 0.9871
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 4572
-    },
-    "peak_memory_mib": 13024
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 24,
-   "result": {
-    "robots": 24,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 12927,
-    "deadline_misses": 2726,
-    "misses_per_1000": 210.876,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 5490,
-    "age_at_dispatch_p50_ms": 2.958,
-    "age_at_dispatch_p99_ms": 96.267,
-    "age_at_dispatch_max_ms": 99.198,
-    "gpu_hours_per_robot_hour": 0.0417,
-    "utilization": {
-     "dev-0": 1.0
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 5489
-    },
-    "peak_memory_mib": 19536
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 255,
-    "late_trimmed_per_1000_actions": 70.833,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.298,
-    "age_at_dispatch_p99_ms": 2.946,
-    "age_at_dispatch_max_ms": 2.956,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0829
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 510,
-    "late_trimmed_per_1000_actions": 70.833,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.045,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.948,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.1677
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 4,
-   "result": {
-    "robots": 4,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1018,
-    "late_trimmed_per_1000_actions": 70.694,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.035,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.957,
-    "gpu_hours_per_robot_hour": 0.25,
-    "utilization": {
-     "dev-0": 0.3361
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 480
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 960,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 2036,
-    "late_trimmed_per_1000_actions": 70.694,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 1.994,
-    "age_at_dispatch_p99_ms": 2.941,
-    "age_at_dispatch_max_ms": 2.958,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 0.6707
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 960
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 5301,
-    "deadline_misses": 1584,
-    "misses_per_1000": 298.812,
-    "starvations_per_robot_hour": 482.5,
-    "faults_per_robot_hour": 390.0,
-    "late_trimmed_actions": 96,
-    "late_trimmed_per_1000_actions": 9.171,
-    "chunks_rejected_at_robot": 3207,
-    "age_at_dispatch_p50_ms": 63.302,
-    "age_at_dispatch_p99_ms": 97.066,
-    "age_at_dispatch_max_ms": 98.238,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9921
-    },
-    "mean_batch": 4.465,
-    "batch_sizes": {
-     "1": 242,
-     "2": 33,
-     "3": 42,
-     "4": 75,
-     "5": 65,
-     "6": 52,
-     "7": 88,
-     "8": 192
-    },
-    "peak_memory_mib": 848
-   }
-  },
-  {
-   "case": "multi_adapter",
-   "workload": "phased",
-   "configuration": "neura_multi_adapter",
-   "robots": 16,
-   "result": {
-    "robots": 16,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 7762,
-    "deadline_misses": 2292,
-    "misses_per_1000": 295.285,
-    "starvations_per_robot_hour": 240.0,
-    "faults_per_robot_hour": 219.375,
-    "late_trimmed_actions": 25,
-    "late_trimmed_per_1000_actions": 3.719,
-    "chunks_rejected_at_robot": 3832,
-    "age_at_dispatch_p50_ms": 60.743,
-    "age_at_dispatch_p99_ms": 96.508,
-    "age_at_dispatch_max_ms": 98.384,
-    "gpu_hours_per_robot_hour": 0.0625,
-    "utilization": {
-     "dev-0": 0.9979
-    },
-    "mean_batch": 5.96,
-    "batch_sizes": {
-     "1": 128,
-     "2": 24,
-     "3": 25,
-     "4": 12,
-     "5": 19,
-     "6": 29,
-     "7": 35,
-     "8": 396
-    },
-    "peak_memory_mib": 848
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_gpu",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 2,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 482,
-    "late_trimmed_per_1000_actions": 66.944,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.045,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.948,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0776,
-     "dev-1": 0.0811
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 244,
-    "late_trimmed_per_1000_actions": 67.778,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0788
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 482,
-    "late_trimmed_per_1000_actions": 66.944,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.045,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.948,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.1587
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 4,
-   "result": {
-    "robots": 4,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 975,
-    "late_trimmed_per_1000_actions": 67.708,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.064,
-    "age_at_dispatch_p99_ms": 2.947,
-    "age_at_dispatch_max_ms": 2.957,
-    "gpu_hours_per_robot_hour": 0.25,
-    "utilization": {
-     "dev-0": 0.3181
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 480
-    },
-    "peak_memory_mib": 3256
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 960,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1938,
-    "late_trimmed_per_1000_actions": 67.292,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 1.994,
-    "age_at_dispatch_p99_ms": 2.941,
-    "age_at_dispatch_max_ms": 2.958,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 0.6342
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 960
-    },
-    "peak_memory_mib": 6512
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 1440,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 3099,
-    "late_trimmed_per_1000_actions": 71.736,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.074,
-    "age_at_dispatch_p99_ms": 2.935,
-    "age_at_dispatch_max_ms": 2.957,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.9137
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 1440
-    },
-    "peak_memory_mib": 9768
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 16,
-   "result": {
-    "robots": 16,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 7772,
-    "deadline_misses": 2971,
-    "misses_per_1000": 382.27,
-    "starvations_per_robot_hour": 213.75,
-    "faults_per_robot_hour": 198.75,
-    "late_trimmed_actions": 397,
-    "late_trimmed_per_1000_actions": 42.587,
-    "chunks_rejected_at_robot": 4223,
-    "age_at_dispatch_p50_ms": 2.429,
-    "age_at_dispatch_p99_ms": 96.006,
-    "age_at_dispatch_max_ms": 98.9,
-    "gpu_hours_per_robot_hour": 0.0625,
-    "utilization": {
-     "dev-0": 0.9871
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 4572
-    },
-    "peak_memory_mib": 13024
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 24,
-   "result": {
-    "robots": 24,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 12927,
-    "deadline_misses": 2726,
-    "misses_per_1000": 210.876,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 5490,
-    "age_at_dispatch_p50_ms": 2.958,
-    "age_at_dispatch_p99_ms": 96.267,
-    "age_at_dispatch_max_ms": 99.198,
-    "gpu_hours_per_robot_hour": 0.0417,
-    "utilization": {
-     "dev-0": 1.0
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 5489
-    },
-    "peak_memory_mib": 19536
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 120,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.0788
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 120
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 240,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 479,
-    "late_trimmed_per_1000_actions": 66.528,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.67,
-    "age_at_dispatch_p99_ms": 4.942,
-    "age_at_dispatch_max_ms": 4.948,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.1577
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 240
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 4,
-   "result": {
-    "robots": 4,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 480,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 985,
-    "late_trimmed_per_1000_actions": 68.403,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.572,
-    "age_at_dispatch_p99_ms": 4.94,
-    "age_at_dispatch_max_ms": 4.957,
-    "gpu_hours_per_robot_hour": 0.25,
-    "utilization": {
-     "dev-0": 0.3165
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 480
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 8,
-   "result": {
-    "robots": 8,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 960,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 1962,
-    "late_trimmed_per_1000_actions": 68.125,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.516,
-    "age_at_dispatch_p99_ms": 6.033,
-    "age_at_dispatch_max_ms": 21.259,
-    "gpu_hours_per_robot_hour": 0.125,
-    "utilization": {
-     "dev-0": 0.6341
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 960
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 12,
-   "result": {
-    "robots": 12,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 2447,
-    "deadline_misses": 561,
-    "misses_per_1000": 229.26,
-    "starvations_per_robot_hour": 300.0,
-    "faults_per_robot_hour": 155.0,
-    "late_trimmed_actions": 2832,
-    "late_trimmed_per_1000_actions": 76.211,
-    "chunks_rejected_at_robot": 735,
-    "age_at_dispatch_p50_ms": 4.111,
-    "age_at_dispatch_p99_ms": 95.325,
-    "age_at_dispatch_max_ms": 99.353,
-    "gpu_hours_per_robot_hour": 0.0833,
-    "utilization": {
-     "dev-0": 0.8171
-    },
-    "mean_batch": 1.545,
-    "batch_sizes": {
-     "1": 823,
-     "2": 198,
-     "3": 202,
-     "4": 11,
-     "5": 7,
-     "6": 3
-    },
-    "peak_memory_mib": 1684
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "phased",
-   "configuration": "neura_co_located",
-   "robots": 16,
-   "result": {
-    "robots": 16,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 6902,
-    "deadline_misses": 3311,
-    "misses_per_1000": 479.716,
-    "starvations_per_robot_hour": 620.625,
-    "faults_per_robot_hour": 451.875,
-    "late_trimmed_actions": 340,
-    "late_trimmed_per_1000_actions": 16.667,
-    "chunks_rejected_at_robot": 2994,
-    "age_at_dispatch_p50_ms": 54.691,
-    "age_at_dispatch_p99_ms": 97.63,
-    "age_at_dispatch_max_ms": 99.053,
-    "gpu_hours_per_robot_hour": 0.0625,
-    "utilization": {
-     "dev-0": 0.9995
-    },
-    "mean_batch": 2.321,
-    "batch_sizes": {
-     "1": 659,
-     "2": 282,
-     "3": 268,
-     "4": 169,
-     "5": 109,
-     "6": 44,
-     "7": 9
-    },
-    "peak_memory_mib": 1690
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "background",
-   "configuration": "dedicated_gpu",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 2,
-    "duration_s": 120.0,
-    "requests": 1138,
-    "deadline_misses": 384,
-    "misses_per_1000": 337.434,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 743,
-    "age_at_dispatch_p50_ms": 2.881,
-    "age_at_dispatch_p99_ms": 96.705,
-    "age_at_dispatch_max_ms": 98.969,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.9642,
-     "dev-1": 0.9667
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 743
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "background",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 194,
-    "misses_per_1000": 337.979,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 371,
-    "age_at_dispatch_p50_ms": 2.848,
-    "age_at_dispatch_p99_ms": 96.388,
-    "age_at_dispatch_max_ms": 98.307,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.9632
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 371
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "background",
-   "configuration": "dedicated_shared_gpu",
-   "robots": 2,
-   "result": {
-    "robots": 2,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 1076,
-    "deadline_misses": 309,
-    "misses_per_1000": 287.175,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 521,
-    "age_at_dispatch_p50_ms": 2.689,
-    "age_at_dispatch_p99_ms": 93.854,
-    "age_at_dispatch_max_ms": 98.008,
-    "gpu_hours_per_robot_hour": 0.5,
-    "utilization": {
-     "dev-0": 0.9988
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 521
-    },
-    "peak_memory_mib": 1628
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "background",
-   "configuration": "neura_co_located",
-   "robots": 1,
-   "result": {
-    "robots": 1,
-    "devices": 1,
-    "duration_s": 120.0,
-    "requests": 574,
-    "deadline_misses": 202,
-    "misses_per_1000": 351.916,
-    "starvations_per_robot_hour": 0.0,
-    "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 0,
-    "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 369,
-    "age_at_dispatch_p50_ms": 4.725,
-    "age_at_dispatch_p99_ms": 95.757,
-    "age_at_dispatch_max_ms": 97.275,
-    "gpu_hours_per_robot_hour": 1.0,
-    "utilization": {
-     "dev-0": 0.9596
-    },
-    "mean_batch": 1.0,
-    "batch_sizes": {
-     "1": 369
-    },
-    "peak_memory_mib": 814
-   }
-  },
-  {
-   "case": "co_located_fine_tunes",
-   "workload": "background",
-   "configuration": "neura_co_located",
    "robots": 2,
    "result": {
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
     "requests": 1074,
-    "deadline_misses": 290,
-    "misses_per_1000": 270.019,
+    "deadline_misses": 878,
+    "misses_per_1000": 817.505,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 518,
-    "age_at_dispatch_p50_ms": 4.768,
-    "age_at_dispatch_p99_ms": 92.724,
-    "age_at_dispatch_max_ms": 98.247,
+    "chunks_rejected_at_robot": 512,
+    "age_at_dispatch_p50_ms": 4.542,
+    "age_at_dispatch_p99_ms": 94.582,
+    "age_at_dispatch_max_ms": 96.304,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9983
+     "dev-0": 0.9701
+    },
+    "mean_batch": 1.809,
+    "batch_sizes": {
+     "1": 54,
+     "2": 229
+    },
+    "peak_memory_mib": 835
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_gpu",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 244,
+    "late_trimmed_per_1000_actions": 67.778,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 518
+     "1": 120
     },
-    "peak_memory_mib": 1628
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 244,
+    "late_trimmed_per_1000_actions": 67.778,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0805
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 120
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 482,
+    "late_trimmed_per_1000_actions": 66.944,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 1.983,
+    "age_at_dispatch_p99_ms": 3.714,
+    "age_at_dispatch_max_ms": 3.753,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.1584
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 4,
+   "result": {
+    "robots": 4,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 480,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 974,
+    "late_trimmed_per_1000_actions": 67.639,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.024,
+    "age_at_dispatch_p99_ms": 3.734,
+    "age_at_dispatch_max_ms": 3.768,
+    "gpu_hours_per_robot_hour": 0.25,
+    "utilization": {
+     "dev-0": 0.3189
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 480
+    },
+    "peak_memory_mib": 3264
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 8,
+   "result": {
+    "robots": 8,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 960,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 1938,
+    "late_trimmed_per_1000_actions": 67.292,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.164,
+    "age_at_dispatch_p99_ms": 3.738,
+    "age_at_dispatch_max_ms": 3.771,
+    "gpu_hours_per_robot_hour": 0.125,
+    "utilization": {
+     "dev-0": 0.633
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 960
+    },
+    "peak_memory_mib": 6528
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 12,
+   "result": {
+    "robots": 12,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 1449,
+    "deadline_misses": 11,
+    "misses_per_1000": 7.591,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 3285,
+    "late_trimmed_per_1000_actions": 76.042,
+    "chunks_rejected_at_robot": 11,
+    "age_at_dispatch_p50_ms": 2.167,
+    "age_at_dispatch_p99_ms": 3.727,
+    "age_at_dispatch_max_ms": 3.771,
+    "gpu_hours_per_robot_hour": 0.0833,
+    "utilization": {
+     "dev-0": 0.8735
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 1449
+    },
+    "peak_memory_mib": 9792
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 16,
+   "result": {
+    "robots": 16,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 2673,
+    "deadline_misses": 920,
+    "misses_per_1000": 344.183,
+    "starvations_per_robot_hour": 213.75,
+    "faults_per_robot_hour": 185.625,
+    "late_trimmed_actions": 4293,
+    "late_trimmed_per_1000_actions": 85.044,
+    "chunks_rejected_at_robot": 719,
+    "age_at_dispatch_p50_ms": 2.456,
+    "age_at_dispatch_p99_ms": 88.247,
+    "age_at_dispatch_max_ms": 97.893,
+    "gpu_hours_per_robot_hour": 0.0625,
+    "utilization": {
+     "dev-0": 0.9475
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 2424
+    },
+    "peak_memory_mib": 13056
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 280,
+    "late_trimmed_per_1000_actions": 77.778,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.235,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0897
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 120
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 549,
+    "late_trimmed_per_1000_actions": 76.25,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 3.969,
+    "age_at_dispatch_p99_ms": 5.714,
+    "age_at_dispatch_max_ms": 5.753,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.1762
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 4,
+   "result": {
+    "robots": 4,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 480,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 1107,
+    "late_trimmed_per_1000_actions": 76.875,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.101,
+    "age_at_dispatch_p99_ms": 5.736,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 0.25,
+    "utilization": {
+     "dev-0": 0.3565
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 480
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 8,
+   "result": {
+    "robots": 8,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 960,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 2255,
+    "late_trimmed_per_1000_actions": 78.299,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.341,
+    "age_at_dispatch_p99_ms": 24.236,
+    "age_at_dispatch_max_ms": 40.314,
+    "gpu_hours_per_robot_hour": 0.125,
+    "utilization": {
+     "dev-0": 0.7098
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 960
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 12,
+   "result": {
+    "robots": 12,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 4652,
+    "deadline_misses": 3893,
+    "misses_per_1000": 836.844,
+    "starvations_per_robot_hour": 807.5,
+    "faults_per_robot_hour": 457.5,
+    "late_trimmed_actions": 296,
+    "late_trimmed_per_1000_actions": 15.061,
+    "chunks_rejected_at_robot": 2201,
+    "age_at_dispatch_p50_ms": 64.554,
+    "age_at_dispatch_p99_ms": 98.304,
+    "age_at_dispatch_max_ms": 100.254,
+    "gpu_hours_per_robot_hour": 0.0833,
+    "utilization": {
+     "dev-0": 0.9866
+    },
+    "mean_batch": 3.013,
+    "batch_sizes": {
+     "1": 287,
+     "2": 218,
+     "3": 113,
+     "4": 75,
+     "5": 98,
+     "6": 51,
+     "7": 55,
+     "8": 32
+    },
+    "peak_memory_mib": 856
+   }
+  },
+  {
+   "case": "multi_adapter",
+   "workload": "phased",
+   "configuration": "neura_multi_adapter",
+   "robots": 16,
+   "result": {
+    "robots": 16,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 7401,
+    "deadline_misses": 6386,
+    "misses_per_1000": 862.856,
+    "starvations_per_robot_hour": 431.25,
+    "faults_per_robot_hour": 346.875,
+    "late_trimmed_actions": 101,
+    "late_trimmed_per_1000_actions": 8.001,
+    "chunks_rejected_at_robot": 3463,
+    "age_at_dispatch_p50_ms": 61.511,
+    "age_at_dispatch_p99_ms": 97.482,
+    "age_at_dispatch_max_ms": 100.311,
+    "gpu_hours_per_robot_hour": 0.0625,
+    "utilization": {
+     "dev-0": 0.9966
+    },
+    "mean_batch": 4.934,
+    "batch_sizes": {
+     "1": 167,
+     "2": 98,
+     "3": 38,
+     "4": 37,
+     "5": 30,
+     "6": 57,
+     "7": 53,
+     "8": 287
+    },
+    "peak_memory_mib": 856
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_gpu",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 2,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 482,
+    "late_trimmed_per_1000_actions": 66.944,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 1.983,
+    "age_at_dispatch_p99_ms": 3.714,
+    "age_at_dispatch_max_ms": 3.753,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0787,
+     "dev-1": 0.0796
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 244,
+    "late_trimmed_per_1000_actions": 67.778,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0805
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 120
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 482,
+    "late_trimmed_per_1000_actions": 66.944,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 1.983,
+    "age_at_dispatch_p99_ms": 3.714,
+    "age_at_dispatch_max_ms": 3.753,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.1584
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 4,
+   "result": {
+    "robots": 4,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 480,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 974,
+    "late_trimmed_per_1000_actions": 67.639,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.024,
+    "age_at_dispatch_p99_ms": 3.734,
+    "age_at_dispatch_max_ms": 3.768,
+    "gpu_hours_per_robot_hour": 0.25,
+    "utilization": {
+     "dev-0": 0.3189
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 480
+    },
+    "peak_memory_mib": 3264
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 8,
+   "result": {
+    "robots": 8,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 960,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 1938,
+    "late_trimmed_per_1000_actions": 67.292,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 2.164,
+    "age_at_dispatch_p99_ms": 3.738,
+    "age_at_dispatch_max_ms": 3.771,
+    "gpu_hours_per_robot_hour": 0.125,
+    "utilization": {
+     "dev-0": 0.633
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 960
+    },
+    "peak_memory_mib": 6528
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 12,
+   "result": {
+    "robots": 12,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 1449,
+    "deadline_misses": 11,
+    "misses_per_1000": 7.591,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 3285,
+    "late_trimmed_per_1000_actions": 76.042,
+    "chunks_rejected_at_robot": 11,
+    "age_at_dispatch_p50_ms": 2.167,
+    "age_at_dispatch_p99_ms": 3.727,
+    "age_at_dispatch_max_ms": 3.771,
+    "gpu_hours_per_robot_hour": 0.0833,
+    "utilization": {
+     "dev-0": 0.8735
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 1449
+    },
+    "peak_memory_mib": 9792
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 16,
+   "result": {
+    "robots": 16,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 2673,
+    "deadline_misses": 920,
+    "misses_per_1000": 344.183,
+    "starvations_per_robot_hour": 213.75,
+    "faults_per_robot_hour": 185.625,
+    "late_trimmed_actions": 4293,
+    "late_trimmed_per_1000_actions": 85.044,
+    "chunks_rejected_at_robot": 719,
+    "age_at_dispatch_p50_ms": 2.456,
+    "age_at_dispatch_p99_ms": 88.247,
+    "age_at_dispatch_max_ms": 97.893,
+    "gpu_hours_per_robot_hour": 0.0625,
+    "utilization": {
+     "dev-0": 0.9475
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 2424
+    },
+    "peak_memory_mib": 13056
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 120,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.0805
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 120
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 240,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 493,
+    "late_trimmed_per_1000_actions": 68.472,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 3.976,
+    "age_at_dispatch_p99_ms": 5.714,
+    "age_at_dispatch_max_ms": 5.753,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.1582
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 240
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 4,
+   "result": {
+    "robots": 4,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 480,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 984,
+    "late_trimmed_per_1000_actions": 68.333,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.083,
+    "age_at_dispatch_p99_ms": 5.736,
+    "age_at_dispatch_max_ms": 5.768,
+    "gpu_hours_per_robot_hour": 0.25,
+    "utilization": {
+     "dev-0": 0.3196
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 480
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 8,
+   "result": {
+    "robots": 8,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 960,
+    "deadline_misses": 0,
+    "misses_per_1000": 0.0,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 1978,
+    "late_trimmed_per_1000_actions": 68.681,
+    "chunks_rejected_at_robot": 0,
+    "age_at_dispatch_p50_ms": 4.107,
+    "age_at_dispatch_p99_ms": 5.721,
+    "age_at_dispatch_max_ms": 5.767,
+    "gpu_hours_per_robot_hour": 0.125,
+    "utilization": {
+     "dev-0": 0.6352
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 960
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 12,
+   "result": {
+    "robots": 12,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 2073,
+    "deadline_misses": 749,
+    "misses_per_1000": 361.312,
+    "starvations_per_robot_hour": 225.0,
+    "faults_per_robot_hour": 92.5,
+    "late_trimmed_actions": 3176,
+    "late_trimmed_per_1000_actions": 79.958,
+    "chunks_rejected_at_robot": 487,
+    "age_at_dispatch_p50_ms": 4.738,
+    "age_at_dispatch_p99_ms": 95.159,
+    "age_at_dispatch_max_ms": 99.554,
+    "gpu_hours_per_robot_hour": 0.0833,
+    "utilization": {
+     "dev-0": 0.8631
+    },
+    "mean_batch": 1.194,
+    "batch_sizes": {
+     "1": 1291,
+     "2": 131,
+     "3": 47,
+     "4": 16,
+     "5": 4
+    },
+    "peak_memory_mib": 1696
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "phased",
+   "configuration": "neura_co_located",
+   "robots": 16,
+   "result": {
+    "robots": 16,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 6860,
+    "deadline_misses": 6117,
+    "misses_per_1000": 891.691,
+    "starvations_per_robot_hour": 579.375,
+    "faults_per_robot_hour": 420.0,
+    "late_trimmed_actions": 354,
+    "late_trimmed_per_1000_actions": 18.094,
+    "chunks_rejected_at_robot": 3231,
+    "age_at_dispatch_p50_ms": 55.711,
+    "age_at_dispatch_p99_ms": 97.743,
+    "age_at_dispatch_max_ms": 99.803,
+    "gpu_hours_per_robot_hour": 0.0625,
+    "utilization": {
+     "dev-0": 1.0005
+    },
+    "mean_batch": 2.536,
+    "batch_sizes": {
+     "1": 603,
+     "2": 260,
+     "3": 224,
+     "4": 182,
+     "5": 134,
+     "6": 82,
+     "7": 17,
+     "8": 1
+    },
+    "peak_memory_mib": 1709
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "background",
+   "configuration": "dedicated_gpu",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 2,
+    "duration_s": 120.0,
+    "requests": 1142,
+    "deadline_misses": 1121,
+    "misses_per_1000": 981.611,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 0,
+    "late_trimmed_per_1000_actions": 0.0,
+    "chunks_rejected_at_robot": 691,
+    "age_at_dispatch_p50_ms": 3.172,
+    "age_at_dispatch_p99_ms": 96.058,
+    "age_at_dispatch_max_ms": 98.509,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.9625,
+     "dev-1": 0.9595
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 691
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "background",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 579,
+    "deadline_misses": 573,
+    "misses_per_1000": 989.637,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 0,
+    "late_trimmed_per_1000_actions": 0.0,
+    "chunks_rejected_at_robot": 349,
+    "age_at_dispatch_p50_ms": 3.0,
+    "age_at_dispatch_p99_ms": 96.362,
+    "age_at_dispatch_max_ms": 97.882,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.9586
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 349
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "background",
+   "configuration": "dedicated_shared_gpu",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 1063,
+    "deadline_misses": 745,
+    "misses_per_1000": 700.847,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 0,
+    "late_trimmed_per_1000_actions": 0.0,
+    "chunks_rejected_at_robot": 502,
+    "age_at_dispatch_p50_ms": 4.607,
+    "age_at_dispatch_p99_ms": 94.584,
+    "age_at_dispatch_max_ms": 97.124,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.9996
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 502
+    },
+    "peak_memory_mib": 1632
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "background",
+   "configuration": "neura_co_located",
+   "robots": 1,
+   "result": {
+    "robots": 1,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 579,
+    "deadline_misses": 572,
+    "misses_per_1000": 987.91,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 0,
+    "late_trimmed_per_1000_actions": 0.0,
+    "chunks_rejected_at_robot": 343,
+    "age_at_dispatch_p50_ms": 5.077,
+    "age_at_dispatch_p99_ms": 96.504,
+    "age_at_dispatch_max_ms": 98.611,
+    "gpu_hours_per_robot_hour": 1.0,
+    "utilization": {
+     "dev-0": 0.9568
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 343
+    },
+    "peak_memory_mib": 816
+   }
+  },
+  {
+   "case": "co_located_fine_tunes",
+   "workload": "background",
+   "configuration": "neura_co_located",
+   "robots": 2,
+   "result": {
+    "robots": 2,
+    "devices": 1,
+    "duration_s": 120.0,
+    "requests": 1073,
+    "deadline_misses": 770,
+    "misses_per_1000": 717.614,
+    "starvations_per_robot_hour": 0.0,
+    "faults_per_robot_hour": 0.0,
+    "late_trimmed_actions": 0,
+    "late_trimmed_per_1000_actions": 0.0,
+    "chunks_rejected_at_robot": 498,
+    "age_at_dispatch_p50_ms": 5.412,
+    "age_at_dispatch_p99_ms": 95.501,
+    "age_at_dispatch_max_ms": 97.938,
+    "gpu_hours_per_robot_hour": 0.5,
+    "utilization": {
+     "dev-0": 0.9984
+    },
+    "mean_batch": 1.0,
+    "batch_sizes": {
+     "1": 498
+    },
+    "peak_memory_mib": 1632
    }
   },
   {
@@ -3075,25 +2808,25 @@
     "robots": 2,
     "devices": 2,
     "duration_s": 120.0,
-    "requests": 663,
-    "deadline_misses": 67,
-    "misses_per_1000": 101.056,
+    "requests": 656,
+    "deadline_misses": 535,
+    "misses_per_1000": 815.549,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 242,
-    "late_trimmed_per_1000_actions": 67.222,
-    "chunks_rejected_at_robot": 475,
-    "age_at_dispatch_p50_ms": 32.704,
-    "age_at_dispatch_p99_ms": 95.094,
-    "age_at_dispatch_max_ms": 97.93,
+    "late_trimmed_actions": 253,
+    "late_trimmed_per_1000_actions": 70.278,
+    "chunks_rejected_at_robot": 486,
+    "age_at_dispatch_p50_ms": 33.011,
+    "age_at_dispatch_p99_ms": 96.091,
+    "age_at_dispatch_max_ms": 97.71,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0806,
-     "dev-1": 0.9846
+     "dev-0": 0.0812,
+     "dev-1": 0.9872
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 595
+     "1": 606
     },
     "peak_memory_mib": 901
    }
@@ -3115,18 +2848,18 @@
     "late_trimmed_actions": 244,
     "late_trimmed_per_1000_actions": 67.778,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.071,
-    "age_at_dispatch_p99_ms": 2.907,
-    "age_at_dispatch_max_ms": 2.944,
+    "age_at_dispatch_p50_ms": 2.272,
+    "age_at_dispatch_p99_ms": 3.753,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3138,26 +2871,26 @@
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 678,
-    "deadline_misses": 97,
-    "misses_per_1000": 143.068,
+    "requests": 671,
+    "deadline_misses": 551,
+    "misses_per_1000": 821.162,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 361,
-    "late_trimmed_per_1000_actions": 100.278,
-    "chunks_rejected_at_robot": 461,
-    "age_at_dispatch_p50_ms": 15.907,
-    "age_at_dispatch_p99_ms": 95.74,
-    "age_at_dispatch_max_ms": 98.321,
+    "late_trimmed_actions": 355,
+    "late_trimmed_per_1000_actions": 98.611,
+    "chunks_rejected_at_robot": 469,
+    "age_at_dispatch_p50_ms": 22.881,
+    "age_at_dispatch_p99_ms": 96.307,
+    "age_at_dispatch_max_ms": 99.221,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9782
+     "dev-0": 0.9836
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 580
+     "1": 589
     },
-    "peak_memory_mib": 1715
+    "peak_memory_mib": 1717
    }
   },
   {
@@ -3169,26 +2902,26 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1479,
-    "deadline_misses": 558,
-    "misses_per_1000": 377.282,
-    "starvations_per_robot_hour": 7.5,
+    "requests": 1484,
+    "deadline_misses": 1241,
+    "misses_per_1000": 836.253,
+    "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 772,
-    "late_trimmed_per_1000_actions": 107.356,
-    "chunks_rejected_at_robot": 675,
-    "age_at_dispatch_p50_ms": 2.171,
-    "age_at_dispatch_p99_ms": 94.871,
-    "age_at_dispatch_max_ms": 98.875,
+    "late_trimmed_actions": 778,
+    "late_trimmed_per_1000_actions": 108.056,
+    "chunks_rejected_at_robot": 683,
+    "age_at_dispatch_p50_ms": 2.384,
+    "age_at_dispatch_p99_ms": 96.513,
+    "age_at_dispatch_max_ms": 99.527,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.9965
+     "dev-0": 0.9999
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 904
+     "1": 916
     },
-    "peak_memory_mib": 3430
+    "peak_memory_mib": 3434
    }
   },
   {
@@ -3205,21 +2938,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 247,
-    "late_trimmed_per_1000_actions": 68.611,
+    "late_trimmed_actions": 250,
+    "late_trimmed_per_1000_actions": 69.444,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.691,
-    "age_at_dispatch_p99_ms": 4.897,
-    "age_at_dispatch_max_ms": 4.944,
+    "age_at_dispatch_p50_ms": 4.272,
+    "age_at_dispatch_p99_ms": 5.753,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0788
+     "dev-0": 0.0805
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 120
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3231,26 +2964,26 @@
     "robots": 2,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 677,
-    "deadline_misses": 101,
-    "misses_per_1000": 149.188,
+    "requests": 673,
+    "deadline_misses": 553,
+    "misses_per_1000": 821.694,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 364,
-    "late_trimmed_per_1000_actions": 101.111,
-    "chunks_rejected_at_robot": 456,
-    "age_at_dispatch_p50_ms": 20.157,
-    "age_at_dispatch_p99_ms": 95.691,
-    "age_at_dispatch_max_ms": 97.655,
+    "late_trimmed_actions": 363,
+    "late_trimmed_per_1000_actions": 100.833,
+    "chunks_rejected_at_robot": 470,
+    "age_at_dispatch_p50_ms": 20.836,
+    "age_at_dispatch_p99_ms": 98.194,
+    "age_at_dispatch_max_ms": 99.801,
     "gpu_hours_per_robot_hour": 0.5,
     "utilization": {
-     "dev-0": 0.9795
+     "dev-0": 0.9821
     },
     "mean_batch": 1.0,
     "batch_sizes": {
-     "1": 576
+     "1": 589
     },
-    "peak_memory_mib": 1715
+    "peak_memory_mib": 1717
    }
   },
   {
@@ -3262,27 +2995,27 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 120.0,
-    "requests": 1285,
-    "deadline_misses": 285,
-    "misses_per_1000": 221.79,
+    "requests": 1368,
+    "deadline_misses": 1065,
+    "misses_per_1000": 778.509,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 726,
-    "late_trimmed_per_1000_actions": 100.833,
-    "chunks_rejected_at_robot": 524,
-    "age_at_dispatch_p50_ms": 4.218,
-    "age_at_dispatch_p99_ms": 92.238,
-    "age_at_dispatch_max_ms": 97.844,
+    "late_trimmed_actions": 718,
+    "late_trimmed_per_1000_actions": 99.722,
+    "chunks_rejected_at_robot": 566,
+    "age_at_dispatch_p50_ms": 3.961,
+    "age_at_dispatch_p99_ms": 60.261,
+    "age_at_dispatch_max_ms": 79.29,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.983
+     "dev-0": 0.9626
     },
-    "mean_batch": 1.508,
+    "mean_batch": 1.452,
     "batch_sizes": {
-     "1": 249,
-     "2": 257
+     "1": 304,
+     "2": 251
     },
-    "peak_memory_mib": 1715
+    "peak_memory_mib": 1717
    }
   }
  ],
@@ -3295,9 +3028,9 @@
      "gpu_hours_per_robot_hour": 1.0
     },
     "dedicated_shared_gpu": {
-     "first_failure": 16,
-     "robots_per_device": 12,
-     "gpu_hours_per_robot_hour": 0.0833
+     "first_failure": 12,
+     "robots_per_device": 8,
+     "gpu_hours_per_robot_hour": 0.125
     },
     "neura_fifo": {
      "first_failure": 12,
@@ -3322,24 +3055,24 @@
      "gpu_hours_per_robot_hour": 1.0
     },
     "dedicated_shared_gpu": {
-     "first_failure": 8,
-     "robots_per_device": 4,
-     "gpu_hours_per_robot_hour": 0.25
+     "first_failure": 2,
+     "robots_per_device": 1,
+     "gpu_hours_per_robot_hour": 1.0
     },
     "neura_fifo": {
-     "first_failure": 8,
-     "robots_per_device": 4,
-     "gpu_hours_per_robot_hour": 0.25
+     "first_failure": 4,
+     "robots_per_device": 2,
+     "gpu_hours_per_robot_hour": 0.5
     },
     "neura_round_robin": {
-     "first_failure": 8,
-     "robots_per_device": 4,
-     "gpu_hours_per_robot_hour": 0.25
+     "first_failure": 4,
+     "robots_per_device": 2,
+     "gpu_hours_per_robot_hour": 0.5
     },
     "neura_deadline_fairness": {
-     "first_failure": 8,
-     "robots_per_device": 4,
-     "gpu_hours_per_robot_hour": 0.25
+     "first_failure": 4,
+     "robots_per_device": 2,
+     "gpu_hours_per_robot_hour": 0.5
     }
    },
    "background": {
@@ -3378,9 +3111,9 @@
      "gpu_hours_per_robot_hour": 1.0
     },
     "dedicated_shared_gpu": {
-     "first_failure": 16,
-     "robots_per_device": 12,
-     "gpu_hours_per_robot_hour": 0.0833
+     "first_failure": 12,
+     "robots_per_device": 8,
+     "gpu_hours_per_robot_hour": 0.125
     },
     "neura_multi_adapter": {
      "first_failure": 12,
@@ -3397,9 +3130,9 @@
      "gpu_hours_per_robot_hour": 1.0
     },
     "dedicated_shared_gpu": {
-     "first_failure": 16,
-     "robots_per_device": 12,
-     "gpu_hours_per_robot_hour": 0.0833
+     "first_failure": 12,
+     "robots_per_device": 8,
+     "gpu_hours_per_robot_hour": 0.125
     },
     "neura_co_located": {
      "first_failure": 12,
@@ -3461,21 +3194,21 @@
      "misses_per_1000": 0.0,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 93,
-     "late_trimmed_per_1000_actions": 68.838,
+     "late_trimmed_actions": 92,
+     "late_trimmed_per_1000_actions": 68.098,
      "chunks_rejected_at_robot": 0,
-     "age_at_dispatch_p50_ms": 1.992,
-     "age_at_dispatch_p99_ms": 3.341,
-     "age_at_dispatch_max_ms": 3.615,
+     "age_at_dispatch_p50_ms": 2.037,
+     "age_at_dispatch_p99_ms": 6.192,
+     "age_at_dispatch_max_ms": 7.013,
      "gpu_hours_per_robot_hour": 1.0,
      "utilization": {
-      "cpu": 0.0801
+      "cpu": 0.0808
      },
      "mean_batch": 1.0,
      "batch_sizes": {
       "1": 45
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3489,21 +3222,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 92,
-    "late_trimmed_per_1000_actions": 68.148,
+    "late_trimmed_actions": 93,
+    "late_trimmed_per_1000_actions": 68.889,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 1.944,
-    "age_at_dispatch_p99_ms": 2.856,
-    "age_at_dispatch_max_ms": 2.878,
+    "age_at_dispatch_p50_ms": 2.308,
+    "age_at_dispatch_p99_ms": 3.762,
+    "age_at_dispatch_max_ms": 3.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0802
+     "dev-0": 0.0809
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 45
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3521,21 +3254,21 @@
      "misses_per_1000": 0.0,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 96,
-     "late_trimmed_per_1000_actions": 71.058,
+     "late_trimmed_actions": 93,
+     "late_trimmed_per_1000_actions": 68.838,
      "chunks_rejected_at_robot": 0,
-     "age_at_dispatch_p50_ms": 4.663,
-     "age_at_dispatch_p99_ms": 7.19,
-     "age_at_dispatch_max_ms": 8.291,
+     "age_at_dispatch_p50_ms": 4.411,
+     "age_at_dispatch_p99_ms": 5.736,
+     "age_at_dispatch_max_ms": 5.909,
      "gpu_hours_per_robot_hour": 1.0,
      "utilization": {
-      "cpu": 0.0829
+      "cpu": 0.0807
      },
      "mean_batch": 1.0,
      "batch_sizes": {
       "1": 45
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3549,21 +3282,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 94,
-    "late_trimmed_per_1000_actions": 69.63,
+    "late_trimmed_actions": 95,
+    "late_trimmed_per_1000_actions": 70.37,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.667,
-    "age_at_dispatch_p99_ms": 4.733,
-    "age_at_dispatch_max_ms": 4.734,
+    "age_at_dispatch_p50_ms": 4.308,
+    "age_at_dispatch_p99_ms": 5.762,
+    "age_at_dispatch_max_ms": 5.768,
     "gpu_hours_per_robot_hour": 1.0,
     "utilization": {
-     "dev-0": 0.0802
+     "dev-0": 0.0809
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 45
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3575,27 +3308,27 @@
     "result": {
      "robots": 4,
      "devices": 1,
-     "duration_s": 45.0,
-     "requests": 180,
-     "deadline_misses": 0,
-     "misses_per_1000": 0.0,
+     "duration_s": 45.001,
+     "requests": 181,
+     "deadline_misses": 1,
+     "misses_per_1000": 5.525,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
      "late_trimmed_actions": 394,
      "late_trimmed_per_1000_actions": 72.936,
-     "chunks_rejected_at_robot": 0,
-     "age_at_dispatch_p50_ms": 4.594,
-     "age_at_dispatch_p99_ms": 6.355,
-     "age_at_dispatch_max_ms": 7.97,
+     "chunks_rejected_at_robot": 1,
+     "age_at_dispatch_p50_ms": 4.508,
+     "age_at_dispatch_p99_ms": 45.524,
+     "age_at_dispatch_max_ms": 46.309,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.3425
+      "cpu": 0.3321
      },
      "mean_batch": 1.0,
      "batch_sizes": {
-      "1": 180
+      "1": 181
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3609,21 +3342,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 377,
-    "late_trimmed_per_1000_actions": 69.815,
+    "late_trimmed_actions": 368,
+    "late_trimmed_per_1000_actions": 68.148,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.554,
-    "age_at_dispatch_p99_ms": 4.949,
-    "age_at_dispatch_max_ms": 4.957,
+    "age_at_dispatch_p50_ms": 3.988,
+    "age_at_dispatch_p99_ms": 5.74,
+    "age_at_dispatch_max_ms": 5.759,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3202
+     "dev-0": 0.3224
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 180
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3635,29 +3368,29 @@
     "result": {
      "robots": 4,
      "devices": 1,
-     "duration_s": 45.001,
+     "duration_s": 45.0,
      "requests": 180,
      "deadline_misses": 0,
      "misses_per_1000": 0.0,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 387,
-     "late_trimmed_per_1000_actions": 71.64,
+     "late_trimmed_actions": 378,
+     "late_trimmed_per_1000_actions": 69.974,
      "chunks_rejected_at_robot": 0,
-     "age_at_dispatch_p50_ms": 4.595,
-     "age_at_dispatch_p99_ms": 7.965,
-     "age_at_dispatch_max_ms": 9.415,
+     "age_at_dispatch_p50_ms": 4.495,
+     "age_at_dispatch_p99_ms": 5.808,
+     "age_at_dispatch_max_ms": 6.291,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.338
+      "cpu": 0.3343
      },
      "mean_batch": 1.0,
      "batch_sizes": {
       "1": 180
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
-    "late_tick_fraction": 0.0002,
+    "late_tick_fraction": 0.0,
     "worker_restarts": 0
    },
    "simulated": {
@@ -3669,21 +3402,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 377,
-    "late_trimmed_per_1000_actions": 69.815,
+    "late_trimmed_actions": 368,
+    "late_trimmed_per_1000_actions": 68.148,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.554,
-    "age_at_dispatch_p99_ms": 4.949,
-    "age_at_dispatch_max_ms": 4.957,
+    "age_at_dispatch_p50_ms": 3.988,
+    "age_at_dispatch_p99_ms": 5.74,
+    "age_at_dispatch_max_ms": 5.759,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3202
+     "dev-0": 0.3224
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 180
     },
-    "peak_memory_mib": 814
+    "peak_memory_mib": 816
    }
   },
   {
@@ -3695,29 +3428,29 @@
     "result": {
      "robots": 3,
      "devices": 1,
-     "duration_s": 45.001,
+     "duration_s": 45.0,
      "requests": 135,
-     "deadline_misses": 0,
-     "misses_per_1000": 0.0,
+     "deadline_misses": 1,
+     "misses_per_1000": 7.407,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 279,
-     "late_trimmed_per_1000_actions": 68.855,
-     "chunks_rejected_at_robot": 0,
-     "age_at_dispatch_p50_ms": 2.03,
-     "age_at_dispatch_p99_ms": 3.882,
-     "age_at_dispatch_max_ms": 5.219,
+     "late_trimmed_actions": 281,
+     "late_trimmed_per_1000_actions": 69.383,
+     "chunks_rejected_at_robot": 1,
+     "age_at_dispatch_p50_ms": 2.016,
+     "age_at_dispatch_p99_ms": 3.708,
+     "age_at_dispatch_max_ms": 4.244,
      "gpu_hours_per_robot_hour": 0.3333,
      "utilization": {
-      "cpu": 0.2508
+      "cpu": 0.2509
      },
      "mean_batch": 1.0,
      "batch_sizes": {
       "1": 135
      },
-     "peak_memory_mib": 2691
+     "peak_memory_mib": 2628
     },
-    "late_tick_fraction": 0.0,
+    "late_tick_fraction": 0.0007,
     "worker_restarts": 0
    },
    "simulated": {
@@ -3729,21 +3462,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 274,
-    "late_trimmed_per_1000_actions": 67.654,
+    "late_trimmed_actions": 269,
+    "late_trimmed_per_1000_actions": 66.42,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 2.118,
-    "age_at_dispatch_p99_ms": 2.93,
-    "age_at_dispatch_max_ms": 2.941,
+    "age_at_dispatch_p50_ms": 1.783,
+    "age_at_dispatch_p99_ms": 3.696,
+    "age_at_dispatch_max_ms": 3.742,
     "gpu_hours_per_robot_hour": 0.3333,
     "utilization": {
-     "dev-0": 0.24
+     "dev-0": 0.2359
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 135
     },
-    "peak_memory_mib": 2442
+    "peak_memory_mib": 2448
    }
   },
   {
@@ -3755,28 +3488,28 @@
     "result": {
      "robots": 4,
      "devices": 1,
-     "duration_s": 45.0,
+     "duration_s": 45.001,
      "requests": 182,
-     "deadline_misses": 1,
-     "misses_per_1000": 5.495,
+     "deadline_misses": 2,
+     "misses_per_1000": 10.989,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 392,
-     "late_trimmed_per_1000_actions": 72.539,
-     "chunks_rejected_at_robot": 1,
-     "age_at_dispatch_p50_ms": 4.47,
-     "age_at_dispatch_p99_ms": 24.447,
-     "age_at_dispatch_max_ms": 60.718,
+     "late_trimmed_actions": 412,
+     "late_trimmed_per_1000_actions": 76.24,
+     "chunks_rejected_at_robot": 2,
+     "age_at_dispatch_p50_ms": 2.441,
+     "age_at_dispatch_p99_ms": 48.321,
+     "age_at_dispatch_max_ms": 72.118,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.3379
+      "cpu": 0.3183
      },
-     "mean_batch": 1.006,
+     "mean_batch": 1.083,
      "batch_sizes": {
-      "1": 179,
-      "2": 1
+      "1": 154,
+      "2": 14
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3785,26 +3518,27 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 45.0,
-    "requests": 180,
-    "deadline_misses": 0,
-    "misses_per_1000": 0.0,
+    "requests": 182,
+    "deadline_misses": 2,
+    "misses_per_1000": 10.989,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 372,
-    "late_trimmed_per_1000_actions": 68.889,
-    "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.761,
-    "age_at_dispatch_p99_ms": 4.906,
-    "age_at_dispatch_max_ms": 8.711,
+    "late_trimmed_actions": 399,
+    "late_trimmed_per_1000_actions": 73.889,
+    "chunks_rejected_at_robot": 2,
+    "age_at_dispatch_p50_ms": 3.936,
+    "age_at_dispatch_p99_ms": 75.462,
+    "age_at_dispatch_max_ms": 83.408,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3172
+     "dev-0": 0.305
     },
-    "mean_batch": 1.0,
+    "mean_batch": 1.071,
     "batch_sizes": {
-     "1": 180
+     "1": 158,
+     "2": 12
     },
-    "peak_memory_mib": 831
+    "peak_memory_mib": 840
    }
   },
   {
@@ -3816,61 +3550,61 @@
     "result": {
      "robots": 4,
      "devices": 1,
-     "duration_s": 45.003,
-     "requests": 852,
-     "deadline_misses": 167,
-     "misses_per_1000": 196.009,
+     "duration_s": 45.001,
+     "requests": 887,
+     "deadline_misses": 554,
+     "misses_per_1000": 624.577,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
      "late_trimmed_actions": 0,
      "late_trimmed_per_1000_actions": 0.0,
-     "chunks_rejected_at_robot": 339,
-     "age_at_dispatch_p50_ms": 29.374,
-     "age_at_dispatch_p99_ms": 102.728,
-     "age_at_dispatch_max_ms": 104.539,
+     "chunks_rejected_at_robot": 277,
+     "age_at_dispatch_p50_ms": 49.4,
+     "age_at_dispatch_p99_ms": 95.666,
+     "age_at_dispatch_max_ms": 101.02,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.9803
+      "cpu": 0.9859
      },
-     "mean_batch": 3.353,
+     "mean_batch": 2.208,
      "batch_sizes": {
-      "1": 8,
-      "2": 18,
-      "3": 6,
-      "4": 70
+      "1": 31,
+      "2": 53,
+      "3": 25,
+      "4": 16
      },
-     "peak_memory_mib": 897
+     "peak_memory_mib": 876
     },
-    "late_tick_fraction": 0.0007,
+    "late_tick_fraction": 0.0,
     "worker_restarts": 0
    },
    "simulated": {
     "robots": 4,
     "devices": 1,
     "duration_s": 45.0,
-    "requests": 825,
-    "deadline_misses": 294,
-    "misses_per_1000": 356.364,
+    "requests": 820,
+    "deadline_misses": 505,
+    "misses_per_1000": 615.854,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
     "late_trimmed_actions": 0,
     "late_trimmed_per_1000_actions": 0.0,
-    "chunks_rejected_at_robot": 236,
-    "age_at_dispatch_p50_ms": 4.571,
-    "age_at_dispatch_p99_ms": 95.89,
-    "age_at_dispatch_max_ms": 95.918,
+    "chunks_rejected_at_robot": 217,
+    "age_at_dispatch_p50_ms": 5.329,
+    "age_at_dispatch_p99_ms": 97.696,
+    "age_at_dispatch_max_ms": 98.092,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.9817
+     "dev-0": 0.9828
     },
-    "mean_batch": 2.304,
+    "mean_batch": 2.172,
     "batch_sizes": {
-     "1": 6,
-     "2": 75,
-     "3": 5,
+     "1": 17,
+     "2": 64,
+     "3": 2,
      "4": 16
     },
-    "peak_memory_mib": 839
+    "peak_memory_mib": 846
    }
   },
   {
@@ -3882,27 +3616,27 @@
     "result": {
      "robots": 4,
      "devices": 1,
-     "duration_s": 45.0,
-     "requests": 181,
+     "duration_s": 45.001,
+     "requests": 180,
      "deadline_misses": 0,
      "misses_per_1000": 0.0,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 381,
-     "late_trimmed_per_1000_actions": 70.529,
-     "chunks_rejected_at_robot": 1,
-     "age_at_dispatch_p50_ms": 4.571,
-     "age_at_dispatch_p99_ms": 10.219,
-     "age_at_dispatch_max_ms": 11.181,
+     "late_trimmed_actions": 391,
+     "late_trimmed_per_1000_actions": 72.394,
+     "chunks_rejected_at_robot": 0,
+     "age_at_dispatch_p50_ms": 4.559,
+     "age_at_dispatch_p99_ms": 6.512,
+     "age_at_dispatch_max_ms": 7.946,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.3378
+      "cpu": 0.3436
      },
      "mean_batch": 1.0,
      "batch_sizes": {
-      "1": 181
+      "1": 180
      },
-     "peak_memory_mib": 1794
+     "peak_memory_mib": 1752
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3916,21 +3650,21 @@
     "misses_per_1000": 0.0,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 377,
-    "late_trimmed_per_1000_actions": 69.815,
+    "late_trimmed_actions": 368,
+    "late_trimmed_per_1000_actions": 68.148,
     "chunks_rejected_at_robot": 0,
-    "age_at_dispatch_p50_ms": 3.554,
-    "age_at_dispatch_p99_ms": 4.949,
-    "age_at_dispatch_max_ms": 4.957,
+    "age_at_dispatch_p50_ms": 3.988,
+    "age_at_dispatch_p99_ms": 5.74,
+    "age_at_dispatch_max_ms": 5.759,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.3202
+     "dev-0": 0.3224
     },
     "mean_batch": 1.0,
     "batch_sizes": {
      "1": 180
     },
-    "peak_memory_mib": 1628
+    "peak_memory_mib": 1632
    }
   },
   {
@@ -3943,27 +3677,27 @@
      "robots": 4,
      "devices": 1,
      "duration_s": 45.001,
-     "requests": 515,
-     "deadline_misses": 97,
-     "misses_per_1000": 188.35,
+     "requests": 517,
+     "deadline_misses": 261,
+     "misses_per_1000": 504.836,
      "starvations_per_robot_hour": 0.0,
      "faults_per_robot_hour": 0.0,
-     "late_trimmed_actions": 266,
-     "late_trimmed_per_1000_actions": 98.482,
-     "chunks_rejected_at_robot": 192,
-     "age_at_dispatch_p50_ms": 6.123,
-     "age_at_dispatch_p99_ms": 98.309,
-     "age_at_dispatch_max_ms": 99.907,
+     "late_trimmed_actions": 271,
+     "late_trimmed_per_1000_actions": 100.333,
+     "chunks_rejected_at_robot": 189,
+     "age_at_dispatch_p50_ms": 17.29,
+     "age_at_dispatch_p99_ms": 94.983,
+     "age_at_dispatch_max_ms": 98.921,
      "gpu_hours_per_robot_hour": 0.25,
      "utilization": {
-      "cpu": 0.9893
+      "cpu": 0.9892
      },
-     "mean_batch": 1.344,
+     "mean_batch": 1.365,
      "batch_sizes": {
-      "1": 137,
-      "2": 72
+      "1": 129,
+      "2": 74
      },
-     "peak_memory_mib": 1798
+     "peak_memory_mib": 1777
     },
     "late_tick_fraction": 0.0,
     "worker_restarts": 0
@@ -3972,29 +3706,29 @@
     "robots": 4,
     "devices": 1,
     "duration_s": 45.0,
-    "requests": 481,
-    "deadline_misses": 90,
-    "misses_per_1000": 187.11,
+    "requests": 514,
+    "deadline_misses": 408,
+    "misses_per_1000": 793.774,
     "starvations_per_robot_hour": 0.0,
     "faults_per_robot_hour": 0.0,
-    "late_trimmed_actions": 273,
-    "late_trimmed_per_1000_actions": 101.111,
-    "chunks_rejected_at_robot": 195,
-    "age_at_dispatch_p50_ms": 4.307,
-    "age_at_dispatch_p99_ms": 68.888,
-    "age_at_dispatch_max_ms": 83.201,
+    "late_trimmed_actions": 260,
+    "late_trimmed_per_1000_actions": 96.296,
+    "chunks_rejected_at_robot": 212,
+    "age_at_dispatch_p50_ms": 3.822,
+    "age_at_dispatch_p99_ms": 69.841,
+    "age_at_dispatch_max_ms": 79.29,
     "gpu_hours_per_robot_hour": 0.25,
     "utilization": {
-     "dev-0": 0.9872
+     "dev-0": 0.9592
     },
-    "mean_batch": 1.516,
+    "mean_batch": 1.473,
     "batch_sizes": {
-     "1": 91,
+     "1": 108,
      "2": 97
     },
-    "peak_memory_mib": 1715
+    "peak_memory_mib": 1717
    }
   }
  ],
- "elapsed_s": 990.3
+ "elapsed_s": 927.8
 }

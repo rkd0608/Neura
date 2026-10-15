@@ -239,8 +239,9 @@ def markdown(data: dict[str, Any]) -> str:
         f"Admission control's estimate for ACT on this device: {estimate['max_robots']} robots "
         f"(limited by {estimate['limiting_factor']}), against "
         f"{measured_capacity['robots_per_device'] if measured_capacity else '-'} measured with "
-        "synchronized arrivals. Admission assumes the worst case (every robot asks at once), so "
-        "it should not exceed the synchronized capacity.",
+        "synchronized arrivals. Admission assumes the worst case (every robot asks at once, "
+        "behind a batch already running), so it must not exceed the synchronized capacity: "
+        f"{_admission_verdict(estimate, measured_capacity)}",
         "",
         "## Results",
         "",
@@ -365,6 +366,10 @@ def markdown(data: dict[str, Any]) -> str:
         "observation in no time. Real robots drift by milliseconds, so near-simultaneous "
         "requests sometimes miss the batching window: the simulation is somewhat optimistic for "
         "synchronized arrivals near a freshness limit (compare the validation table).",
+        "- On a CPU host the background job and the worker share the CPU with the gateway and "
+        "the simulated robots, so real ages there include the harness slowing down; the "
+        "simulation models the device only. On a GPU the background job competes for the GPU "
+        "alone.",
         "- Admission control is set aside in the benchmark so it can measure what N robots "
         "get; production refuses sessions beyond the admission estimate.",
         "- Robots that latch a fault are reset by a simulated operator after one second and "
@@ -378,6 +383,15 @@ def markdown(data: dict[str, Any]) -> str:
         "",
     ]
     return "\n".join(out)
+
+
+def _admission_verdict(estimate: dict[str, Any], measured: dict[str, Any] | None) -> str:
+    if measured is None:
+        return "not measured."
+    promised, served = estimate["max_robots"], measured["robots_per_device"]
+    if promised > served:
+        return f"it does ({promised} > {served}), so admission is optimistic on this device."
+    return f"it does not ({promised} <= {served})."
 
 
 def _cameras(image: list[int] | None) -> str:

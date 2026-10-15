@@ -271,6 +271,8 @@ The implemented check (M2) models the worst case: every session requests at once
 
 plus average utilization ≤ `1 − reserve` and memory headroom.
 
+*M6 update:* the scheduler's batching window (§9.2) serves robots that ask together in one batch, so synchronized arrivals cost one batch's latency rather than a queue of single batches. The CPU benchmark (§12.1) also found that robots desynchronize on their own when a pass is slower than a control period.
+
 *Implementation finding (M2), important for the GPU-sharing bet (§25):* with the example's illustrative 100 ms dispatch-freshness limit and 45 ms batches, condition 1 caps one worker at about one batch of sessions (8), well below its throughput limit. Starvation budgets were never the binding constraint. Synchronized requests are realistic: robots that start together stay in phase. Two levers can raise safe capacity, and both belong in the M6 benchmarks:
 
 - **request phasing:** spreading sessions' refill times so bursts do not align;
@@ -362,6 +364,20 @@ Workers run the artifact's pinned OCI image, without network access beyond the s
   - Real-time validation of the main configurations with the production gateway, real workers and gRPC robots.
 
   Reports go to `bench/reports/<device>/` as `results.json` and a generated `README.md`. The GPU workflow (`.github/workflows/bench.yml`) runs on a self-hosted runner labeled `gpu`. Neither configuration uses `torch.compile` or CUDA graphs, so the comparison stays like for like (§10).
+- **What the CPU development host showed** (`bench/reports/cpu-intel-xeon-processor/`; a 4-core CPU with ACT `small` at 128 x 96, so not GPU evidence). The harness fixed problems the unit tests could not see:
+  - The scheduler dispatched the first of several near-simultaneous requests alone, so the rest waited a whole forward pass. Whether they batched depended on event-loop timing; the batching window now makes it deliberate (§9.2).
+  - The scheduler grew batches past what robots could accept: every chunk of a four-robot batch arrived after the 150 ms acceptance limit and was discarded. Batches now stop growing at members' acceptance limits, and chunks robots reject count as deadline misses in the benchmark. Earlier runs had flattered shared serving by not counting them.
+  - Sampling noise in a measured profile can make a larger batch look faster. Profiles are now monotone in batch size (the conservative reading).
+  - Synthetic weights produced out-of-range actions, and the robot runtime latched `ACTION_OUT_OF_RANGE` as designed. The synthetic checkpoints now center actions in the robot's ranges.
+  - Robots that start together do not stay in phase when a forward pass takes longer than a control period: the first ones served run ahead. With the batching window they are served together and stay in phase. On a GPU, where a pass is shorter than a period, phasing (§9.3) needs the GPU run to settle.
+
+  The numbers, with simulation and real time agreeing within single events except where the CPU slows the harness itself:
+  - ACT takes 79 ms at batch 1 and 192 ms at batch 8 here.
+  - Same weights: Neura and one process per robot both serve 8 robots, failing at 12. With synchronized arrivals Neura serves 2 and one process per robot 1.
+  - Multi-adapter batching passes parity (3e-7) and costs 5 to 11% over the base model, so here it serves as many robots as same-weights batching.
+  - Diffusion Policy (244 ms per pass, 8-action chunks) cannot serve one robot at 30 Hz on this CPU.
+  - A background job on the same CPU fails every configuration.
+  - Admission's worst case admits none here: a 106 ms batch-1 p99 already exceeds the 100 ms dispatch-freshness limit. That is conservative against the 8 robots served with phased arrivals and the 2 with synchronized ones.
 
 ---
 

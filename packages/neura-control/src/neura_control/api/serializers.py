@@ -184,6 +184,7 @@ def revision(row: models.Revision) -> dict[str, Any]:
             "compatibility": row.compatibility,
             "reason": row.reason,
             "message": row.message,
+            "capacity": row.capacity,
         },
     }
 
@@ -275,6 +276,16 @@ def api_token(row: models.ApiToken) -> dict[str, Any]:
         "project_ids": row.project_ids,
         "expires_at": iso(row.expires_at),
         "last_used_at": iso(row.last_used_at),
+    }
+
+
+def member(row: models.Membership) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, organization_id=row.organization_id),
+        "role": row.role,
+        "email": row.email,
+        "subject": row.subject,
+        "state": "Active" if row.subject is not None else "Invited",
     }
 
 

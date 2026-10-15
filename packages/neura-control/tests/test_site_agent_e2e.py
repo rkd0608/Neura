@@ -239,7 +239,9 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
     for rev in ("rev1", "rev2"):
         op: str = client.post(f"/v1/revisions/{ids[rev]}/prepare").json()["metadata"]["id"]
         wait_for(partial(succeeded, client, op), what=f"prepare {rev}")
-        assert client.get(f"/v1/revisions/{ids[rev]}").json()["status"]["phase"] == "Prepared"
+        status = client.get(f"/v1/revisions/{ids[rev]}").json()["status"]
+        assert status["phase"] == "Prepared"
+        assert status["capacity"]["max_robots"] >= len(ROBOTS)  # "this server can run N robots"
 
     # --- robots start, but nothing is assigned until a local approval ---------------------------
     robots = [
@@ -306,6 +308,12 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
 
         sessions = wait_for(live_sessions, what="sessions")
         assert {s["revision_id"] for s in sessions} == {ids["rev1"]}
+        assert set(sessions[0]["metrics"]) <= {
+            "chunks",
+            "dispatched_actions",
+            "buffer_actions",
+            "rtt_p99_ms",
+        }
         wait_for(
             lambda: (
                 client.get(f"/v1/robots/{ids['robots'][0]}").json()["status"]["phase"]

@@ -50,14 +50,22 @@ class Organization(Resource, Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
-class Membership(Base):
+class Membership(Resource, Base):
+    """A person in an organization. Added by SSO subject, or invited by email and bound to the
+    subject the first time that person signs in with the verified email."""
+
     __tablename__ = "memberships"
-    organization_id: Mapped[str] = mapped_column(
-        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    __table_args__ = (
+        UniqueConstraint("organization_id", "subject", name="uq_memberships_org_subject"),
+        UniqueConstraint("organization_id", "email", name="uq_memberships_org_email"),
     )
-    subject: Mapped[str] = mapped_column(String(512), primary_key=True)  # "<issuer>|<sub>"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subject: Mapped[str | None] = mapped_column(String(512), index=True)  # "<issuer>|<sub>"
+    email: Mapped[str | None] = mapped_column(String(320), index=True)  # lower case
     role: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = _now()
 
 
 class ApiToken(Resource, Base):
@@ -215,6 +223,8 @@ class Revision(Resource, Base):
     phase: Mapped[str] = mapped_column(String(32), nullable=False, default="Created")
     reason: Mapped[str | None] = mapped_column(String(64))
     message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Site-computed capacity estimate (design §9.3), reported when the revision is prepared.
+    capacity: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class Operation(Resource, Base):

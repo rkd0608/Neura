@@ -64,6 +64,8 @@ message HeartbeatRequest {
   string fault_reason = 7;
   uint64 dispatched_actions = 8;
   uint64 task_epoch = 9;
+  // Actions queued on the robot (its buffer level), for status reporting only.
+  uint64 queued_actions = 10;
 }
 
 message HeartbeatResponse {

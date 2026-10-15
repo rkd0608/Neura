@@ -13,6 +13,7 @@ members = [
     "neura-control",
     "neura-proto",
     "neura-runtime",
+    "neura-sdk",
     "neura-server",
     "neura-sim",
     "neura-workspace",
@@ -1127,6 +1128,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "neura-sdk"
+version = "0.1.0.dev0"
+source = { editable = "packages/neura-sdk" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.28" }]
+
+[[package]]
 name = "neura-server"
 version = "0.1.0.dev0"
 source = { editable = "packages/neura-server" }
@@ -1194,6 +1206,7 @@ dev = [
     { name = "neura-control" },
     { name = "neura-proto" },
     { name = "neura-runtime" },
+    { name = "neura-sdk" },
     { name = "neura-server" },
     { name = "neura-sim" },
     { name = "openapi-spec-validator" },
@@ -1219,6 +1232,7 @@ dev = [
     { name = "neura-control", editable = "packages/neura-control" },
     { name = "neura-proto", editable = "packages/neura-proto" },
     { name = "neura-runtime", editable = "packages/neura-runtime" },
+    { name = "neura-sdk", editable = "packages/neura-sdk" },
     { name = "neura-server", editable = "packages/neura-server" },
     { name = "neura-sim", editable = "packages/neura-sim" },
     { name = "openapi-spec-validator", specifier = ">=0.9" },

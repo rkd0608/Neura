@@ -29,6 +29,10 @@ class ControlPlaneSettings(BaseSettings):
     oidc_issuer: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
+    # The console signs people in with authorization code + PKCE as a public client registered at
+    # the IdP. Published in /v1/meta; without it the console offers API-token sign-in only.
+    console_oidc_client_id: str | None = None
+    console_oidc_scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
 
     rate_limit_per_minute: int = Field(default=1200, ge=1)
     event_retention_hours: int = Field(default=24, ge=1)
@@ -62,6 +66,8 @@ class ControlPlaneSettings(BaseSettings):
         oidc = [self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url]
         if any(oidc) and not all(oidc):
             raise ValueError("set all of oidc_issuer, oidc_audience and oidc_jwks_url, or none")
+        if self.console_oidc_client_id and not self.oidc_issuer:
+            raise ValueError("console_oidc_client_id needs the OIDC settings (oidc_issuer, ...)")
         if self.manifest_signing_key is None and self.environment in ("staging", "production"):
             raise ValueError("manifest_signing_key is required in staging and production")
         if (self.agent_tls_cert_file is None) != (self.agent_tls_key_file is None):

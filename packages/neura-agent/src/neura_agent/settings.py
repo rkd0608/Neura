@@ -54,6 +54,8 @@ class AgentSettings(BaseSettings):
         default_factory=lambda: [sys.executable, "-m", "neura_server"]
     )
     gateway_simulate_latency: bool = True
+    # Round trip to robots assumed by capacity estimates until robots report measured ones.
+    capacity_rtt_p99_ms: float = Field(default=20.0, gt=0)
 
     # --- preflight ---
     require_gpu: bool = False

@@ -143,6 +143,7 @@ class SessionClient:
             runtime_state=self.runtime.state.value,
             fault_reason=self.runtime.fault.reason.value if self.runtime.fault else "",
             dispatched_actions=self.runtime.dispatched,
+            queued_actions=self.runtime.queued_actions,
             task_epoch=self.runtime.task_epoch,
         )
 

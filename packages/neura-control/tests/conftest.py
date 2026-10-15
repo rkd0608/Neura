@@ -11,21 +11,26 @@ import json as jsonlib
 import os
 import secrets
 import sys
+import time
 import uuid
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx2 as httpx
+import jwt
 import psycopg
 import pytest
 import yaml
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from neura_control.app import create_app
 from neura_control.db.engine import create_engine, session_factory
 from neura_control.db.migrate import upgrade
+from neura_control.security.oidc import OidcVerifier
 from neura_control.security.principal import Role
 from neura_control.services import bootstrap
 from neura_control.settings import ControlPlaneSettings
@@ -187,6 +192,35 @@ def settings(clean_database: str) -> ControlPlaneSettings:
     )
 
 
+class OidcIssuer:
+    """A test SSO issuer: signs OIDC access tokens the control plane is configured to trust."""
+
+    def __init__(self) -> None:
+        self.key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.verifier = OidcVerifier(
+            issuer="https://sso.example.com",
+            audience="neura",
+            key_resolver=lambda _: self.key.public_key(),
+        )
+
+    def token(
+        self, sub: str, *, audience: str = "neura", expires_in: int = 300, **claims: Any
+    ) -> str:
+        now = datetime.now(UTC)
+        return jwt.encode(
+            {
+                "iss": "https://sso.example.com",
+                "sub": sub,
+                "aud": audience,
+                "iat": now,
+                "exp": now + timedelta(seconds=expires_in),
+                **claims,
+            },
+            self.key,
+            algorithm="RS256",
+        )
+
+
 AppFactory = Callable[..., tuple[ConformanceClient, str]]
 
 
@@ -218,3 +252,44 @@ def contract(name: str) -> dict[str, Any]:
     data = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
     assert isinstance(data, dict)
     return data
+
+
+class LiveApi:
+    """The control plane served over real HTTP by uvicorn in a background thread, for clients
+    that bring their own transport (the SDK, the console's end-to-end tests)."""
+
+    def __init__(self, settings: ControlPlaneSettings, subjects: dict[str, Role]) -> None:
+        import socket
+        import threading
+
+        import uvicorn
+
+        self.organization_id, self.token = asyncio.run(
+            _bootstrap(str(settings.database_url), subjects)
+        )
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        self.url = f"http://127.0.0.1:{port}"
+        config = uvicorn.Config(
+            create_app(settings), host="127.0.0.1", port=port, log_level="warning", lifespan="on"
+        )
+        self._server = uvicorn.Server(config)
+        self._thread = threading.Thread(target=self._server.run, daemon=True)
+        self._thread.start()
+        deadline = time.monotonic() + 15
+        while not self._server.started:
+            if time.monotonic() > deadline or not self._thread.is_alive():
+                raise RuntimeError("the control plane did not start")
+            time.sleep(0.05)
+
+    def close(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=15)
+
+
+@pytest.fixture
+def live_api(settings: ControlPlaneSettings) -> Iterator[LiveApi]:
+    api = LiveApi(settings, {})
+    yield api
+    api.close()

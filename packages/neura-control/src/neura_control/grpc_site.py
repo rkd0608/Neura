@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
@@ -456,7 +456,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 task_epoch=int(item.task_epoch),
                 state=state,
                 reason=item.reason.code or None,
-                metrics={k: float(v) for k, v in item.metrics.items()},
+                metrics=_session_metrics(item.metrics),
             )
             await site_reports.report_robot(
                 session,
@@ -585,6 +585,22 @@ def _command_message(command: SiteCommand) -> site_pb2.Command:
             site_pb2.CollectDiagnostics(scope=str(data.get("scope", "")))
         )
     return message
+
+
+def _session_metrics(reported: Mapping[str, float]) -> dict[str, float | int]:
+    """Session metrics in the published schema (api/openapi.yaml Session.metrics); anything else
+    a site sends is dropped (design §18.2)."""
+    metrics: dict[str, float | int] = {}
+    for name, published in (
+        ("chunks", "chunks"),
+        ("dispatched_actions", "dispatched_actions"),
+        ("queued_actions", "buffer_actions"),
+    ):
+        if name in reported:
+            metrics[published] = max(0, int(reported[name]))
+    if "rtt_p99_us" in reported:
+        metrics["rtt_p99_ms"] = round(max(0.0, reported["rtt_p99_us"]) / 1000, 3)
+    return metrics
 
 
 async def _organization_of(session: AsyncSession, project_id: str) -> str:

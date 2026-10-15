@@ -6,9 +6,11 @@ never do: a successful request is intent, and only a site report turns it into o
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +31,7 @@ from neura_control.db.models import (
 from neura_control.ids import Kind, new_id
 from neura_control.services import records
 
+log = logging.getLogger("neura.control")
 TERMINAL = frozenset({"Succeeded", "Failed", "Cancelled"})
 
 
@@ -84,6 +87,49 @@ async def update_operation(
     return operation
 
 
+class _CapacityAssumptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    control_period_ms: float = Field(ge=0)
+    starvation_budget_ms: float = Field(ge=0)
+    request_interval_ms: float = Field(ge=0)
+    link_allowance_ms: float = Field(ge=0)
+    dispatch_freshness_ms: float | None = Field(default=None, ge=0)
+    acceptance_freshness_ms: float | None = Field(default=None, ge=0)
+    max_batch: int = Field(ge=1)
+    reserve_fraction: float = Field(ge=0, le=1)
+    latency_p99_ms_by_batch: dict[str, float]
+    memory_available_mib: int | None = Field(default=None, ge=0)
+
+
+class _Capacity(BaseModel):
+    """What a site may report as a capacity estimate (api/openapi.yaml CapacityEstimate)."""
+
+    model_config = ConfigDict(extra="forbid")
+    max_robots: int = Field(ge=0, le=100_000)
+    limiting_factor: Literal[
+        "deadline",
+        "dispatch_freshness",
+        "acceptance_freshness",
+        "memory",
+        "throughput",
+        "search_limit",
+    ]
+    source: Literal["configured_profile", "measured_profile"]
+    assumptions: _CapacityAssumptions
+
+
+def _capacity(reported: Any) -> dict[str, Any] | None:
+    """Accept a site's capacity estimate only if it has the published shape."""
+    if reported is None:
+        return None
+    try:
+        parsed = _Capacity.model_validate(reported)
+    except ValidationError:
+        log.warning("ignored a malformed capacity estimate from a site")
+        return None
+    return {**parsed.model_dump(mode="json"), "estimated_at": iso(utcnow())}
+
+
 async def _apply_outcome(session: AsyncSession, operation: Operation) -> None:
     succeeded = operation.state == "Succeeded"
     if operation.kind == "prepare_revision":
@@ -95,6 +141,8 @@ async def _apply_outcome(session: AsyncSession, operation: Operation) -> None:
         )
         revision.reason = operation.reason
         revision.message = operation.message
+        if succeeded:
+            revision.capacity = _capacity(operation.result.get("capacity"))
         _touch(revision)
         await _emit(session, revision.project_id, revision)
         if succeeded:

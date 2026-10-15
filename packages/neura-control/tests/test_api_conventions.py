@@ -7,16 +7,13 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import jwt
 import psycopg
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
-from conftest import VALIDATOR, AppFactory, ConformanceClient, contract
+from conftest import VALIDATOR, AppFactory, ConformanceClient, OidcIssuer, contract
 from neura_control.app import create_app, iter_routes
 from neura_control.db.models import Base
-from neura_control.security.oidc import OidcVerifier
 from neura_control.security.principal import Role
 
 Api = tuple[ConformanceClient, str]
@@ -152,32 +149,8 @@ def test_expired_token_is_rejected(api: Api, database_url: str) -> None:
     )
 
 
-class _Issuer:
-    def __init__(self) -> None:
-        self.key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        self.verifier = OidcVerifier(
-            issuer="https://sso.example.com",
-            audience="neura",
-            key_resolver=lambda _: self.key.public_key(),
-        )
-
-    def token(self, sub: str, *, audience: str = "neura", expires_in: int = 300) -> str:
-        now = datetime.now(UTC)
-        return jwt.encode(
-            {
-                "iss": "https://sso.example.com",
-                "sub": sub,
-                "aud": audience,
-                "iat": now,
-                "exp": now + timedelta(seconds=expires_in),
-            },
-            self.key,
-            algorithm="RS256",
-        )
-
-
 def test_oidc_users_get_their_role(make_api: AppFactory) -> None:
-    issuer = _Issuer()
+    issuer = OidcIssuer()
     client, org = make_api(
         oidc_verifier=issuer.verifier,
         memberships={

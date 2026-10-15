@@ -13,10 +13,11 @@ setup: ## Install the workspace and dev tools into .venv
 	$(UV) sync --frozen
 
 .PHONY: gen
-gen: ## Regenerate code from proto/, catalog/ and contract models
+gen: ## Regenerate code from proto/, catalog/, contract models and the API spec
 	$(UV) run python tools/gen_reason_codes.py
 	$(UV) run python tools/gen_proto.py
 	$(UV) run python tools/gen_schemas.py
+	$(UV) run python tools/gen_sdk.py
 
 .PHONY: examples
 examples: ## Refresh example execution-profile bindings to current digests
@@ -28,6 +29,7 @@ check-generated: ## Fail if any generated file is stale
 	$(UV) run python tools/gen_proto.py --check
 	$(UV) run python tools/gen_schemas.py --check
 	$(UV) run python tools/refresh_example_bindings.py --check
+	$(UV) run python tools/gen_sdk.py --check
 
 .PHONY: fmt
 fmt: ## Format code

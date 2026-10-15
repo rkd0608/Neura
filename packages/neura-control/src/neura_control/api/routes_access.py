@@ -1,4 +1,4 @@
-"""API tokens and support access grants (design §18.2, §20.7)."""
+"""Members, API tokens and support access grants (design §18.2, §19.2, §20.7)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
@@ -23,10 +23,17 @@ from neura_control.api.common import (
     resource_result,
     transaction,
 )
-from neura_control.api.schemas import ApiTokenCreate, SupportGrantCreate
+from neura_control.api.schemas import ApiTokenCreate, MemberCreate, MemberUpdate, SupportGrantCreate
 from neura_control.api.scope import Ctx, touch
 from neura_control.clock import utcnow
-from neura_control.db.models import ApiToken, Organization, Project, Site, SupportGrant
+from neura_control.db.models import (
+    ApiToken,
+    Membership,
+    Organization,
+    Project,
+    Site,
+    SupportGrant,
+)
 from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
@@ -76,6 +83,133 @@ async def me(request: Request, principal: Principal = Depends(authenticate)) -> 
             else None,
         },
     ).response()
+
+
+# --- members ---------------------------------------------------------------------------------
+
+
+@router.get("/v1/organizations/{organization_id}/members")
+async def list_members(
+    organization_id: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    query = page_query(request)
+    async with transaction(request) as session:
+        await Ctx(request, principal).organization(session, organization_id, Permission.ADMIN)
+        page = await paginate(
+            session,
+            select(Membership).where(Membership.organization_id == organization_id),
+            Membership.id,
+            query,
+            serializers.member,
+        )
+    return ApiResult(200, page).response()
+
+
+@router.post("/v1/organizations/{organization_id}/members", status_code=201)
+async def add_member(
+    organization_id: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    body = await parse_body(request, MemberCreate)
+    ctx = Ctx(request, principal)
+    email = body.email.lower() if body.email else None
+
+    async def work(session: AsyncSession) -> ApiResult:
+        await ctx.organization(session, organization_id, Permission.ADMIN)
+        existing = (
+            await session.scalars(
+                select(Membership).where(
+                    Membership.organization_id == organization_id,
+                    Membership.email == email
+                    if email is not None
+                    else Membership.subject == body.subject,
+                )
+            )
+        ).first()
+        if existing is not None:
+            raise ProblemError(
+                ReasonCode.API_CONFLICT,
+                f"{email or body.subject} is already a member ({existing.id})",
+            )
+        member = Membership(
+            id=new_id(Kind.MEMBER),
+            organization_id=organization_id,
+            email=email,
+            subject=body.subject,
+            role=body.role,
+            created_by=principal.subject,
+        )
+        session.add(member)
+        await session.flush()
+        await _audit_org(session, ctx, organization_id, "member.add", member.id)
+        await session.refresh(member)
+        return resource_result(
+            201, serializers.member(member), 1, f"/v1/organizations/{organization_id}/members"
+        )
+
+    return await idempotent(request, principal, work)
+
+
+async def _ensure_an_admin_remains(session: AsyncSession, member: Membership) -> None:
+    """An organization must keep at least one active admin, or nobody could manage it."""
+    if member.role != "admin" or member.subject is None:
+        return
+    others = await session.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(
+            Membership.organization_id == member.organization_id,
+            Membership.role == "admin",
+            Membership.subject.is_not(None),
+            Membership.id != member.id,
+        )
+    )
+    if not others:
+        raise ProblemError(
+            ReasonCode.API_CONFLICT, "the organization would be left without an active admin"
+        )
+
+
+@router.patch("/v1/members/{member_id}")
+async def update_member(
+    member_id: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    expected = if_match(request)
+    body = await parse_body(request, MemberUpdate, merge_patch=True)
+    ctx = Ctx(request, principal)
+    async with transaction(request) as session:
+        member = await session.get(Membership, member_id, with_for_update=True)
+        if member is None:
+            raise ProblemError(ReasonCode.API_NOT_FOUND)
+        await ctx.organization(session, member.organization_id, Permission.ADMIN)
+        check_version(member.version, expected)
+        if body.role is not None and body.role != member.role:
+            if body.role != "admin":
+                await _ensure_an_admin_remains(session, member)
+            member.role = body.role
+            touch(member)
+            await _audit_org(session, ctx, member.organization_id, "member.update", member.id)
+        return resource_result(200, serializers.member(member), member.version).response()
+
+
+@router.delete("/v1/members/{member_id}", status_code=204)
+async def remove_member(
+    member_id: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    expected = if_match(request)
+    ctx = Ctx(request, principal)
+    async with transaction(request) as session:
+        member = await session.get(Membership, member_id, with_for_update=True)
+        if member is None:
+            raise ProblemError(ReasonCode.API_NOT_FOUND)
+        await ctx.organization(session, member.organization_id, Permission.ADMIN)
+        check_version(member.version, expected)
+        await _ensure_an_admin_remains(session, member)
+        await session.delete(member)
+        await _audit_org(session, ctx, member.organization_id, "member.remove", member.id)
+    return Response(status_code=204)
+
+
+# --- API tokens ------------------------------------------------------------------------------
 
 
 @router.get("/v1/organizations/{organization_id}/api-tokens")

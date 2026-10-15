@@ -269,6 +269,10 @@ async def test_prepare_verifies_contracts_and_reports_success(site: Site) -> Non
     states = [m.operation.state for m in messages if m.WhichOneof("body") == "operation"]
     assert states == ["Running", "Succeeded"]
     assert site.core.state.prepared == {REV1["id"]: REV1["revision_digest"]}
+    succeeded = [m.operation for m in messages if m.WhichOneof("body") == "operation"][-1]
+    capacity = json.loads(succeeded.result_json)["capacity"]
+    assert capacity["max_robots"] > 0
+    assert capacity["source"] == "configured_profile"
 
 
 async def test_a_redelivered_command_is_executed_at_most_once(site: Site) -> None:

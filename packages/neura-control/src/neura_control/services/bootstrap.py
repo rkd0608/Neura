@@ -40,9 +40,17 @@ async def add_membership(
 ) -> None:
     await session.execute(
         insert(Membership)
-        .values(organization_id=organization_id, subject=subject, role=role.value)
+        .values(
+            id=new_id(Kind.MEMBER),
+            organization_id=organization_id,
+            subject=subject,
+            role=role.value,
+            version=1,
+            created_by="bootstrap",
+        )
         .on_conflict_do_update(
-            index_elements=["organization_id", "subject"], set_={"role": role.value}
+            constraint="uq_memberships_org_subject",
+            set_={"role": role.value, "version": Membership.version + 1},
         )
     )
 

@@ -25,7 +25,7 @@ info:
     - Lists are cursor-paginated.
 
 
-    Status: Proposed. Implementation lands in milestone M3.'
+    Status: implemented (M3, extended in M4 and M5).'
 servers:
 - url: https://api.example.invalid
   description: Placeholder until the domain is decided.
@@ -2119,6 +2119,162 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/organizations/{organization_id}/members:
+    get:
+      operationId: listMembers
+      tags:
+      - Access
+      summary: List the organization's members and invitations.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: addMember
+      tags:
+      - Access
+      summary: Invite a person by email or add an SSO subject.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/members/{member_id}:
+    patch:
+      operationId: updateMember
+      tags:
+      - Access
+      summary: Change a member's role.
+      parameters:
+      - $ref: '#/components/parameters/MemberId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/MemberUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The organization would be left without an admin (API_CONFLICT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/IfMatchRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: removeMember
+      tags:
+      - Access
+      summary: Remove a member or withdraw an invitation.
+      parameters:
+      - $ref: '#/components/parameters/MemberId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The organization would be left without an admin (API_CONFLICT).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/IfMatchRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     oidc:
@@ -2284,6 +2440,12 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/SupportGrantId'
+    MemberId:
+      name: member_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/MemberId'
   headers:
     ETag:
       description: Resource version for optimistic concurrency.
@@ -3465,6 +3627,10 @@ components:
               - type: 'null'
             message:
               type: string
+            capacity:
+              oneOf:
+              - $ref: '#/components/schemas/CapacityEstimate'
+              - type: 'null'
       additionalProperties: false
       description: 'An immutable deployment revision: one artifact, robot profile and execution profile.'
     RevisionCreate:
@@ -3778,6 +3944,7 @@ components:
       - api_spec_version
       - contracts_api_version
       - protocol_version
+      - authentication
       properties:
         service:
           type: string
@@ -3793,6 +3960,39 @@ components:
           type: string
         environment:
           type: string
+        authentication:
+          type: object
+          description: How people and machines sign in, for the console and other clients.
+          required:
+          - api_tokens
+          - oidc
+          properties:
+            api_tokens:
+              type: boolean
+              description: API tokens are accepted.
+            oidc:
+              oneOf:
+              - type: object
+                description: SSO with OIDC authorization code + PKCE; null when not configured.
+                required:
+                - issuer
+                - client_id
+                - scopes
+                properties:
+                  issuer:
+                    type: string
+                    format: uri
+                  client_id:
+                    type: string
+                  audience:
+                    type:
+                    - string
+                    - 'null'
+                  scopes:
+                    type: array
+                    items:
+                      type: string
+              - type: 'null'
     Session:
       type: object
       readOnly: true
@@ -3841,6 +4041,15 @@ components:
               type: number
               minimum: 0
             deadline_misses_last_hour:
+              type: integer
+              minimum: 0
+            rtt_p99_ms:
+              type: number
+              minimum: 0
+            chunks:
+              type: integer
+              minimum: 0
+            dispatched_actions:
               type: integer
               minimum: 0
         data_age_seconds:
@@ -4032,3 +4241,160 @@ components:
     Timestamp:
       type: string
       format: date-time
+    MemberId:
+      type: string
+      pattern: ^mbr_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Member identifier: `mbr_` followed by a ULID.'
+      examples:
+      - mbr_01JA2B3C4D5E6F7G8H9JKMNPQR
+    MemberRole:
+      enum:
+      - viewer
+      - deployer
+      - site_operator
+      - admin
+      description: 'Organization role (design §19.2). Deploy and physical activation are separate: no
+        role lets the cloud approve motion.'
+    Member:
+      type: object
+      description: A person's membership in an organization. Invited by verified email or added by SSO
+        subject; an invitation becomes active when the person first signs in with that verified email.
+      required:
+      - metadata
+      - role
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+        subject:
+          type:
+          - string
+          - 'null'
+          description: '`<issuer>|<sub>` once bound.'
+        state:
+          enum:
+          - Invited
+          - Active
+    MemberCreate:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 512
+      oneOf:
+      - required:
+        - email
+      - required:
+        - subject
+      additionalProperties: false
+      description: Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`).
+    MemberUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396).
+      properties:
+        role:
+          $ref: '#/components/schemas/MemberRole'
+      additionalProperties: false
+    MemberPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    CapacityEstimate:
+      type: object
+      description: How many robots one batch group on this site's server can serve at this revision's
+        execution profile, from the same admission model the gateway enforces (design §9.3). `source`
+        says whether the latency profile was configured or measured (measured profiles arrive with M6).
+      required:
+      - max_robots
+      - limiting_factor
+      - source
+      - assumptions
+      - estimated_at
+      properties:
+        max_robots:
+          type: integer
+          minimum: 0
+        limiting_factor:
+          enum:
+          - deadline
+          - dispatch_freshness
+          - acceptance_freshness
+          - memory
+          - throughput
+          - search_limit
+          description: 'What stopped one more robot from being admitted: its starvation deadline, observation
+            freshness at dispatch or acceptance, GPU memory, or sustained throughput (the reserve kept
+            free).'
+        source:
+          enum:
+          - configured_profile
+          - measured_profile
+        assumptions:
+          type: object
+          description: The inputs of the estimate, so it can be checked and reproduced.
+          properties:
+            control_period_ms:
+              type: number
+              minimum: 0
+            starvation_budget_ms:
+              type: number
+              minimum: 0
+            request_interval_ms:
+              type: number
+              minimum: 0
+            link_allowance_ms:
+              type: number
+              minimum: 0
+            dispatch_freshness_ms:
+              type:
+              - number
+              - 'null'
+              minimum: 0
+            acceptance_freshness_ms:
+              type:
+              - number
+              - 'null'
+              minimum: 0
+            max_batch:
+              type: integer
+              minimum: 1
+            reserve_fraction:
+              type: number
+              minimum: 0
+              maximum: 1
+            latency_p99_ms_by_batch:
+              type: object
+              additionalProperties:
+                type: number
+                minimum: 0
+            memory_available_mib:
+              type:
+              - integer
+              - 'null'
+              minimum: 0
+        estimated_at:
+          $ref: '#/components/schemas/Timestamp'

@@ -188,6 +188,30 @@ class SupportGrantCreate(Strict):
     justification: Annotated[str, StringConstraints(min_length=10, max_length=2000)]
 
 
+MemberRole = Literal["viewer", "deployer", "site_operator", "admin"]
+# Deliberately simple: the address only has to match the IdP's verified email claim exactly.
+Email = Annotated[
+    str,
+    StringConstraints(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=320, strip_whitespace=True),
+]
+
+
+class MemberCreate(Strict):
+    role: MemberRole
+    email: Email | None = None
+    subject: Annotated[str, StringConstraints(min_length=3, max_length=512)] | None = None
+
+    @model_validator(mode="after")
+    def _one_identity(self) -> Self:
+        if (self.email is None) == (self.subject is None):
+            raise ValueError("give exactly one of email or subject")
+        return self
+
+
+class MemberUpdate(Strict):
+    role: MemberRole | None = None
+
+
 class SpecPatch(Strict):
     """``{"spec": {...}}`` merge-patch envelope; fields are checked after merging."""
 

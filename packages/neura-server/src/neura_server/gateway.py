@@ -59,6 +59,7 @@ class Session:
     robot_state: str = ""
     fault_reason: str = ""
     dispatched_actions: int = 0
+    queued_actions: int = 0
     observations: int = 0
     chunks: int = 0
     rejections: Counter[str] = field(default_factory=Counter)
@@ -205,6 +206,7 @@ class GatewayCore:
         session.robot_state = request.runtime_state[:32]
         session.fault_reason = request.fault_reason[:64]
         session.dispatched_actions = int(request.dispatched_actions)
+        session.queued_actions = int(request.queued_actions)
         return dataplane_pb2.HeartbeatResponse(
             ack=dataplane_pb2.HeartbeatAck(
                 robot_send_time_us=request.robot_send_time_us,
@@ -415,6 +417,7 @@ class GatewayCore:
                     "robot_state": s.robot_state,
                     "fault_reason": s.fault_reason,
                     "dispatched_actions": s.dispatched_actions,
+                    "queued_actions": s.queued_actions,
                     "observations": s.observations,
                     "chunks": s.chunks,
                     "rejections": dict(s.rejections),

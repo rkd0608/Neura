@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from fastapi import Request
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
 from neura_control.api.common import transaction
@@ -22,6 +23,7 @@ from neura_control.security.principal import (
     Role,
 )
 from neura_control.security.tokens import API_TOKEN_PREFIX, parse_token, verify_secret
+from neura_control.services import records
 
 # Avoid a write on every request: record token use at most this often.
 LAST_USED_RESOLUTION = timedelta(minutes=1)
@@ -73,12 +75,50 @@ async def _oidc_principal(request: Request, credential: str) -> Principal:
     if verifier is None:
         raise ProblemError(ReasonCode.API_UNAUTHENTICATED)
     try:
-        subject = verifier.subject(credential)
+        identity = verifier.identity(credential)
     except TokenInvalidError as exc:
         raise ProblemError(ReasonCode.API_UNAUTHENTICATED) from exc
     async with transaction(request) as session:
+        if identity.email is not None:
+            await _accept_invitations(session, identity.subject, identity.email)
         memberships = (
-            await session.scalars(select(Membership).where(Membership.subject == subject))
+            await session.scalars(select(Membership).where(Membership.subject == identity.subject))
         ).all()
     grants = {m.organization_id: ROLE_PERMISSIONS[Role(m.role)] for m in memberships}
-    return Principal(subject=subject, kind=PrincipalKind.USER, grants=grants)
+    return Principal(subject=identity.subject, kind=PrincipalKind.USER, grants=grants)
+
+
+async def _accept_invitations(session: AsyncSession, subject: str, email: str) -> None:
+    """Bind invitations for this verified email to the signed-in subject (first sign-in only).
+    An organization where the subject is already a member keeps that membership."""
+    invitations = (
+        await session.scalars(
+            select(Membership)
+            .where(Membership.email == email, Membership.subject.is_(None))
+            .with_for_update(skip_locked=True)
+        )
+    ).all()
+    if not invitations:
+        return
+    member_of = set(
+        (
+            await session.scalars(
+                select(Membership.organization_id).where(Membership.subject == subject)
+            )
+        ).all()
+    )
+    for invitation in invitations:
+        if invitation.organization_id in member_of:
+            continue
+        invitation.subject = subject
+        invitation.version += 1
+        invitation.updated_at = utcnow()
+        await records.audit(
+            session,
+            principal=Principal(subject=subject, kind=PrincipalKind.USER, grants={}),
+            organization_id=invitation.organization_id,
+            project_id=None,
+            action="member.accept",
+            target=invitation.id,
+            request_id="sign-in",
+        )

@@ -63,6 +63,15 @@ class AdmissionDecision:
     detail: str
     worst_case_completion_us: int
     utilization: float
+    # What refused the load: memory, dispatch_freshness, acceptance_freshness, deadline or
+    # throughput. None when admitted.
+    limit: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CapacityReport:
+    max_sessions: int
+    limiting_factor: str  # the limit that refused one more session, or "search_limit"
 
 
 class AdmissionController:
@@ -102,6 +111,7 @@ class AdmissionController:
                     f"batch of {typical_batch} needs {needed} MiB, {self._memory} MiB available",
                     0,
                     0.0,
+                    "memory",
                 )
 
         blocking = self._profile.p99_us(typical_batch)
@@ -117,12 +127,15 @@ class AdmissionController:
                 completion = elapsed + demand.link_us
                 worst = max(worst, completion)
                 problem = None
+                limit = "deadline"
                 if dispatch_wait + uplink > demand.max_age_at_dispatch_us:
+                    limit = "dispatch_freshness"
                     problem = (
                         f"observation age at dispatch {dispatch_wait + uplink} us exceeds "
                         f"{demand.max_age_at_dispatch_us} us"
                     )
                 elif completion > demand.max_age_at_acceptance_us:
+                    limit = "acceptance_freshness"
                     problem = (
                         f"observation age at acceptance {completion} us exceeds "
                         f"{demand.max_age_at_acceptance_us} us"
@@ -139,6 +152,7 @@ class AdmissionController:
                         f"{n} sessions: {problem} for {demand.session_id}",
                         worst,
                         0.0,
+                        limit,
                     )
 
         per_request = self._profile.p99_us(typical_batch) / typical_batch
@@ -151,6 +165,7 @@ class AdmissionController:
                 f"(reserve {self._reserve:.0%})",
                 worst,
                 utilization,
+                "throughput",
             )
         return AdmissionDecision(True, None, "admitted", worst, utilization)
 
@@ -166,6 +181,10 @@ class AdmissionController:
 
     def capacity_estimate(self, demand_template: SessionDemand, limit: int = 1024) -> int:
         """How many identical sessions this worker could admit: 'this server can run N robots'."""
+        return self.capacity(demand_template, limit).max_sessions
+
+    def capacity(self, demand_template: SessionDemand, limit: int = 1024) -> CapacityReport:
+        """The capacity estimate and what limits it, for identical sessions."""
         count = 0
         while count < limit:
             trial = [
@@ -179,7 +198,8 @@ class AdmissionController:
                 )
                 for i in range(count + 1)
             ]
-            if not self.evaluate(trial).admitted:
-                break
+            decision = self.evaluate(trial)
+            if not decision.admitted:
+                return CapacityReport(count, decision.limit or "deadline")
             count += 1
-        return count
+        return CapacityReport(count, "search_limit")

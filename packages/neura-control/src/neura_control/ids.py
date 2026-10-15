@@ -30,6 +30,7 @@ class Kind(StrEnum):
     AUDIT_RECORD = "aud"
     API_TOKEN = "tok"
     SUPPORT_GRANT = "sgr"
+    MEMBER = "mbr"
     ENROLLMENT_TOKEN = "enr"
 
 

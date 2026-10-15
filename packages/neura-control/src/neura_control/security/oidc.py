@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import jwt
@@ -14,6 +15,12 @@ KeyResolver = Callable[[str], Any]
 
 class TokenInvalidError(Exception):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class OidcIdentity:
+    subject: str  # "<issuer>|<sub>"
+    email: str | None  # lower case, only when the issuer marked it verified
 
 
 class OidcVerifier:
@@ -38,6 +45,11 @@ class OidcVerifier:
 
     def subject(self, token: str) -> str:
         """Verify signature, issuer, audience and expiry; return ``"<issuer>|<sub>"``."""
+        return self.identity(token).subject
+
+    def identity(self, token: str) -> OidcIdentity:
+        """Verify the token and return who it identifies. The email is used only to accept an
+        invitation, and only when the issuer says it is verified."""
         try:
             header = jwt.get_unverified_header(token)
             if header.get("alg") not in ALLOWED_ALGORITHMS:
@@ -53,4 +65,9 @@ class OidcVerifier:
             )
         except jwt.PyJWTError as exc:
             raise TokenInvalidError(str(exc)) from exc
-        return f"{claims['iss']}|{claims['sub']}"
+        email = claims.get("email")
+        verified = claims.get("email_verified") is True
+        return OidcIdentity(
+            subject=f"{claims['iss']}|{claims['sub']}",
+            email=email.strip().lower() if isinstance(email, str) and verified else None,
+        )

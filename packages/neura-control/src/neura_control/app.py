@@ -262,6 +262,17 @@ def create_app(
             "contracts_api_version": CONTRACTS_API_VERSION,
             "protocol_version": common_pb2.ProtocolVersion.Name(common_pb2.PROTOCOL_VERSION_1),
             "environment": settings.environment,
+            "authentication": {
+                "api_tokens": True,
+                "oidc": {
+                    "issuer": settings.oidc_issuer,
+                    "client_id": settings.console_oidc_client_id,
+                    "audience": settings.oidc_audience,
+                    "scopes": settings.console_oidc_scopes,
+                }
+                if settings.oidc_issuer and settings.console_oidc_client_id
+                else None,
+            },
         }
 
     @app.get("/v1/openapi.yaml", include_in_schema=False)

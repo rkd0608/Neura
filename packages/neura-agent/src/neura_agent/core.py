@@ -45,6 +45,8 @@ from neura_contracts.site_protocol import (
     contact_proof_payload,
 )
 from neura_runtime.binding import ExecutionBinding, IncompatibleBindingError
+from neura_server import capacity
+from neura_server.config import ServingConfig
 
 log = logging.getLogger("neura.agent")
 OUTBOX_LIMIT = 1000
@@ -434,7 +436,7 @@ class AgentCore:
         assert isinstance(robot, RobotProfile)
         assert isinstance(profile, ExecutionProfile)
         try:
-            ExecutionBinding(artifact, robot, profile)
+            binding = ExecutionBinding(artifact, robot, profile)
         except IncompatibleBindingError as exc:
             first = exc.report.issues[0]
             self._report(
@@ -454,7 +456,12 @@ class AgentCore:
             command_id,
             operation_id,
             "Succeeded",
-            result={"revision_digest": revision["revision_digest"]},
+            result={
+                "revision_digest": revision["revision_digest"],
+                "capacity": capacity.estimate(
+                    binding, self.serving_config(), rtt_p99_ms=self.settings.capacity_rtt_p99_ms
+                ),
+            },
         )
 
     def _request_activation(
@@ -656,6 +663,7 @@ class AgentCore:
                         "observations": float(s.get("observations", 0)),
                         "rtt_p99_us": float(s.get("rtt_p99_us", 0)),
                         "dispatched_actions": float(s.get("dispatched_actions", 0)),
+                        "queued_actions": float(s.get("queued_actions", 0)),
                     },
                 )
             )
@@ -719,6 +727,11 @@ class AgentCore:
             "gateway_running": self.gateway.running,
             "gateway_suspended": self.gateway_suspended,
         }
+
+    def serving_config(self) -> ServingConfig:
+        """The serving settings this site's gateway runs with (and capacity is estimated for)."""
+        serving = build_gateway_config(self.state, self.settings, self.gateway_dir)["serving"]
+        return ServingConfig.model_validate(serving)
 
     def assignment_for(self, robot_name: str) -> dict[str, Any] | None:
         """What a robot should run: its next revision during a switch, else its current one."""

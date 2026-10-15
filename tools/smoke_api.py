@@ -1,4 +1,4 @@
-"""Drive a running dev stack through a whole pilot, the way a customer would.
+"""Drive a running dev stack through a whole pilot, the way a customer would, using the SDK.
 
 1. Onboard through the management API: project, site, contracts, robots, deployment, revision.
 2. Enroll the site agent with the install command the API returned (run on the "server").
@@ -28,6 +28,9 @@ from typing import Any
 import httpx
 import yaml
 
+from neura_sdk import Client, NeuraApiError
+from neura_sdk.models import ContractDocument
+
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples" / "contracts"
 COMPOSE = ["docker", "compose", "-f", str(ROOT / "deploy" / "compose" / "compose.yaml")]
@@ -56,7 +59,7 @@ def wait_for[T](what: str, check: Callable[[], T | None], timeout: float = 60) -
     while time.monotonic() < deadline:
         try:
             result = check()
-        except (httpx.HTTPError, KeyError, ValueError) as exc:
+        except (httpx.HTTPError, NeuraApiError, KeyError, ValueError) as exc:
             last = exc
         else:
             if result:
@@ -79,86 +82,60 @@ def on_server(*args: str, env: dict[str, str] | None = None) -> str:
     return compose("exec", "-T", *flags, "site-agent", *args)
 
 
-class Api:
-    def __init__(self, url: str, token: str) -> None:
-        self.http = httpx.Client(
-            base_url=url, headers={"Authorization": f"Bearer {token}"}, timeout=10
-        )
-
-    def call(self, method: str, path: str, body: Any = None, expect: int = 200) -> dict[str, Any]:
-        headers = {}
-        if method == "POST":
-            headers["Idempotency-Key"] = secrets.token_hex(16)
-        response = self.http.request(method, path, json=body, headers=headers)
-        if response.status_code != expect:
-            raise SystemExit(
-                f"{method} {path}: expected {expect}, got {response.status_code}: {response.text}"
-            )
-        data: dict[str, Any] = response.json() if response.content else {}
-        return data
-
-    def get(self, path: str) -> dict[str, Any]:
-        return self.call("GET", path)
-
-    def operation_done(self, operation_id: str) -> dict[str, Any] | None:
-        operation = self.get(f"/v1/operations/{operation_id}")
-        if operation["state"] in ("Failed", "Cancelled"):
-            raise SystemExit(f"operation {operation_id} {operation['state']}: {operation}")
-        return operation if operation["state"] == "Succeeded" else None
+def operation_done(neura: Client, operation_id: str) -> dict[str, Any] | None:
+    operation = neura.get_operation(operation_id)
+    if operation["state"] in ("Failed", "Cancelled"):
+        raise SystemExit(f"operation {operation_id} {operation['state']}: {operation}")
+    return dict(operation) if operation["state"] == "Succeeded" else None
 
 
-def onboard(api: Api) -> dict[str, Any]:
-    me = api.get("/v1/me")
-    org = me["organizations"][0]["id"]
+def onboard(neura: Client) -> dict[str, Any]:
+    org = neura.get_current_principal()["organizations"][0]["id"]
     suffix = secrets.token_hex(3)
-    project = api.call(
-        "POST",
-        f"/v1/organizations/{org}/projects",
-        {"spec": {"name": f"smoke-{suffix}", "display_name": "Smoke test"}},
-        201,
+    project = neura.create_project(
+        org, body={"spec": {"name": f"smoke-{suffix}", "display_name": "Smoke test"}}
     )["metadata"]["id"]
-    site = api.call(
-        "POST",
-        f"/v1/projects/{project}/sites",
-        {
+    site = neura.create_site(
+        project,
+        body={
             "spec": {
                 "name": "warehouse",
                 "display_name": "Warehouse",
                 "offline_authorization_hours": 24,
             }
         },
-        201,
     )["metadata"]["id"]
-    ids = {}
-    for collection, name in (
-        ("robot-profiles", "so101.robot.yaml"),
-        ("model-artifacts", "act-so101.artifact.yaml"),
-        ("execution-profiles", "act-so101-30hz.profile.yaml"),
-    ):
-        document = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
-        ids[collection] = api.call(
-            "POST", f"/v1/projects/{project}/{collection}", {"document": document}, 201
-        )["metadata"]["id"]
+
+    def document(name: str) -> ContractDocument:
+        loaded: ContractDocument = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
+        return loaded
+
+    robot_profile = neura.register_robot_profile(
+        project, body={"document": document("so101.robot.yaml")}
+    )["metadata"]["id"]
+    artifact = neura.register_model_artifact(
+        project, body={"document": document("act-so101.artifact.yaml")}
+    )["metadata"]["id"]
+    execution_profile = neura.register_execution_profile(
+        project, body={"document": document("act-so101-30hz.profile.yaml")}
+    )["metadata"]["id"]
     robots = [
-        api.call(
-            "POST",
-            f"/v1/projects/{project}/robots",
-            {
+        neura.create_robot(
+            project,
+            body={
                 "spec": {
                     "name": f"robot-{i}",
                     "display_name": f"Robot {i}",
                     "site_id": site,
-                    "robot_profile_id": ids["robot-profiles"],
+                    "robot_profile_id": robot_profile,
                 }
             },
-            201,
         )["metadata"]["id"]
         for i in range(ROBOTS)
     ]
-    deployment = api.call(
-        "POST",
-        f"/v1/projects/{project}/deployments",
-        {
+    deployment = neura.create_deployment(
+        project,
+        body={
             "spec": {
                 "name": "pilot",
                 "display_name": "Pilot",
@@ -167,21 +144,19 @@ def onboard(api: Api) -> dict[str, Any]:
                 "rollout": {"strategy": "all_at_task_boundary"},
             }
         },
-        201,
     )["metadata"]["id"]
-    revision = api.call(
-        "POST",
-        f"/v1/deployments/{deployment}/revisions",
-        {
+    revision = neura.create_revision(
+        deployment,
+        body={
             "spec": {
-                "model_artifact_id": ids["model-artifacts"],
-                "execution_profile_id": ids["execution-profiles"],
-                "robot_profile_id": ids["robot-profiles"],
+                "model_artifact_id": artifact,
+                "execution_profile_id": execution_profile,
+                "robot_profile_id": robot_profile,
             }
         },
-        201,
     )
-    if not revision["status"]["compatibility"]["compatible"]:
+    compatibility = revision["status"].get("compatibility")
+    if not compatibility or not compatibility["compatible"]:
         raise SystemExit(f"example revision is incompatible: {revision['status']}")
     print(f"    organization {org}, project {project}, site {site}")
     print(f"    {ROBOTS} robots, deployment {deployment}, revision {revision['metadata']['id']}")
@@ -215,39 +190,39 @@ def main() -> int:
     parser.add_argument("--token", default=None)
     parser.add_argument("--api-only", action="store_true", help="stop after onboarding")
     args = parser.parse_args()
-    api = Api(args.url, args.token or dev_token())
+    neura = Client(args.url, token=args.token or dev_token(), max_retries=5)
 
     step("onboarding a customer through the management API")
-    ids = onboard(api)
+    ids = onboard(neura)
     if args.api_only:
         return 0
 
     step("enrolling the site agent with the install command from the API")
-    enrollment = api.call(
-        "POST", f"/v1/sites/{ids['site']}/enrollment-tokens", {"ttl_minutes": 30}, 201
-    )
+    enrollment = neura.create_enrollment_token(ids["site"], body={"ttl_minutes": 30})
     print("    " + on_server(*shlex.split(enrollment["install_command"])).strip())
     wait_for(
         "the site to connect",
-        lambda: api.get(f"/v1/sites/{ids['site']}")["status"]["connected"],
+        lambda: neura.get_site(ids["site"])["status"].get("connected"),
     )
-    servers = api.get(f"/v1/sites/{ids['site']}/servers")["items"]
-    checks = {c["name"]: c["passed"] for c in servers[0]["status"]["preflight"]}
+    servers = neura.list_servers(ids["site"])["items"]
+    checks = {c["name"]: c["passed"] for c in servers[0]["status"].get("preflight", [])}
     print(f"    server {servers[0]['metadata']['id']} connected; preflight {checks}")
 
     step("preparing the revision at the site")
-    prepare = api.call("POST", f"/v1/revisions/{ids['revision']}/prepare", {}, 202)
-    wait_for("prepare", lambda: api.operation_done(prepare["metadata"]["id"]))
-    phase = api.get(f"/v1/revisions/{ids['revision']}")["status"]["phase"]
-    print(f"    revision phase: {phase}")
+    prepare = neura.prepare_revision(ids["revision"])
+    wait_for("prepare", lambda: operation_done(neura, prepare["metadata"]["id"]))
+    revision_status = neura.get_revision(ids["revision"])["status"]
+    capacity = revision_status.get("capacity")
+    if capacity is None:
+        raise SystemExit("the site reported no capacity estimate for the prepared revision")
+    print(
+        f"    revision phase: {revision_status['phase']}; this server can run "
+        f"{capacity['max_robots']} robots at this profile "
+        f"(limited by {capacity['limiting_factor']})"
+    )
 
     step("requesting activation; it waits for the site operator")
-    activation = api.call(
-        "POST",
-        f"/v1/deployments/{ids['deployment']}/activation-requests",
-        {"revision_id": ids["revision"]},
-        202,
-    )
+    activation = neura.request_activation(ids["deployment"], body={"revision_id": ids["revision"]})
     pending = wait_for(
         "the approval to reach the site",
         lambda: json.loads(on_server("neura-agent", "approvals"))["items"],
@@ -266,8 +241,10 @@ def main() -> int:
         "ops@warehouse",
         env={"NEURA_AGENT_OPERATOR_TOKEN": DEV_OPERATOR_TOKEN},
     )
-    wait_for("the activation", lambda: api.operation_done(activation["metadata"]["id"]), timeout=90)
-    active = api.get(f"/v1/deployments/{ids['deployment']}")["status"]["active_revision_ids"]
+    wait_for(
+        "the activation", lambda: operation_done(neura, activation["metadata"]["id"]), timeout=90
+    )
+    active = neura.get_deployment(ids["deployment"])["status"].get("active_revision_ids", {})
     if set(active.values()) != {ids["revision"]}:
         raise SystemExit(f"deployment does not show the revision active: {active}")
 
@@ -282,9 +259,7 @@ def main() -> int:
     print(f"    batching: {group['batch_sizes']}, deadline misses: {group['deadline_misses']}")
     sessions = wait_for(
         "sessions in the control plane",
-        lambda: (
-            len(s := api.get(f"/v1/projects/{ids['project']}/sessions")["items"]) == ROBOTS and s
-        ),
+        lambda: s if len(s := neura.list_sessions(ids["project"])["items"]) == ROBOTS else None,
     )
     print(f"    the control plane sees {len(sessions)} sessions")
 
@@ -307,9 +282,9 @@ def main() -> int:
     wait_for("the control plane", lambda: httpx.get(f"{args.url}/readyz", timeout=2).is_success)
     wait_for(
         "the site to reconnect",
-        lambda: api.get(f"/v1/sites/{ids['site']}")["status"]["connected"],
+        lambda: neura.get_site(ids["site"])["status"].get("connected"),
     )
-    audit = api.get(f"/v1/projects/{ids['project']}/audit-records?page_size=200")["items"]
+    audit = list(neura.paginate(neura.list_audit_records, ids["project"], page_size=200))
     print(f"    reconnected; {len(audit)} audit records")
     print("pilot smoke test passed")
     return 0

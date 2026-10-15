@@ -203,7 +203,9 @@ async def stream_events(
         nonlocal position
         idle = 0.0
         deadline = asyncio.get_running_loop().time() + settings.events_max_stream_s
-        yield b"retry: 1000\n\n"
+        # The starting position as an id-only message: a client that reconnects before any
+        # event arrives resumes from here and misses nothing (SSE sets lastEventId from it).
+        yield f"retry: 1000\nid: {position}\n\n".encode()
         while asyncio.get_running_loop().time() < deadline and not await request.is_disconnected():
             async with transaction(request) as session:
                 rows = (

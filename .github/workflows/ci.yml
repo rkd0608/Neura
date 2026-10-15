@@ -135,3 +135,7 @@ jobs:
         run: uv sync --frozen
       - name: Build, start and verify
         run: tools/smoke_dev_stack.sh
+      - name: Policy workers in the container sandbox
+        run: |
+          docker build -f deploy/docker/Dockerfile --target neura-worker -t neura-worker:dev .
+          NEURA_TEST_WORKER_IMAGE=neura-worker:dev uv run pytest tests/integration/test_worker_sandbox.py

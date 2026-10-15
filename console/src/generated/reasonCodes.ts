@@ -444,6 +444,12 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: true,
     message: "The key that decrypts the model's sealed weights is not available to this server.",
   },
+  WORKER_IMAGE_UNAVAILABLE: {
+    area: "worker",
+    severity: "error",
+    retryable: true,
+    message: "The model's runtime image is not at this site and could not be pulled.",
+  },
   AGENT_DEVICE_UNAVAILABLE: {
     area: "agent",
     severity: "error",

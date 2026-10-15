@@ -52,6 +52,7 @@ from neura_server.leases import (
 )
 from neura_server.metrics import GatewayMetrics
 from neura_server.profiles import LatencyProfile
+from neura_server.sandbox import launcher_for, remove_stale
 from neura_server.scheduler import Batch, Scheduler
 
 log = logging.getLogger("neura.gateway")
@@ -211,7 +212,11 @@ class GatewayServer:
         return WorkerBackend(
             f"g{self._group_seq}",
             spec,
-            command=serving.worker_command,
+            launcher=launcher_for(
+                serving.sandbox,
+                serving.worker_command,
+                deployment.binding.artifact.spec.runtime_image.reference,
+            ),
             socket_dir=self._worker_dir,
             start_timeout_s=serving.worker_start_timeout_s,
         )
@@ -264,6 +269,9 @@ class GatewayServer:
     # --- lifecycle ----------------------------------------------------------------------------
 
     async def start(self) -> None:
+        serving = self.config.serving
+        if serving.backend == "workers" and serving.sandbox.kind == "container":
+            await remove_stale(serving.sandbox.runtime)
         options = [
             ("grpc.max_receive_message_length", self.config.max_message_bytes),
             ("grpc.max_send_message_length", self.config.max_message_bytes),

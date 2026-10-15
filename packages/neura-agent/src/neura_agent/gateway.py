@@ -19,7 +19,7 @@ from neura_agent.identity import atomic_write
 from neura_agent.settings import AgentSettings
 from neura_agent.site_pki import GatewayTls, unexpired
 from neura_agent.state import AgentState
-from neura_server.config import GatewayConfig
+from neura_server.config import GatewayConfig, SandboxConfig
 from neura_server.grpc_server import GatewayServer
 
 log = logging.getLogger("neura.agent.gateway")
@@ -111,6 +111,7 @@ def build_gateway_config(
             "simulate_latency": settings.gateway_simulate_latency,
             "max_batch": settings.gateway_max_batch,
             "worker_command": settings.worker_command,
+            "sandbox": sandbox_config(settings).model_dump(mode="json"),
         },
     }
     if tls is not None:
@@ -120,6 +121,17 @@ def build_gateway_config(
             "client_ca": str(tls.client_ca),
         }
     return config
+
+
+def sandbox_config(settings: AgentSettings) -> SandboxConfig:
+    return SandboxConfig(
+        kind=settings.worker_sandbox,
+        runtime=settings.worker_container_runtime,
+        image_override=settings.worker_image_override,
+        memory_mib=settings.worker_memory_mib,
+        cpus=settings.worker_cpus,
+        pids_limit=settings.worker_pids_limit,
+    )
 
 
 def write_revision_documents(

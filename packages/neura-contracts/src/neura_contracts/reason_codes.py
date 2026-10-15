@@ -87,6 +87,7 @@ class ReasonCode(StrEnum):
     AGENT_ARTIFACT_UNTRUSTED = "AGENT_ARTIFACT_UNTRUSTED"
     AGENT_ARTIFACT_SIGNATURE_INVALID = "AGENT_ARTIFACT_SIGNATURE_INVALID"
     AGENT_ARTIFACT_KEY_UNAVAILABLE = "AGENT_ARTIFACT_KEY_UNAVAILABLE"
+    WORKER_IMAGE_UNAVAILABLE = "WORKER_IMAGE_UNAVAILABLE"
     AGENT_DEVICE_UNAVAILABLE = "AGENT_DEVICE_UNAVAILABLE"
     AGENT_ENROLLMENT_INVALID = "AGENT_ENROLLMENT_INVALID"
     AGENT_UNAUTHENTICATED = "AGENT_UNAUTHENTICATED"
@@ -624,6 +625,13 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="error",
         retryable=True,
         message="The key that decrypts the model's sealed weights is not available to this server.",
+    ),
+    ReasonCode.WORKER_IMAGE_UNAVAILABLE: ReasonCodeInfo(
+        code=ReasonCode.WORKER_IMAGE_UNAVAILABLE,
+        area="worker",
+        severity="error",
+        retryable=True,
+        message="The model's runtime image is not at this site and could not be pulled.",
     ),
     ReasonCode.AGENT_DEVICE_UNAVAILABLE: ReasonCodeInfo(
         code=ReasonCode.AGENT_DEVICE_UNAVAILABLE,

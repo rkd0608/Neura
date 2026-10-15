@@ -30,6 +30,7 @@ from numpy.typing import NDArray
 from neura.v1 import worker_pb2, worker_pb2_grpc
 from neura_adapters import ModelInputs, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode
+from neura_server.sandbox import Invocation, Launcher, ProcessLauncher
 from neura_server.worker import MAX_MESSAGE_BYTES, encode_inputs, outputs_from
 
 log = logging.getLogger("neura.gateway.workers")
@@ -92,27 +93,22 @@ class WorkerSpec:
     adapter: str | None = None
     warmup_batches: tuple[int, ...] = (1,)
 
-    def arguments(self, socket: Path) -> list[str]:
-        args = [
-            "serve",
-            "--socket",
-            str(socket),
-            "--artifact",
-            str(self.artifact),
-            "--robot-profile",
-            str(self.robot_profile),
-            "--execution-profile",
-            str(self.execution_profile),
-            "--device",
-            self.device,
-            "--warmup",
-            ",".join(str(b) for b in self.warmup_batches),
+    def invocation(self, socket: Path) -> Invocation:
+        """``neura-worker serve`` for this spec, listening on ``socket``."""
+        flags = ["--device", self.device, "--warmup", ",".join(str(b) for b in self.warmup_batches)]
+        if self.adapter is not None:
+            flags += ["--adapter", self.adapter]
+        inputs = [
+            ("--artifact", self.artifact),
+            ("--robot-profile", self.robot_profile),
+            ("--execution-profile", self.execution_profile),
         ]
         if self.checkpoint is not None:
-            args += ["--checkpoint", str(self.checkpoint)]
-        if self.adapter is not None:
-            args += ["--adapter", self.adapter]
-        return args
+            inputs.append(("--checkpoint", self.checkpoint))
+        return Invocation("serve", self.device, flags, inputs, [("--socket", socket)])
+
+    def arguments(self, socket: Path) -> list[str]:
+        return self.invocation(socket).host_args()
 
 
 class WorkerBackend:
@@ -121,13 +117,16 @@ class WorkerBackend:
         name: str,
         spec: WorkerSpec,
         *,
-        command: Sequence[str],
         socket_dir: Path,
         start_timeout_s: float,
+        command: Sequence[str] | None = None,
+        launcher: Launcher | None = None,
     ) -> None:
+        if (command is None) == (launcher is None):
+            raise ValueError("give a worker command or a launcher")
         self.name = name
         self.spec = spec
-        self._command = list(command)
+        self.launcher: Launcher = launcher or ProcessLauncher(command or [])
         self._socket_dir = socket_dir
         self._start_timeout_s = start_timeout_s
         if len(str(self._socket_path(999_999))) > UNIX_PATH_MAX:
@@ -184,9 +183,9 @@ class WorkerBackend:
             socket = self._socket_path(self.incarnation)
             self.state = "starting" if self.restarts == 0 else "restarting"
             started = time.monotonic()
+            run = f"{self.name}-{self.incarnation}"
             process = self._process = await asyncio.create_subprocess_exec(
-                *self._command,
-                *self.spec.arguments(socket),
+                *self.launcher.command(run, self.spec.invocation(socket)),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
             )
@@ -218,6 +217,8 @@ class WorkerBackend:
                 await self._disconnect()
                 if drain is not None:
                     drain.cancel()
+                # A killed launcher process (a hung worker) can leave its container running.
+                await asyncio.shield(self.launcher.remove(run))
             if self._stop_requested():  # stop() may have run while we waited
                 return
             self.restarts += 1

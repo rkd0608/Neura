@@ -27,6 +27,7 @@ from neura_agent.gateway import (
     GatewayRunner,
     build_gateway_config,
     revision_documents,
+    sandbox_config,
     write_gateway_config,
     write_revision_documents,
 )
@@ -55,6 +56,7 @@ from neura_contracts.site_protocol import (
 from neura_runtime.binding import ExecutionBinding, IncompatibleBindingError
 from neura_server import capacity
 from neura_server.config import ServingConfig, load_profile_points
+from neura_server.sandbox import ImageUnavailableError, ensure_image, launcher_for
 
 log = logging.getLogger("neura.agent")
 OUTBOX_LIMIT = 1000
@@ -562,6 +564,21 @@ class AgentCore:
             checkpoint = await asyncio.to_thread(self.artifacts.checkout, binding.artifact)
         paths = write_revision_documents(self.gateway_dir, revision_id, documents)
         max_batch = self.settings.gateway_max_batch
+        sandbox = sandbox_config(self.settings)
+        image = binding.artifact.spec.runtime_image.reference
+        if sandbox.kind == "container":
+            # Pull, verify, then run (design §17.3): the image is fetched here, by its digest,
+            # and never when a worker starts.
+            run_image = sandbox.image_override or image
+            self._report(command_id, operation_id, "Running", message=f"pulling {run_image}")
+            try:
+                await ensure_image(
+                    sandbox.runtime,
+                    run_image,
+                    pull_timeout_s=self.settings.worker_image_pull_timeout_s,
+                )
+            except ImageUnavailableError as exc:
+                raise ArtifactError(ReasonCode.WORKER_IMAGE_UNAVAILABLE, str(exc)) from exc
         profile = placement.profile_path(
             self.gateway_dir / "profiles", binding, device, max_batch, adapter
         )
@@ -570,7 +587,7 @@ class AgentCore:
                 command_id, operation_id, "Running", message=f"loading and profiling on {device}"
             )
             await placement.measure(
-                self.settings.worker_command,
+                launcher_for(sandbox, self.settings.worker_command, image),
                 documents=paths,
                 device=device,
                 checkpoint=checkpoint,

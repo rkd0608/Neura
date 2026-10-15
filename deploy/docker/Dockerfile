@@ -4,6 +4,7 @@
 #   docker build -f deploy/docker/Dockerfile --target neura-agent -t neura-agent .
 #   docker build -f deploy/docker/Dockerfile --target neura-agent-gpu -t neura-agent-gpu .
 #   docker build -f deploy/docker/Dockerfile --target neura-console -t neura-console .
+#   docker build -f deploy/docker/Dockerfile --target neura-worker-gpu -t neura-worker-gpu .
 
 ARG PYTHON_IMAGE=python:3.13-slim
 
@@ -101,6 +102,17 @@ CMD ["neura-gateway"]
 FROM runtime AS neura-sim-robots
 WORKDIR /srv/neura
 CMD ["neura-sim-robots"]
+
+# Policy worker runtime images (design §12). An artifact pins one by digest in
+# spec.runtime_image; the site runs its workers in it with no network and a read-only root.
+# neura-worker: the worker framework without PyTorch (the mock adapter; development and tests).
+FROM runtime AS neura-worker
+CMD ["neura-worker"]
+
+# neura-worker-gpu: with PyTorch (CUDA) and LeRobot, for ACT, Diffusion Policy, SmolVLA and pi0.
+# Publishers extend it with their own adapters, push it, and pin its digest in their artifacts.
+FROM runtime-models AS neura-worker-gpu
+CMD ["neura-worker"]
 
 # --- web console --------------------------------------------------------------------------------
 FROM node:22.20-alpine AS console-build

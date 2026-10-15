@@ -131,6 +131,7 @@ class Site:
             **{
                 "gateway_backend": "simulated",
                 "trusted_publisher_keys": [PUBLISHER_HEX],
+                "worker_sandbox": "process",
                 **settings,
             },
         )
@@ -740,6 +741,31 @@ async def test_prepare_measures_the_model_and_reports_its_sharing_case(tmp_path:
     assert (deployment["device"], deployment["adapter"]) == ("cuda:0", "mock")
     assert json.loads(Path(deployment["profile"]).read_text())["points"]
     assert config["serving"]["backend"] == "workers"
+
+
+async def test_prepare_pulls_the_pinned_runtime_image_or_fails(tmp_path: Path) -> None:
+    """In the container sandbox the runtime image is fetched at prepare, by digest."""
+    calls = tmp_path / "calls"
+    runtime = tmp_path / "runtime"
+    runtime.write_text(f'#!/bin/sh\necho "$@" >> {calls}\nexit 1\n')
+    runtime.chmod(0o755)
+    site = Site(
+        tmp_path,
+        gateway_backend="workers",
+        dev_adapter_override="mock",
+        worker_sandbox="container",
+        worker_container_runtime=[str(runtime)],
+    )
+    site.cuda.append(0)
+    await site.commit([REV1])
+    await site.core.on_command(site.prepare(REV1["id"]))
+    report = last_report(site)
+    assert (report.state, report.reason.code) == ("Failed", "WORKER_IMAGE_UNAVAILABLE"), report
+    image = _example("act-so101.artifact.yaml")["spec"]["runtime_image"]["reference"]
+    assert calls.read_text().splitlines() == [f"image inspect {image}", f"pull {image}"]
+    config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
+    assert config["serving"]["sandbox"]["kind"] == "container"
+    assert config["serving"]["sandbox"]["runtime"] == [str(runtime)]
 
 
 async def test_fine_tunes_sharing_one_gpu_are_co_located(tmp_path: Path) -> None:

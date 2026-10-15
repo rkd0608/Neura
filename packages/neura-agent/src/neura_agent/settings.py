@@ -86,6 +86,18 @@ class AgentSettings(BaseSettings):
     worker_command: list[str] = Field(
         default_factory=lambda: [sys.executable, "-m", "neura_server.worker"]
     )
+    # How policy workers run (design §12: customer model code is untrusted). container: the
+    # artifact's runtime image, pinned by digest, with no network, a read-only root, no
+    # capabilities and resource limits. process: a plain child process (development only).
+    worker_sandbox: Literal["container", "process"] = "container"
+    worker_container_runtime: list[str] = Field(default_factory=lambda: ["docker"])
+    worker_memory_mib: int | None = Field(default=None, ge=256)
+    worker_cpus: float | None = Field(default=None, gt=0)
+    worker_pids_limit: int = Field(default=512, ge=16)
+    worker_image_pull_timeout_s: float = Field(default=1800.0, gt=0)
+    # DEVELOPMENT ONLY: run workers in this image (a digest or name@digest) instead of the
+    # artifact's runtime image.
+    worker_image_override: str | None = None
     # Profiling at prepare: forward passes timed per batch size, and how long loading and
     # profiling a model may take.
     profile_iterations: int = Field(default=30, ge=5, le=1000)

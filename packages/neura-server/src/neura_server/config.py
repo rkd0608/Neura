@@ -86,6 +86,38 @@ class ProfilePointConfig(_Model):
     memory_mib: int = Field(default=0, ge=0)
 
 
+ImageReference = Annotated[
+    str,
+    StringConstraints(pattern=r"^([^\s@]+@)?sha256:[0-9a-f]{64}$", max_length=512),
+]
+
+
+class SandboxConfig(_Model):
+    """How policy workers run (design §12): customer model code is untrusted.
+
+    container: each worker runs the artifact's runtime image, pinned by digest, with no network,
+    a read-only root filesystem, no capabilities, resource limits, its device only, and its
+    inputs mounted read-only. process: a plain child process (development and tests only).
+    """
+
+    kind: Literal["container", "process"] = "process"
+    # The container runtime's command line: docker, podman, or a wrapper.
+    runtime: list[str] = Field(default_factory=lambda: ["docker"], min_length=1)
+    # The command inside the image that starts a worker.
+    entrypoint: list[str] = Field(default_factory=lambda: ["neura-worker"], min_length=1)
+    # Run this image instead of the artifact's (development only): a digest or name@digest.
+    image_override: ImageReference | None = None
+    memory_mib: int | None = Field(default=None, ge=256)
+    cpus: float | None = Field(default=None, gt=0)
+    pids_limit: int = Field(default=512, ge=16)
+    shm_mib: int = Field(default=1024, ge=64)
+    tmp_mib: int = Field(default=2048, ge=64)
+    # The user the worker runs as; None: the gateway's own uid:gid, so it can use the socket.
+    user: str | None = None
+    # How a CUDA device is handed to the container; {index} is the device index.
+    gpu_args: list[str] = Field(default_factory=lambda: ["--gpus", "device={index}"])
+
+
 class ServingConfig(_Model):
     # workers: one policy worker process per batch group, running the artifact's adapter on its
     # device (design §12). simulated: the mock policy in the gateway process, for development
@@ -96,6 +128,7 @@ class ServingConfig(_Model):
     worker_command: list[str] = Field(
         default_factory=lambda: [sys.executable, "-m", "neura_server.worker"], min_length=1
     )
+    sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     # Where worker sockets live; None: a private temporary directory.
     worker_dir: Path | None = None
     # Loading and warming up a large model can take minutes.

@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import secrets
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from neura_agent.artifacts import ArtifactError
 from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.config import profile_batch_sizes
+from neura_server.sandbox import Invocation, Launcher
 
 SAME_WEIGHTS = "same_weights"
 CO_LOCATED_FINE_TUNES = "co_located_fine_tunes"
@@ -84,7 +86,7 @@ def profile_path(
 
 
 async def measure(
-    command: list[str],
+    launcher: Launcher,
     *,
     documents: dict[str, Path],
     device: str,
@@ -95,32 +97,24 @@ async def measure(
     timeout_s: float,
     adapter: str | None = None,
 ) -> dict[str, Any]:
-    """Run `neura-worker profile` and return the measured profile. Raises ArtifactError with the
-    worker's reason when the model cannot be loaded or profiled on the device."""
-    args = [
-        *command,
-        "profile",
-        "--artifact",
-        str(documents["model_artifact"]),
-        "--robot-profile",
-        str(documents["robot_profile"]),
-        "--execution-profile",
-        str(documents["execution_profile"]),
-        "--device",
-        device,
-        "--batch-sizes",
-        ",".join(str(b) for b in profile_batch_sizes(max_batch)),
-        "--warmup",
-        ",".join(str(b) for b in profile_batch_sizes(max_batch)),
-        "--iterations",
-        str(iterations),
-        "--out",
-        str(out),
+    """Run `neura-worker profile` (in the worker sandbox) and return the measured profile.
+    Raises ArtifactError with the worker's reason when the model cannot be loaded or profiled
+    on the device."""
+    batches = ",".join(str(b) for b in profile_batch_sizes(max_batch))
+    flags = ["--device", device, "--batch-sizes", batches, "--warmup", batches]
+    flags += ["--iterations", str(iterations)]
+    if adapter is not None:
+        flags += ["--adapter", adapter]
+    inputs = [
+        ("--artifact", documents["model_artifact"]),
+        ("--robot-profile", documents["robot_profile"]),
+        ("--execution-profile", documents["execution_profile"]),
     ]
     if checkpoint is not None:
-        args += ["--checkpoint", str(checkpoint)]
-    if adapter is not None:
-        args += ["--adapter", adapter]
+        inputs.append(("--checkpoint", checkpoint))
+    invocation = Invocation("profile", device, flags, inputs, [("--out", out)])
+    name = f"profile-{secrets.token_hex(4)}"
+    args = launcher.command(name, invocation)
     out.parent.mkdir(parents=True, exist_ok=True)
     process = await asyncio.create_subprocess_exec(
         *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE
@@ -133,6 +127,8 @@ async def measure(
         raise ArtifactError(
             ReasonCode.WORKER_LOAD_FAILED, f"profiling did not finish in {timeout_s:.0f} s"
         ) from None
+    finally:
+        await launcher.remove(name)
     for line in reversed(stdout.decode(errors="replace").splitlines()):
         try:
             message = json.loads(line)

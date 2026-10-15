@@ -12,6 +12,10 @@ help: ## Show this help
 setup: ## Install the workspace and dev tools into .venv
 	$(UV) sync --frozen
 
+.PHONY: models-setup
+models-setup: ## Also install PyTorch and LeRobot (the models group), for model tests and benchmarks
+	$(UV) sync --frozen --group models
+
 .PHONY: gen
 gen: ## Regenerate code from proto/, catalog/, contract models and the API spec
 	$(UV) run python tools/gen_reason_codes.py
@@ -52,6 +56,21 @@ test: ## Run the test suite
 
 .PHONY: check
 check: lint typecheck check-generated test ## Everything CI runs, except the dev-stack smoke test
+
+.PHONY: test-models
+test-models: ## Model tests: LeRobot adapters, real workers, the benchmark harness (needs models-setup)
+	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench tests/integration/test_act_worker.py
+	$(UV) run --group models neura-bench run --preset smoke --out $${TMPDIR:-/tmp}/neura-bench-smoke
+
+BENCH_DEVICE ?= cuda:0
+
+.PHONY: bench
+bench: ## GPU-sharing benchmark on the GPU runner; report in bench/reports/<gpu>/
+	$(UV) run --group models neura-bench run --preset gpu --device $(BENCH_DEVICE)
+
+.PHONY: bench-cpu
+bench-cpu: ## The benchmark on this machine's CPU (a development host; labeled as such)
+	$(UV) run --group models neura-bench run --preset cpu
 
 .PHONY: dev
 dev: ## Start the local stack (Postgres, control plane, site agent with its data plane, simulated robots)

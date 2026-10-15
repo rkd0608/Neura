@@ -54,6 +54,21 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+  models:
+    name: Models (LeRobot adapters, real workers, benchmark harness)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install (with PyTorch and LeRobot)
+        run: make models-setup
+      - name: Model tests and a smoke run of the benchmark
+        run: make test-models
+
   console:
     name: Console (lint, types, unit and end-to-end tests)
     runs-on: ubuntu-24.04

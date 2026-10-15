@@ -1,0 +1,45 @@
+name: GPU benchmark
+
+# The GPU-sharing benchmark (design §9.5, §10) on a self-hosted runner with an NVIDIA GPU, labeled
+# "gpu". Run it from the Actions tab; the report is uploaded as an artifact, to be committed under
+# bench/reports/.
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: CUDA device to benchmark
+        default: "cuda:0"
+      size:
+        description: Model size (tiny, small, base)
+        default: "base"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: Benchmark
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.13"
+      - name: GPU
+        run: nvidia-smi
+      - name: Install (with PyTorch and LeRobot)
+        run: make models-setup
+      - name: Benchmark
+        env:
+          DEVICE: ${{ inputs.device }}
+          SIZE: ${{ inputs.size }}
+        run: >-
+          uv run --group models neura-bench run --preset gpu
+          --device "$DEVICE" --size "$SIZE" --out bench-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-report
+          path: bench-report

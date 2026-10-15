@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -137,3 +138,15 @@ def simulate_free_result(robots: int, misses: float) -> Result:
     window = Window(duration_s=60, robots=robots, devices=1, requests=1000)
     window.served_late = int(misses)
     return summarize(window)
+
+
+def test_per_robot_baselines_get_a_batch_group_each_at_any_count(tmp_path: Path) -> None:
+    """One process per robot needs as many distinct artifacts as robots, past any pool size."""
+    files = write_files(tmp_path, contracts())
+    models = suite.Models(files, [], files, tmp_path)
+    measured = SimpleNamespace(contention=SimpleNamespace(contention=Contention()))
+    builder = suite.Builder(suite.PRESETS["smoke"], models, measured)  # type: ignore[arg-type]
+    builder.latency = lambda kind: FAST  # type: ignore[method-assign]
+    p = suite.plan(suite.SAME_WEIGHTS, suite.DEDICATED_SHARED, 40, suite.PRESETS["smoke"])
+    scenario = builder.simulation(p, suite.PHASED, 40, warmup_s=0.1, duration_s=0.1)
+    assert len({g.binding.artifact_digest for g in scenario.groups}) == 40

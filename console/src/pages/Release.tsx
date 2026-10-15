@@ -17,7 +17,7 @@ import {
   useRobots,
   useSites,
 } from "../api/queries";
-import { documentTitle } from "../components/Contracts";
+import { documentTitle, sharingCase } from "../components/Contracts";
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
 import {
@@ -392,6 +392,12 @@ function RevisionRow({
           <span title={`Limited by ${capacity.limiting_factor.replaceAll("_", " ")}`}>
             <strong>{capacity.max_robots}</strong> robots per batch group
             <div className="muted">limited by {capacity.limiting_factor.replaceAll("_", " ")}</div>
+            <div className="muted" title={sharingCase(capacity.sharing_case).detail}>
+              {sharingCase(capacity.sharing_case).label}
+              {capacity.source === "measured_profile"
+                ? ", measured on the site"
+                : ", configured profile"}
+            </div>
           </span>
         ) : (
           <span className="muted">Estimated when prepared</span>

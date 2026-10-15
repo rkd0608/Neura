@@ -2,6 +2,7 @@
 # Images for Neura services. Build from the repository root:
 #   docker build -f deploy/docker/Dockerfile --target neura-control -t neura-control .
 #   docker build -f deploy/docker/Dockerfile --target neura-agent -t neura-agent .
+#   docker build -f deploy/docker/Dockerfile --target neura-agent-gpu -t neura-agent-gpu .
 #   docker build -f deploy/docker/Dockerfile --target neura-console -t neura-console .
 
 ARG PYTHON_IMAGE=python:3.13-slim
@@ -31,6 +32,8 @@ COPY packages/neura-runtime/pyproject.toml packages/neura-runtime/README.md pack
 COPY packages/neura-server/pyproject.toml packages/neura-server/README.md packages/neura-server/
 COPY packages/neura-sim/pyproject.toml packages/neura-sim/README.md packages/neura-sim/
 COPY packages/neura-sdk/pyproject.toml packages/neura-sdk/README.md packages/neura-sdk/
+COPY packages/neura-adapters/pyproject.toml packages/neura-adapters/README.md packages/neura-adapters/
+COPY packages/neura-bench/pyproject.toml packages/neura-bench/README.md packages/neura-bench/
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-install-workspace
@@ -39,14 +42,26 @@ RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-editable
 
-FROM ${PYTHON_IMAGE} AS runtime
+# The same environment plus PyTorch (with its CUDA libraries) and LeRobot: the models group.
+FROM build AS build-models
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
+    uv sync --frozen --no-dev --group models --all-packages --no-editable
+
+FROM ${PYTHON_IMAGE} AS runtime-base
 RUN useradd --uid 10001 --user-group --no-create-home --home-dir /app --shell /usr/sbin/nologin neura \
     && mkdir -p /var/lib/neura && chown neura:neura /var/lib/neura
-COPY --from=build /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app
+
+FROM runtime-base AS runtime
+COPY --from=build /app/.venv /app/.venv
+USER neura
+
+FROM runtime-base AS runtime-models
+COPY --from=build-models /app/.venv /app/.venv
 USER neura
 
 FROM runtime AS neura-control
@@ -61,6 +76,15 @@ CMD ["neura-control"]
 FROM runtime AS neura-agent
 ENV NEURA_AGENT_LOCAL_HOST=0.0.0.0
 EXPOSE 8090
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+    CMD ["python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2); sys.exit(0)"]
+CMD ["neura-agent"]
+
+# Site agent for GPU servers: its policy workers load real models (PyTorch, LeRobot) on the GPUs
+# the agent may use. Run with the NVIDIA container toolkit (`--gpus all`).
+FROM runtime-models AS neura-agent-gpu
+ENV NEURA_AGENT_LOCAL_HOST=0.0.0.0
+EXPOSE 8090 50051
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2); sys.exit(0)"]
 CMD ["neura-agent"]

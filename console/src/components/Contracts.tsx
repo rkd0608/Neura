@@ -185,3 +185,29 @@ export function RegisterContract({
     </Dialog>
   );
 }
+
+/** How a revision's batch group shares its device (design §9.5), as capacity estimates say. */
+export const SHARING_CASES: Record<string, { label: string; detail: string }> = {
+  same_weights: {
+    label: "Batched",
+    detail: "Robots on this revision share forward passes, and nothing else runs on the device.",
+  },
+  multi_adapter: {
+    label: "Multi-adapter",
+    detail: "One base-model forward pass serves several adapters.",
+  },
+  co_located_fine_tunes: {
+    label: "Co-located fine-tunes",
+    detail:
+      "Other fine-tunes of the same architecture run their own workers on this device. The estimate assumes no contention from them; see the benchmark reports.",
+  },
+  different_architectures: {
+    label: "Shares the device",
+    detail:
+      "Other models run their own workers on this device. The estimate assumes no contention from them; see the benchmark reports.",
+  },
+};
+
+export function sharingCase(value: string | null | undefined): { label: string; detail: string } {
+  return SHARING_CASES[value ?? "same_weights"] ?? { label: value ?? "", detail: "" };
+}

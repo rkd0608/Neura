@@ -13,7 +13,7 @@ import {
   useSessions,
   useSites,
 } from "../api/queries";
-import { documentTitle } from "../components/Contracts";
+import { documentTitle, sharingCase } from "../components/Contracts";
 import {
   Badge,
   Card,
@@ -83,6 +83,7 @@ export function Capacity() {
                     In this release
                   </th>
                   <th scope="col">Limited by</th>
+                  <th scope="col">Device</th>
                   <th scope="col">Assumptions</th>
                 </tr>
               </thead>
@@ -93,6 +94,7 @@ export function Capacity() {
                     (p) => p.metadata.id === revision.spec.execution_profile_id,
                   );
                   const a = capacity.assumptions;
+                  const sharing = sharingCase(capacity.sharing_case);
                   return (
                     <tr key={revision.metadata.id}>
                       <td>
@@ -118,6 +120,16 @@ export function Capacity() {
                         )}
                       </td>
                       <td>{capacity.limiting_factor.replaceAll("_", " ")}</td>
+                      <td className="small">
+                        {a.device ? <span className="mono">{a.device}</span> : "—"}
+                        <div title={sharing.detail}>{sharing.label}</div>
+                        {a.co_located_groups ? (
+                          <div className="muted">
+                            {a.co_located_groups} other{" "}
+                            {a.co_located_groups === 1 ? "group" : "groups"} on the device
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="small">
                         <details>
                           <summary>

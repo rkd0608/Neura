@@ -32,9 +32,7 @@ def test_the_report_states_capacity_crossovers_and_its_limits() -> None:
 def test_report_command_regenerates_the_markdown(tmp_path: Path) -> None:
     (tmp_path / "results.json").write_text(FIXTURE.read_text())
     assert main(["report", str(tmp_path)]) == 0
-    assert (tmp_path / "README.md").read_text() == report.markdown(
-        json.loads(FIXTURE.read_text())
-    )
+    assert (tmp_path / "README.md").read_text() == report.markdown(json.loads(FIXTURE.read_text()))
 
 
 def test_labels_are_directory_names() -> None:

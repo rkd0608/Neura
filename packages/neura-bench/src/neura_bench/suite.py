@@ -244,14 +244,14 @@ async def take_measurements(config: SuiteConfig, models: Models) -> Measurements
 # --- scenarios ------------------------------------------------------------------------------
 
 
-def _bindings(base: DeploymentFiles, count: int) -> Iterator[ExecutionBinding]:
+def _bindings(base: DeploymentFiles, start: int, count: int) -> Iterator[ExecutionBinding]:
     """Distinct artifacts (one batch group each) with the base's contracts, for simulation."""
     artifact = json.loads(base.artifact.read_text())
     robot = json.loads(base.robot_profile.read_text())
     profile = json.loads(base.execution_profile.read_text())
     r = parse_document(robot)
     assert isinstance(r, RobotProfile)
-    for index in range(count):
+    for index in range(start, start + count):
         variant = json.loads(json.dumps(artifact))
         variant["metadata"]["version"] = f"{artifact['metadata']['version']}-sim-{index}"
         a = parse_document(variant)
@@ -355,7 +355,7 @@ class Builder:
     def _sim_binding(self, kind: str, index: int) -> ExecutionBinding:
         pool = self._sim_bindings.setdefault(kind, [])
         while len(pool) <= index:
-            pool.extend(_bindings(self.files(kind), 16))
+            pool.extend(_bindings(self.files(kind), len(pool), 16))
         return pool[index]
 
     def simulation(

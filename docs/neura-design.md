@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented, M6 onward not yet built · October 14, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 onward not yet built · October 15, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -334,6 +334,33 @@ An adapter implements: `load(artifact)`, `warmup()`, `infer_batch(requests) → 
 
 Workers run the artifact's pinned OCI image, without network access beyond the scheduler socket, with resource limits. Customer model code is treated as untrusted executable code inside that sandbox.
 
+### 12.1 Implementation notes (M6)
+
+- **Adapters** (`packages/neura-adapters`). The interface is `load → warmup(batch sizes) → infer(batch)` with the declared properties (deterministic, batching, multi-adapter, stateless, device, precision, parameters). Registered: `mock`, `lerobot-act`, `lerobot-smolvla`, `lerobot-pi0`, `lerobot-pi05`, `lerobot-diffusion`. A LeRobot checkpoint (`save_pretrained` layout) runs with its own pre- and post-processors, so outputs match LeRobot's inference for the same inputs. Loading checks the checkpoint against the contract (input names and shapes, action size, chunk length) and refuses a mismatch at prepare, never on a robot. Checkpoints that read a history of observations (Diffusion Policy with `n_obs_steps > 1`) are refused as stateful. bf16 and fp16 run under autocast, because the policies create float32 tensors of their own; ACT in bf16 stays within 2 degrees of fp32. Device out-of-memory is a typed error.
+- **Verified here:** ACT and Diffusion Policy end to end on CPU (synthetic checkpoints: the real LeRobot architectures with random weights, `neura_adapters.synthetic`). SmolVLA and π0 share the same code path but start from pretrained vision-language backbones downloaded from their publishers, which this build environment cannot reach; their first run is on the GPU runner.
+- **Policy workers.** `neura-worker serve` runs one model on one device for one batch group and serves `neura.v1.PolicyWorker` (`Describe`, `Infer`) on a Unix socket (mode 0600, in a private directory). Its first stdout line announces ready or a typed load error, and it exits when its stdin closes, so a worker never outlives its gateway. The gateway's `WorkerBackend` supervises one worker per group and restarts it with backoff. Failures reach robots as typed rejections:
+  - a worker that exits during a batch: `WORKER_CRASHED`;
+  - a batch not finished by its latest deadline (and at least `worker_timeout_ms`): the worker is killed, `WORKER_TIMED_OUT`;
+  - no worker ready: `WORKER_UNAVAILABLE`; a policy error: `WORKER_INFERENCE_FAILED`; a model that cannot load: `WORKER_LOAD_FAILED` or the specific reason.
+
+  A result is delivered only from the worker incarnation the batch was sent to. Batch groups key on the concrete device (`artifact:cuda:0:bf16`); a reload stops the workers of groups no deployment uses, freeing their memory. Workers report their peak memory. The simulated backend (mock policy, profile-sampled latency) remains for the Compose stack and tests. Until M7, workers run in the agent's environment (`neura-agent-gpu` image: PyTorch and LeRobot); the pinned artifact image and sandbox above are M7.
+- **Weights at the site** (§18.1). The agent keeps a content-addressed store (`<state>/artifacts`). Files arrive by `neura-agent import-weights DIR [--artifact FILE]` or from configured sources (`NEURA_AGENT_ARTIFACT_SOURCES`: directories or HTTPS base URLs laid out as `<source>/sha256/<hex>`, optional bearer token). Every file is verified against its digest before it is stored. A prepared artifact becomes a read-only checkout of hard links to verified blobs. Weights never pass through the control plane. Missing weights fail prepare with `AGENT_ARTIFACT_UNAVAILABLE`, naming the files and the fix.
+- **Prepare with real workers** (`NEURA_AGENT_GATEWAY_BACKEND=workers`, the default):
+  1. choose the device: the group's existing one, else the allowed GPU with the fewest groups (`AGENT_DEVICE_UNAVAILABLE` when the profile needs a GPU and none may be used);
+  2. check out the weights;
+  3. run `neura-worker profile` on that device: load, warm up, and measure p50, p99 and peak memory per batch size;
+  4. estimate capacity from the measured profile. The estimate now carries `source: measured_profile`, the `sharing_case` (§9.5), the device and the number of co-located groups.
+
+  The gateway's scheduler and admission start from the same measured profile. The console shows the sharing case and the profile's source.
+- **Multi-adapter batching** exists as a mechanism (`neura_adapters.lora`): forward hooks add each request's LoRA term over a stacked, zero-padded adapter bank, with each layer's batch dimension found by a probe pass. Adapters on layers whose forward is bypassed (fused attention) are refused, not silently ignored. `check_parity` compares a mixed batch with each adapter merged and run alone. Per §9.5 it is not in the data plane: the benchmark measures whether it pays first.
+- **Benchmark harness** (`packages/neura-bench`, `make bench`): the four sharing cases against the dedicated baselines (§10), described in its README.
+  - Measurements through real worker processes: latency per batch size, contention between co-located workers, a background job, multi-adapter cost and parity.
+  - A simulated link calibrated from one robot alone in real time.
+  - Simulated sweeps using the production robot runtime, gateway and scheduler, with processor sharing on the device. Each configuration's capacity is the largest robot count meeting the SLO.
+  - Real-time validation of the main configurations with the production gateway, real workers and gRPC robots.
+
+  Reports go to `bench/reports/<device>/` as `results.json` and a generated `README.md`. The GPU workflow (`.github/workflows/bench.yml`) runs on a self-hosted runner labeled `gpu`. Neither configuration uses `torch.compile` or CUDA graphs, so the comparison stays like for like (§10).
+
 ---
 
 ## 13. Control plane and releases (built after the data plane is proven)
@@ -419,7 +446,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M3. Control plane** ✅ | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20). Alembic migrations; transactional idempotency keys; `If-Match` concurrency; audit and change events in the same transaction as each change; site-report service that alone writes observed state (used by the agent in M4); `GET /v1/me`; bootstrap CLI and development bootstrap | Every response in the test suite is validated against the OpenAPI spec; every spec operation is implemented; idempotency (including concurrent retries), concurrency, roles, OIDC and audit tests pass; the dev stack onboards a customer through the API |
 | **M4. Site agent** ✅ | Enrollment with one-time tokens and on-host keys, preflight, outbound stream (TLS), signed manifest reconciliation, contract verification at the site, local boundaries, at-most-once commands, local approval, task-boundary revision switches, signed contact proofs for offline authorization, supervised data plane, local site API and CLI (§17, §19.5); implementation notes in §17.6 | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage and reconnects by itself (`make smoke` runs the whole pilot on the Compose stack) |
 | **M5. Web console** ✅ | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19); members API with invitations; sign-in configuration in `/v1/meta`; site-computed capacity estimates; generated Python SDK; implementation notes in §19.7 | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests (`make console-e2e`, in CI) |
-| **M6. Models and GPU sharing** | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10) | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner |
+| **M6. Models and GPU sharing** (built; GPU run pending) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
 | **M7. Production hardening** | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations |
 | **M8. Physical validation** | SO-101-class arms connected through the same platform | Fault suite and parity pass on hardware |
 

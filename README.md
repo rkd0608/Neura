@@ -22,11 +22,14 @@ design and the build plan (§16.1).
 | `packages/neura-control` | Cloud control plane: management API on Postgres, migrations, auth, audit, events (`neura-control`) |
 | `packages/neura-agent` | Site agent on customer GPU servers: enrollment, signed desired state, local approval, supervised data plane, local site API (`neura-agent`) |
 | `packages/neura-runtime` | Robot runtime: action queue, chunk merging, fencing, state machine, session and gRPC clients |
-| `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy workers (`neura-gateway`) |
+| `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy worker processes (`neura-gateway`, `neura-worker`) |
+| `packages/neura-adapters` | Model adapters: LeRobot ACT, SmolVLA, π0, π0.5 and Diffusion Policy, a mock, synthetic checkpoints, profiler, multi-adapter (LoRA) batching |
+| `packages/neura-bench` | GPU-sharing benchmark: each sharing case against the dedicated baselines (`neura-bench`) |
 | `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, `neura-sim-robots` |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
+| `bench/reports/` | Benchmark reports, one directory per device |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
 
@@ -45,7 +48,14 @@ make smoke     # build, start, run a whole pilot end to end, stop
 make console-setup   # pnpm install
 make console-check   # format, lint (incl. accessibility), strict types, unit tests
 make console-e2e     # the whole journey in Chromium against the real backend
+
+make models-setup    # also install PyTorch and LeRobot (about 5 GB), for real models
+make test-models     # LeRobot adapters, real worker processes, a smoke run of the benchmark
+make bench           # the GPU-sharing benchmark on a GPU; report in bench/reports/<gpu>/
 ```
+
+`make setup` installs the default environment only; run `make models-setup` again after it to
+keep PyTorch and LeRobot.
 
 The dev stack bootstraps an organization and an admin API token (development only; see
 `deploy/compose/compose.yaml`). Sign in to the console with that token. The site agent starts unenrolled and the robots wait for an
@@ -79,6 +89,14 @@ uv run neura-contracts check \
   --artifact examples/contracts/act-so101.artifact.yaml \
   --robot examples/contracts/so101.robot.yaml \
   --profile examples/contracts/act-so101-30hz.profile.yaml
+```
+
+The dev stack runs the mock policy with simulated GPU latency. A real site runs one policy worker
+process per model on its GPU (the agent's default). Model weights stay at the site: copy a
+checkpoint onto the server and import it, and `prepare` loads it on the GPU and measures it there:
+
+```bash
+neura-agent import-weights /path/to/checkpoint --artifact my-model.artifact.yaml
 ```
 
 Watch the simulated robots being served:

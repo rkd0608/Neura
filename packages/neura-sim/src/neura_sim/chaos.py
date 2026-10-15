@@ -52,7 +52,7 @@ from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
 from neura_sim.invariants import InvariantMonitor
 
 
-def _free_port() -> int:
+def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return int(s.getsockname()[1])
@@ -323,7 +323,7 @@ class Chaos:
             else:
                 workdir = config.workdir
                 workdir.mkdir(parents=True, exist_ok=True)
-            gateway_port, status_port, proxy_port = _free_port(), _free_port(), _free_port()
+            gateway_port, status_port, proxy_port = free_port(), free_port(), free_port()
             site_config = self._write_config(workdir, gateway_port, status_port)
             self.status_url = f"http://127.0.0.1:{status_port}"
             gateway = GatewayProcess(site_config, workdir / "gateway.log")

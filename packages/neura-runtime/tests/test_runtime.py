@@ -225,6 +225,15 @@ def test_out_of_range_action_latches_a_fault(harness: Harness) -> None:
     assert harness.controller.commands == []
 
 
+def test_non_finite_actions_are_out_of_range(harness: Harness) -> None:
+    # Decoding refuses NaN and infinity first; the range check does not rely on it.
+    transform = harness.binding.action_transform
+    actions = np.zeros((3, harness.binding.action_dim))
+    actions[1, 2] = np.nan
+    actions[2, 0] = np.inf
+    assert transform.out_of_range(actions) == [1, 2]
+
+
 def test_out_of_range_beyond_executed_window_is_ignored(harness: Harness) -> None:
     obs = harness.start()
     values = np.zeros((harness.binding.chunk_length, harness.binding.action_dim), dtype=np.float32)

@@ -19,7 +19,7 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M5. Web console | Onboarding to deployment in the browser, live sessions, faults, audit, settings; generated Python SDK | Built |
 | M6. Models and GPU sharing | ACT, SmolVLA and π0-class adapters, batching and multi-adapter batching, profiling, benchmark harness | Built; benchmark on a GPU pending |
 | M7. Production hardening | Mutual TLS, artifact signing, customer-managed keys, outbound ledger, dashboards, installer and signed upgrades, worker sandbox, supply-chain controls, chaos and soak testing, a security review, these docs | Built; 72-hour soaks with injected faults had no invariant violation |
-| M8. Physical validation | SO-101 class arms through the same platform: fault suite and parity on hardware | Not started |
+| M8. Physical validation | SO-101 class arms through the same platform: fault suite and parity on hardware | Built and passing on the emulated arm; the run on hardware is pending |
 
 ## Not yet on this site
 

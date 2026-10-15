@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-sidebar_position: 9
+sidebar_position: 10
 description: What the most common reason codes mean and what to do about them.
 status: Experimental
 ---

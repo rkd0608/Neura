@@ -26,13 +26,16 @@ design and the build plan (§16.1).
 | `packages/neura-adapters` | Model adapters: LeRobot ACT, SmolVLA, π0, π0.5 and Diffusion Policy, a mock, synthetic checkpoints, profiler, multi-adapter (LoRA) batching |
 | `packages/neura-bench` | GPU-sharing benchmark: each sharing case against the dedicated baselines (`neura-bench`) |
 | `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, invariant monitor, `neura-sim-robots`, `neura-sim-soak`, `neura-chaos` |
+| `packages/neura-robots` | Real robots: the SO-101 arm over LeRobot, a servo bus emulator, `neura-arm` (serve an arm), `neura-qualify` (hardware fault suite, parity, closed-loop episodes) |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
 | `site/` | Public developer docs (Docusaurus): every page labeled, references generated from the sources |
 | `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
 | `examples/site/` | A development gateway configuration, used by the docs quickstart |
+| `examples/robots/` | A `neura-arm` configuration for an SO-101 arm |
 | `bench/reports/` | Benchmark reports, one directory per device |
 | `soak/reports/` | 72-hour soak reports with injected faults, and how to reproduce them |
+| `qualification/reports/` | Hardware qualification reports (the emulated arm until hardware runs) |
 | `deploy/` | Container images and the local Compose stack |
 | `tools/` | Code generators and checks |
 
@@ -61,6 +64,7 @@ make docs            # docs dev server; make docs-check: labels, wording, build
 
 make soak            # 72 simulated hours of the site with injected faults (about 2 hours)
 make chaos           # faults in a real gateway, its workers and the network (5 minutes)
+make qualify-emulated  # the hardware fault suite and parity on the emulated SO-101 arm
 ```
 
 `make setup` installs the default environment only; run `make models-setup` again after it to

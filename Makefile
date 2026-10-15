@@ -68,6 +68,10 @@ test-models: ## Model tests: LeRobot adapters, real workers, benchmarks, the SO-
 	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench packages/neura-robots tests/integration/test_act_worker.py
 	$(UV) run --group models neura-bench run --preset smoke --out $${TMPDIR:-/tmp}/neura-bench-smoke
 
+.PHONY: qualify-emulated
+qualify-emulated: ## The hardware fault suite and parity on the emulated SO-101 arm (needs models-setup)
+	$(UV) run --group models neura-qualify run --emulate --out $${TMPDIR:-/tmp}/neura-qualify-emulated.json
+
 SOAK_HOURS ?= 72
 
 .PHONY: soak

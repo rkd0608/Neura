@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 (production hardening) implemented; M8 (physical validation) not started · October 15, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm · October 15, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -217,6 +217,90 @@ States follow the blueprint: `Disconnected → Ready → Armed → Running ⇄ W
 ### Fault suite (every supported integration must pass, in simulation and with fault injection)
 
 Stale reply, duplicate reply, reordered replies, reply for old epoch, reply for old lease generation, worker crash mid-batch, worker restart (old chunk must never replay), gateway restart, network delay above budget, network partition, packet loss on the stream, camera missing or skewed beyond tolerance, NaN or out-of-range action, oversized message, GPU out-of-memory, cloud control plane down for a long period, offline authorization expiry, operator takeover, second client for the same robot, recording disk full.
+
+### 7.1 Hardware integration and qualification (M8)
+
+**The first integration: SO-101-class arms over LeRobot** (`packages/neura-robots`)
+
+- `So101Arm` is the runtime's `Controller` and `SensorSource` for an SO-101 arm (six Feetech STS3215 servos). It is built on LeRobot 0.6: its Feetech bus driver, the calibration made with `lerobot-calibrate`, and its cameras. Customers keep the calibration and tools they already use. Neura adds what makes the arm safe to serve remotely:
+  - **One actuator authority** (§6.3). An exclusive `flock` on a lock file named after the resolved serial device, taken before connecting, plus `TIOCEXCL` on the open port, so any other program fails to open it. `has_authority` fails if the lock file is replaced or the port is closed, and the runtime faults with `ACTUATOR_LOCK_LOST`.
+  - **No jump on connect.** Every goal is set to the present position before torque is enabled, so a goal an earlier program left in the servos is never executed.
+  - **The contract matches the arm.** Before anything moves, the robot profile is checked against the arm: command names against its motors, units (degrees for joints, 0–100 for the gripper), every command range inside the calibrated range, and fault responses against what the arm can do. A profile that allows a command outside the calibration is refused.
+  - **Confirmed holds.** `hold_position` and `controlled_stop` set every goal to the present position, then read the goals and torque back. Only then does the runtime report a stop. Torque is never dropped as a fault response: an SO-101 falls without it, so `brake` is refused. `customer_stop_path` runs the integrator's own command (a relay that cuts servo power, say).
+  - **A joint that gives up fails the command.** Every 10 commands (one sync read, about 1 ms) the torque of every joint is read back. A servo whose overload protection dropped torque is not following, so the command fails (`CONTROLLER_COMMAND_FAILED`) and the others hold. The hold is then *not* confirmed, so no stop is claimed.
+  - **Motion limit per command.** LeRobot's `max_relative_target` (10 degrees by default) caps each joint's move per command, behind the runtime's range checks.
+  - **Honest timestamps.** Joint state is stamped when read. Each image carries its own capture time, converted from its age to the robot's monotonic clock.
+- **The emulator** (`neura-arm-emulator`): six STS3215 servos behind a pseudo-terminal, speaking Feetech protocol 0. That covers ping, read, write, sync read, sync write, reg write and action, with checksums, the control table, EEPROM lock and sign-magnitude homing. LeRobot's real bus driver opens it like the arm's USB adapter, so everything above the serial port runs unchanged in development and CI. Dynamics: goal tracking at the servo's speed, and sag under gravity without torque. Faults: an unplugged servo, a silent bus, corrupted packets, a stalled joint, and an overload that drops torque. It is a test double for the bus, not a model of the arm's mechanics.
+- **`neura-arm`** is the robot-side process for a real arm: the runtime, the session client and the gateway connection around a connected arm (`examples/robots/so101-arm.yaml`).
+  - **Nothing moves without the operator.** It never arms on its own.
+  - **Operator commands** (`arm`, `stop`, `takeover`, `reset`, `instruction`, `status`, `quit`) run on the control loop, the one thread that owns the bus. A command that waited more than 2 s (typed while no revision was served, say) is dropped, never executed late.
+  - **`reset`** first brings every goal to the present position and torque back on, because a tripped servo answers every read with an error until then. It then revalidates the actuator, bus, calibration and contract (§7).
+  - **Revisions.** It serves a pinned revision or whatever the site assigns. A new assignment applies at a task boundary, after the new robot profile is checked against the arm, without letting go of it. A revision that does not fit is refused and the current one keeps running.
+  - **Session refusals are shown to the operator** with their reason (`ADMISSION_CAPACITY_EXCEEDED` with the predicted observation age, for example) instead of retrying silently.
+
+**Qualification** (`neura-qualify`). A combination is Supported (§26.2) only after three things pass on the real robot.
+
+1. **The hardware fault suite.** The site's gateway process and its real policy workers run on the robot computer behind `neura-chaos`'s TCP fault proxy. The arm is served by `neura-arm`'s own process code and watched by the independent invariant monitor (§17.7). Each scenario arms the robot, lets it run and injects one fault. It then checks the runtime's verdict (state, reason, whether the response was confirmed) and what the arm physically did, from its joint readings:
+   - after a fault or during starvation the arm held still within tolerance (1 degree by default), measured from 0.3 s after the hold;
+   - it received no command while faulted or starved;
+   - a latched fault stayed latched until the reset;
+   - the monitor saw no violation;
+   - every command it ever received was inside the profile's ranges.
+
+   The scenarios cover the §7 list where it applies to a robot:
+
+   | Scenario | Covers |
+   | --- | --- |
+   | `nominal` | runs at the control rate, control loop on time; records parity samples |
+   | `network_jitter` | latency within budget: keeps running |
+   | `network_delay` | stale reply, network delay above budget |
+   | `partition` | network partition, late (reordered) replies after it heals: starvation fault, still latched |
+   | `reset_connections` | packet loss on the stream (TCP loses as a stall or a reset) |
+   | `gateway_kill`, `gateway_freeze` | gateway restart, a stalled host |
+   | `worker_kill` | worker crash mid-batch and restart, no replay |
+   | `operator_takeover`, `second_client` | the same names in §7, with reply for an old lease generation |
+   | `camera_frozen`, `camera_unplugged` | camera missing or too old |
+   | `invalid_action`, `nan_action` | out-of-range and NaN actions with a valid digest |
+   | `duplicate_chunk`, `old_epoch_chunk` | duplicate reply, reply for an old epoch |
+   | `controller_failure`, `torque_loss`, `bus_unplugged` | controller command failure; the last two must not claim a stop |
+   | `second_runtime_blocked`, `actuator_lock_lost` | one actuator authority (§6.3) |
+
+   Oversized messages, GPU out-of-memory, a long control-plane outage and offline authorization expiry are not robot-side, and stay in the gateway, worker and agent suites. Recording does not exist yet.
+2. **Open-loop parity.** During `nominal`, the harness keeps the raw readings behind some observations (joint positions and camera frames as captured) and the chunks the site returned. It then runs the checkpoint through LeRobot alone on the same readings: `prepare_observation_for_inference`, the checkpoint's processors and `predict_action_chunk`. None of Neura's code is on that path: not the tensor encoding, transport, batching, worker or action mapping. The largest difference must be within 0.001 in the model's action units. The reference requires the artifact's state in the robot's own units, as LeRobot training produces.
+3. **Closed-loop non-inferiority.** Operator-scored episodes of the same task are served two ways: by Neura, and by LeRobot's own loop on the robot computer (`predict_action` each control period, as `lerobot-record --policy.path` does).
+   - **Order.** After an unscored warm-up of both, episodes alternate in ABBA blocks, and the operator is not told which way each was served.
+   - **Verdict.** The lower bound of the one-sided 95% interval for the difference in success rates (Newcombe's hybrid score interval) must be above minus the margin.
+   - **Defaults.** 30 episodes each and a margin of 0.15: with both at 90%, the bound is about −0.14. Ten episodes each cannot show it even at 100%.
+
+`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario run, including `--manual` ones), with parity and episodes for the same artifact that passed. It refuses emulated reports.
+
+**Hardware test protocol**
+
+- **Setup:**
+  - the arm calibrated with `lerobot-calibrate`;
+  - `neura-arm check` passes;
+  - the robot profile's command ranges inside the calibrated ranges (the integration refuses them otherwise);
+  - `max_relative_target` at 10 degrees or less;
+  - `on_exit: hold`;
+  - the trained checkpoint that will be deployed, on the device it will be deployed on, with the execution profile being qualified.
+- **Safety:** an operator stands at the arm's power switch for the whole run; the workspace is clear of people and fragile objects. The harness asks for confirmation before anything moves. For `bus_unplugged` (`--manual`), the operator unplugs and replugs the servo bus when asked.
+- **Run:** `neura-qualify run ... --manual`, then `neura-qualify episodes ...`. Commit both reports under `qualification/reports/<arm>/`, then promote.
+
+**Results on the emulated arm** (`qualification/reports/emulated/2026-10-15.json`; synthetic ACT on CPU, synthetic cameras): 21 of 21 scenarios passed in 125 s; parity 1.5e-5 over 10 chunks; 0 invariant violations over 1,899 dispatched actions, 63 accepted chunks, 12 latched faults and 11 resets. `make qualify-emulated` runs it in CI. The run on hardware is pending: it needs the arm.
+
+**Found and fixed while building it**
+
+- **Non-finite actions.** The runtime's range check passed NaN (every comparison with NaN is false). Decoding already refused non-finite tensors, so no NaN reached a controller. The check no longer relies on that: anything not inside the range is out of range.
+- **Reset after an overload.** A tripped STS3215 answers every read with an overload error until its torque is re-enabled, so revalidating first refused every reset. Reset now restores goals and torque with sync writes, which have no status packet, and then revalidates.
+- **Admission on a slow host.** On a CPU, the latency tail made admission predict an observation age of 104 ms against a 100 ms budget. It refused new sessions until the slow samples aged out of the 120 s horizon (§9.3, the M7 fix). That is correct, but it was invisible: the robot retried silently. Refusals now reach the operator with their reason. The emulated contracts use freshness budgets a CI runner's CPU meets; a hardware run qualifies its profile unchanged.
+
+**Known limits**
+
+- One arm type: SO-101-class arms on LeRobot's Feetech driver.
+- Camera faults, controller failures and corrupted chunks are injected at the integration boundary, not by breaking hardware. A servo overload is induced only on the emulator.
+- `TIOCEXCL` does not bind a privileged process; the lock file still does.
+- After the servo bus is unplugged, `neura-arm` must be restarted: LeRobot keeps the port marked open.
+- The robot's control loop runs on an asyncio event loop with the bus calls inline. The report states late ticks: 0 of 300 in the emulated nominal run. A tighter integration moves the controller to its own real-time thread (§9).
 
 ---
 
@@ -466,7 +550,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M5. Web console** ✅ | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19); members API with invitations; sign-in configuration in `/v1/meta`; site-computed capacity estimates; generated Python SDK; implementation notes in §19.7 | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests (`make console-e2e`, in CI) |
 | **M6. Models and GPU sharing** (built; GPU run pending) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
 | **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
-| **M8. Physical validation** | SO-101-class arms connected through the same platform | Fault suite and parity pass on hardware |
+| **M8. Physical validation** (built; hardware run pending) | SO-101-class arms connected through the same platform: the SO-101 integration over LeRobot, a servo bus emulator, `neura-arm`, and `neura-qualify` (hardware fault suite, open-loop parity, closed-loop non-inferiority); implementation notes in §7.1 | Fault suite and parity pass on hardware. Built and passing on the emulated arm (`qualification/reports/`); the hardware report is produced by `neura-qualify` with the arm |
 
 Engineering standards for every milestone: typed code, tests written with the code, CI gates that cannot be bypassed, architecture decisions recorded in this document, and no component on the action path depending on the cloud.
 

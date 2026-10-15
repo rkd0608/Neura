@@ -1,0 +1,1132 @@
+{
+  "kind": "neura-hardware-qualification",
+  "version": 1,
+  "started_at": "2026-10-15T19:46:59Z",
+  "duration_s": 124.7,
+  "emulated": true,
+  "passed": true,
+  "complete": true,
+  "hardware": {
+    "arm": "so101",
+    "port": "/dev/pts/0",
+    "calibration_id": "emulated",
+    "cameras": {
+      "front": {
+        "kind": "synthetic",
+        "fps": 30.0
+      },
+      "wrist": {
+        "kind": "synthetic",
+        "fps": 30.0
+      }
+    },
+    "servo_firmware": {
+      "shoulder_pan": "sts3215 3.10",
+      "shoulder_lift": "sts3215 3.10",
+      "elbow_flex": "sts3215 3.10",
+      "wrist_flex": "sts3215 3.10",
+      "wrist_roll": "sts3215 3.10",
+      "gripper": "sts3215 3.10"
+    }
+  },
+  "software": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+    "neura-robots": "0.1.0.dev0",
+    "neura-runtime": "0.1.0.dev0",
+    "neura-server": "0.1.0.dev0",
+    "lerobot": "0.6.1",
+    "torch": "2.11.0"
+  },
+  "contracts": {
+    "model": "act-so101",
+    "artifact": "sha256:83543fb4b5614931d4ba4cc076b89889637dd1c962627cbe55bf64354f48d2c6",
+    "robot_profile": "sha256:7777db16581c66ac0d94d675ec5a2f34ad3c0af68350b63ff59dce2d856ae820",
+    "robot": "so101-follower",
+    "execution_profile": "sha256:d1c21110258a90e2823d9e47f63c5d40bf1ebb62418ff467063e718a2fafa110",
+    "execution_profile_name": "act-so101-30hz",
+    "device": "cpu"
+  },
+  "scenarios": [
+    {
+      "name": "nominal",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "executes at the control rate",
+          "passed": true,
+          "detail": "600 actions of 600 control periods"
+        },
+        {
+          "name": "control loop on time",
+          "passed": true,
+          "detail": "0.00% late ticks"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "seconds": 20.0,
+        "actions": 600,
+        "expected_actions": 600,
+        "late_tick_share": 0.0,
+        "rtt_p99_us": 8784,
+        "parity_samples": 10
+      }
+    },
+    {
+      "name": "network_jitter",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "kept running",
+          "passed": true,
+          "detail": "ended Running"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "name": "network_delay",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 133 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 22 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "partition",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['STARVATION_GRACE_EXHAUSTED'], got STARVATION_GRACE_EXHAUSTED"
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 165 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 23 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "reset_connections",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "name": "gateway_kill",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 76 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 23 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "gateway_freeze",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 90 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 23 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "worker_kill",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 76 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 43 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "workers": 1,
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "operator_takeover",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the takeover",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "ready at once",
+          "passed": true,
+          "detail": "Ready"
+        },
+        {
+          "name": "hold confirmed",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no command after the takeover",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 over 51 readings"
+        }
+      ],
+      "observed": {
+        "reply": "taken over; holding"
+      }
+    },
+    {
+      "name": "second_client",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "second_client_dispatched": 0,
+        "states": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "name": "camera_frozen",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 45 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 41 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "observations refused",
+          "passed": true,
+          "detail": "51 incomplete observations"
+        }
+      ],
+      "observed": {
+        "camera": "wrist",
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "camera_unplugged",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 44 readings"
+        },
+        {
+          "name": "no command while starved",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still while starved",
+          "passed": true,
+          "detail": "moved 0.00 over 43 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "observations refused",
+          "passed": true,
+          "detail": "52 incomplete observations"
+        }
+      ],
+      "observed": {
+        "camera": "wrist",
+        "states": [
+          "Running",
+          "Waiting",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "STARVATION_GRACE_EXHAUSTED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": null
+        }
+      }
+    },
+    {
+      "name": "invalid_action",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['ACTION_OUT_OF_RANGE'], got ACTION_OUT_OF_RANGE"
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 81 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "ACTION_OUT_OF_RANGE",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": "rows [0] outside the robot's declared command ranges"
+        }
+      }
+    },
+    {
+      "name": "nan_action",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "the chunk was refused",
+          "passed": true,
+          "detail": "1 refused"
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "name": "duplicate_chunk",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "the duplicate was dropped",
+          "passed": true,
+          "detail": "1 duplicates dropped"
+        },
+        {
+          "name": "no fault",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "name": "old_epoch_chunk",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "running again in a new epoch",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "the old epoch's chunk was dropped",
+          "passed": true,
+          "detail": "1 dropped"
+        },
+        {
+          "name": "no fault",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {}
+    },
+    {
+      "name": "controller_failure",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['CONTROLLER_COMMAND_FAILED'], got CONTROLLER_COMMAND_FAILED"
+        },
+        {
+          "name": "response confirmed",
+          "passed": true,
+          "detail": "controlled_stop on the arm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 82 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "CONTROLLER_COMMAND_FAILED",
+          "response": "controlled_stop",
+          "confirmed": true,
+          "detail": "injected controller failure (qualification)"
+        }
+      }
+    },
+    {
+      "name": "torque_loss",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['CONTROLLER_COMMAND_FAILED'], got CONTROLLER_COMMAND_FAILED"
+        },
+        {
+          "name": "no stop claimed without confirmation",
+          "passed": true,
+          "detail": "the runtime must not report a stop the arm could not confirm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "CONTROLLER_COMMAND_FAILED",
+          "response": "controlled_stop",
+          "confirmed": false,
+          "detail": "torque off on elbow_flex (overload?)"
+        }
+      }
+    },
+    {
+      "name": "bus_unplugged",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['CONTROLLER_COMMAND_FAILED', 'STARVATION_GRACE_EXHAUSTED'], got CONTROLLER_COMMAND_FAILED"
+        },
+        {
+          "name": "no stop claimed without confirmation",
+          "passed": true,
+          "detail": "the runtime must not report a stop the arm could not confirm"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "recovers after an operator reset",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "CONTROLLER_COMMAND_FAILED",
+          "response": "controlled_stop",
+          "confirmed": false,
+          "detail": "ConnectionError: Failed to sync read 'Present_Position' on ids=[1, 2, 3, 4, 5, 6] after 3 tries. [TxRxResult] There is no status packet!"
+        }
+      }
+    },
+    {
+      "name": "second_runtime_blocked",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "a second runtime is refused",
+          "passed": true,
+          "detail": "/dev/pts/0 is driven by another process (process 3955); one runtime per robot"
+        },
+        {
+          "name": "still running",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "still holds the actuator",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observed": {
+        "direct_open": "allowed (privileged process)"
+      }
+    },
+    {
+      "name": "actuator_lock_lost",
+      "passed": true,
+      "skipped": null,
+      "checks": [
+        {
+          "name": "running before the fault",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "faulted",
+          "passed": true,
+          "detail": "expected ['ACTUATOR_LOCK_LOST'], got ACTUATOR_LOCK_LOST"
+        },
+        {
+          "name": "latched",
+          "passed": true,
+          "detail": "only an explicit local reset clears a fault"
+        },
+        {
+          "name": "no command after the fault",
+          "passed": true,
+          "detail": "0 commands"
+        },
+        {
+          "name": "held still",
+          "passed": true,
+          "detail": "moved 0.00 (tolerance 1.0) over 35 readings"
+        },
+        {
+          "name": "no invariant violation",
+          "passed": true,
+          "detail": "0 violations"
+        },
+        {
+          "name": "reset is refused",
+          "passed": true,
+          "detail": "reset refused:\n- this process no longer holds the actuator: restart it"
+        }
+      ],
+      "observed": {
+        "states": [
+          "Running",
+          "Faulted"
+        ],
+        "fault": {
+          "reason": "ACTUATOR_LOCK_LOST",
+          "response": "controlled_stop",
+          "confirmed": false,
+          "detail": null
+        }
+      }
+    }
+  ],
+  "global_checks": [
+    {
+      "name": "every command within the profile's ranges",
+      "passed": true,
+      "detail": "0 outside"
+    }
+  ],
+  "parity": {
+    "measured": true,
+    "samples": 10,
+    "max_abs_error": 1.52587890625e-05,
+    "mean_max_abs_error": 1.316070556640625e-05,
+    "atol": 0.001,
+    "passed": true,
+    "reference": "LeRobot alone on the same arm readings (predict_action_chunk)"
+  },
+  "invariants": {
+    "violations": 0,
+    "by_code": {},
+    "checked": {
+      "actions_dispatched": 1899,
+      "chunks_accepted": 63,
+      "faults_latched": 12,
+      "leases_granted": 5,
+      "resets": 11
+    },
+    "first": []
+  },
+  "arm_counters": {
+    "command_clipped": 11,
+    "commands": 1900,
+    "response_controlled_stop": 19,
+    "response_hold_position": 9,
+    "camera_wrist_no_frame": 52,
+    "torque_lost": 1,
+    "command_failed": 1,
+    "state_read_failed": 8
+  }
+}

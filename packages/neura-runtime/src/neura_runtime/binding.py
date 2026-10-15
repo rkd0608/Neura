@@ -72,8 +72,9 @@ class ActionTransform:
         return model
 
     def out_of_range(self, robot_actions: FloatArray) -> list[int]:
-        """Row indexes containing any value outside the robot's declared command range."""
-        bad = (robot_actions < self.low) | (robot_actions > self.high)
+        """Row indexes containing any value outside the robot's declared command range (or not
+        a number: decoding already refuses those, and this check does not rely on it)."""
+        bad = ~((robot_actions >= self.low) & (robot_actions <= self.high))
         return [int(i) for i in np.flatnonzero(bad.any(axis=1))]
 
 

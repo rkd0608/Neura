@@ -147,6 +147,7 @@ class So101Arm:
         self.telemetry: deque[Sample] = deque(maxlen=100_000)
         self._commanded: dict[str, float] | None = None
         self.last_command: NDArray[np.float64] | None = None  # as the runtime gave it
+        self.servo_firmware: dict[str, str] = {}
         self._clock: Callable[[], int] = lambda: time.monotonic_ns() // 1000
 
     def _use(self, robot: RobotProfile) -> None:
@@ -170,6 +171,7 @@ class So101Arm:
             serial = getattr(getattr(bus, "port_handler", None), "ser", None)
             if serial is not None:
                 self.lock.make_port_exclusive(serial.fileno())
+            self.servo_firmware = self._firmware()
             if not self.robot.is_calibrated:
                 raise ArmError(
                     f"the arm on {self.config.port} does not match calibration "
@@ -193,6 +195,16 @@ class So101Arm:
         except BaseException:
             self.close(hold=False)
             raise
+
+    def _firmware(self) -> dict[str, str]:
+        """Each servo's model and firmware version, for the qualification report."""
+        bus = self.robot.bus
+        try:
+            major = bus.sync_read("Firmware_Major_Version", normalize=False)
+            minor = bus.sync_read("Firmware_Minor_Version", normalize=False)
+        except Exception:
+            return {}
+        return {m: f"{bus.motors[m].model} {major[m]}.{minor[m]}" for m in bus.motors}
 
     def _connect_cameras(self) -> None:
         missing = {c.role for c in self.profile.spec.cameras} - set(self.config.cameras)

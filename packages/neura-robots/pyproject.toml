@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 neura-arm = "neura_robots.cli:main"
 neura-arm-emulator = "neura_robots.emulator:main"
+neura-qualify = "neura_robots.qualify.cli:main"
 
 [project.optional-dependencies]
 # Real SO-101 arms through LeRobot (its Feetech bus, calibration and cameras). LeRobot brings

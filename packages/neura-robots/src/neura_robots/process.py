@@ -103,6 +103,7 @@ class ArmProcess:
         self.resets = 0
         self._ticks = 0
         self._last_state: RuntimeState | None = None
+        self._last_rejection: tuple[str, str] | None = None
         self._monitor: InvariantMonitor | None = None
         self._watched: Any = None
         self.tick_hooks: list[Callable[[int], None]] = []
@@ -144,6 +145,15 @@ class ArmProcess:
         if runtime.state is not self._last_state:
             self._last_state = runtime.state
             self.say(self._describe())
+        rejection = self.client.last_rejection
+        refused = (rejection.value, self.client.last_rejection_detail) if rejection else None
+        if refused != self._last_rejection:
+            self._last_rejection = refused
+            if refused is not None:
+                self.say(
+                    f"{self.robot_id}: the gateway refused a session ({refused[0]}: "
+                    f"{refused[1]}); retrying"
+                )
 
     def _describe(self) -> str:
         runtime = self.runtime

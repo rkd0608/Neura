@@ -92,6 +92,7 @@ class SessionClient:
         self._heartbeat_in_flight: int | None = None
         self.max_message_bytes = 0
         self.last_rejection: ReasonCode | None = None
+        self.last_rejection_detail = ""
 
     @property
     def connected(self) -> bool:
@@ -190,9 +191,11 @@ class SessionClient:
             self._heartbeat_in_flight = None
             self.max_message_bytes = accepted.max_message_bytes
             self.last_rejection = None
+            self.last_rejection_detail = ""
             self.runtime.attach_session(accepted.session_id, accepted.lease_generation)
         else:
             self.last_rejection = _reason(response.rejected.code)
+            self.last_rejection_detail = response.rejected.message
             self._next_open_at = now_us + self.config.reconnect_backoff_us
 
     def on_open_failed(self, now_us: int) -> None:

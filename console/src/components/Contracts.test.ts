@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDocument } from "./Contracts";
+import { parseDocument, parseSignatures } from "./Contracts";
 
 describe("parseDocument", () => {
   it("accepts YAML and JSON documents of the expected kind", () => {
@@ -21,6 +21,23 @@ describe("parseDocument", () => {
     );
     expect(() => parseDocument("kind: [unclosed", "RobotProfile")).toThrow(
       "Not valid YAML or JSON",
+    );
+  });
+});
+
+describe("parseSignatures", () => {
+  const signature = { key_id: "ed25519:0123456789abcdef", public_key: "ab", signature: "cd" };
+
+  it("accepts what neura-contracts sign prints, one or a list, and nothing", () => {
+    expect(parseSignatures(JSON.stringify(signature, null, 2))).toEqual([signature]);
+    expect(parseSignatures(JSON.stringify([signature, signature]))).toHaveLength(2);
+    expect(parseSignatures("  ")).toEqual([]);
+  });
+
+  it("refuses anything else with a clear message", () => {
+    expect(() => parseSignatures("not json")).toThrow("neura-contracts sign");
+    expect(() => parseSignatures(JSON.stringify({ key_id: "x" }))).toThrow(
+      "key_id, public_key and signature",
     );
   });
 });

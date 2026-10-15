@@ -13,8 +13,9 @@ import pytest
 import yaml
 
 from neura_agent.__main__ import main as agent_main
-from neura_agent.artifacts import ArtifactError, ArtifactStore
-from neura_contracts import ModelArtifact, ReasonCode, parse_document
+from neura_agent.artifacts import ArtifactError, ArtifactStore, load_keys
+from neura_agent.settings import ArtifactKey
+from neura_contracts import ModelArtifact, ReasonCode, parse_document, sealing
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 
@@ -137,6 +138,77 @@ def test_weights_are_fetched_from_an_http_source_and_verified(
     with pytest.raises(ArtifactError) as raised:
         ArtifactStore(tmp_path / "store2", [url]).checkout(artifact_for(bad))
     assert raised.value.code is ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH
+
+
+def sealed_mirror(tmp_path: Path, files: dict[str, bytes]) -> tuple[Path, sealing.FileKey]:
+    """The checkpoint sealed with a customer key (neura-contracts seal) in a source layout."""
+    sealing.generate_key_file(tmp_path / "kek")
+    key = sealing.FileKey(tmp_path / "kek")
+    sealing.seal_directory(tmp_path / "ckpt", tmp_path / "sealed", key)
+    for data in files.values():
+        assert (
+            data not in (tmp_path / "sealed/sha256" / hashlib.sha256(data).hexdigest()).read_bytes()
+        )
+    return tmp_path / "sealed", key
+
+
+def test_sealed_weights_are_opened_with_the_sites_key(tmp_path: Path) -> None:
+    files = checkpoint(tmp_path / "ckpt")
+    mirror, key = sealed_mirror(tmp_path, files)
+    store = ArtifactStore(tmp_path / "store", [str(mirror)], keys={key.key_id: key})
+    out = store.checkout(artifact_for(files))
+    for name, data in files.items():
+        assert (out / name).read_bytes() == data
+
+
+def test_sealed_weights_need_the_key_and_untampered_bytes(tmp_path: Path) -> None:
+    files = checkpoint(tmp_path / "ckpt")
+    mirror, key = sealed_mirror(tmp_path, files)
+    with pytest.raises(ArtifactError) as no_key:
+        ArtifactStore(tmp_path / "store", [str(mirror)]).checkout(artifact_for(files))
+    assert no_key.value.code is ReasonCode.AGENT_ARTIFACT_KEY_UNAVAILABLE
+    assert key.key_id in str(no_key.value)
+    blob = mirror / "sha256" / hashlib.sha256(files["model.safetensors"]).hexdigest()
+    data = bytearray(blob.read_bytes())
+    data[-20] ^= 1
+    blob.write_bytes(bytes(data))
+    store = ArtifactStore(tmp_path / "store", [str(mirror)], keys={key.key_id: key})
+    with pytest.raises(ArtifactError) as tampered:
+        store.checkout(artifact_for(files))
+    assert tampered.value.code is ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH
+    assert not store.has("sha256:" + hashlib.sha256(files["model.safetensors"]).hexdigest())
+    assert not list((tmp_path / "store" / "incoming").iterdir())  # nothing partial left
+
+
+def test_sealed_weights_are_fetched_over_https(
+    tmp_path: Path, http_mirror: tuple[str, Path, list[str]]
+) -> None:
+    url, root, _ = http_mirror
+    files = checkpoint(tmp_path / "ckpt")
+    mirror, key = sealed_mirror(tmp_path, files)
+    for blob in (mirror / "sha256").iterdir():
+        (root / "sha256" / blob.name).write_bytes(blob.read_bytes())
+    store = ArtifactStore(tmp_path / "store", [url], keys={key.key_id: key})
+    out = store.checkout(artifact_for(files))
+    assert (out / "model.safetensors").read_bytes() == files["model.safetensors"]
+
+
+def test_artifact_keys_load_from_settings(tmp_path: Path) -> None:
+    sealing.generate_key_file(tmp_path / "kek")
+    file_key = sealing.FileKey(tmp_path / "kek")
+    keys = load_keys(
+        [
+            ArtifactKey(file=tmp_path / "kek"),
+            ArtifactKey(key_id="vault:transit/neura", command=["neura-vault-key"]),
+        ]
+    )
+    assert sorted(keys) == sorted([file_key.key_id, "vault:transit/neura"])
+    with pytest.raises(ValueError, match="is key"):
+        load_keys([ArtifactKey(file=tmp_path / "kek", key_id="file:0000000000000000")])
+    with pytest.raises(ValueError, match="needs its key_id"):
+        ArtifactKey(command=["x"])
+    with pytest.raises(ValueError, match="either file or command"):
+        ArtifactKey()
 
 
 def test_unused_checkouts_are_pruned_but_imports_kept(tmp_path: Path) -> None:

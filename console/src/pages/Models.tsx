@@ -4,21 +4,31 @@ import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { api, unwrap, type Schemas } from "../api/client";
-import { useArtifacts, useExecutionProfiles, useRobotProfiles } from "../api/queries";
+import { api, idempotent, unwrap, type Schemas } from "../api/client";
+import {
+  useApiMutation,
+  useArtifacts,
+  useExecutionProfiles,
+  useRobotProfiles,
+} from "../api/queries";
 import {
   KIND_LABELS,
   RegisterContract,
   documentMeta,
   documentTitle,
+  parseSignatures,
   type Kind,
   type Registered,
+  type Signature,
 } from "../components/Contracts";
+import { Dialog } from "../components/Dialog";
+import { useToasts } from "../components/Toasts";
 import {
   Badge,
   Card,
   Empty,
   ErrorState,
+  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -120,6 +130,7 @@ export function Models() {
                   <th scope="col">Adapter</th>
                   <th scope="col">Outputs</th>
                   <th scope="col">Licenses</th>
+                  <th scope="col">Publisher</th>
                   <th scope="col">Digest</th>
                 </tr>
               </thead>
@@ -145,6 +156,9 @@ export function Models() {
                       <td>
                         code {license(s.licenses?.code)}
                         <div className="muted small">weights {license(s.licenses?.weights)}</div>
+                      </td>
+                      <td>
+                        <Signed signatures={a.signatures} />
                       </td>
                       <td>
                         <code>{shortDigest(a.digest)}</code>
@@ -214,6 +228,135 @@ export function Models() {
         />
       ) : null}
     </>
+  );
+}
+
+/** Whether publishers signed the artifact. Sites check the keys against the ones they trust. */
+function Signed({ signatures }: { signatures: Signature[] }) {
+  if (signatures.length === 0) return <Badge tone="warn">Unsigned</Badge>;
+  return (
+    <>
+      <Badge tone="ok">Signed</Badge>
+      {signatures.map((sig) => (
+        <div className="muted small" key={sig.key_id}>
+          <code>{sig.key_id}</code>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Signatures({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
+  const { orgId } = useScope();
+  const can = usePermissions(orgId);
+  const toasts = useToasts();
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = useApiMutation(
+    async (signature: Signature) =>
+      unwrap(
+        await api.POST("/v1/model-artifacts/{model_artifact_id}/signatures", {
+          params: { path: { model_artifact_id: artifact.metadata.id }, header: idempotent() },
+          body: signature,
+        }),
+      ),
+    [
+      ["p", projectId, "contract", artifact.metadata.id],
+      ["p", projectId, "model-artifacts"],
+    ],
+  );
+  return (
+    <Card
+      title="Publisher signatures"
+      description="A site runs this artifact only if a publisher key its operator trusts signed its digest (neura-agent trust-publisher). Signing never changes the document or its digest."
+      actions={
+        can.deploy ? (
+          <button type="button" className="button" onClick={() => setAdding(true)}>
+            Add signature
+          </button>
+        ) : null
+      }
+    >
+      {artifact.signatures.length === 0 ? (
+        <p>
+          <Badge tone="warn">Unsigned</Badge> Sites that require signatures will refuse to prepare
+          it. Sign it with <code>neura-contracts sign</code> and add the signature here.
+        </p>
+      ) : (
+        <KeyValue
+          items={artifact.signatures.map((sig) => [
+            <code key="k">{sig.key_id}</code>,
+            <code key="p" className="small">
+              {sig.public_key}
+            </code>,
+          ])}
+        />
+      )}
+      <Dialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        title="Add a publisher signature"
+        description={
+          <>
+            Paste the JSON that <code>neura-contracts sign</code> printed for this artifact. It is
+            verified against the digest <code>{shortDigest(artifact.digest)}</code>.
+          </>
+        }
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            let signatures: Signature[];
+            try {
+              signatures = parseSignatures(text);
+              if (signatures.length !== 1) throw new Error("Paste one signature at a time.");
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e));
+              return;
+            }
+            add.mutate(signatures[0] as Signature, {
+              onSuccess: () => {
+                toasts.ok("Signature added.");
+                setText("");
+                setAdding(false);
+              },
+            });
+          }}
+        >
+          <div className="dialog-body">
+            <Field id="signature-text" label="Signature" error={error}>
+              <textarea
+                id="signature-text"
+                value={text}
+                spellCheck={false}
+                rows={6}
+                aria-invalid={error ? true : undefined}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+            {add.isError ? (
+              <ErrorState error={add.error} title="The signature was not accepted" />
+            ) : null}
+          </div>
+          <div className="dialog-footer form-actions">
+            <button type="button" className="button" onClick={() => setAdding(false)}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="button primary"
+              disabled={!text.trim() || add.isPending}
+            >
+              {add.isPending ? "Adding…" : "Add signature"}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+    </Card>
   );
 }
 
@@ -523,6 +666,9 @@ export function ContractPage() {
           ]}
         />
       </Card>
+      {k === "ModelArtifact" && "signatures" in doc.data ? (
+        <Signatures artifact={doc.data} projectId={projectId} />
+      ) : null}
       <Card
         title="Document"
         description="Exactly as registered. Changing it means registering a new document with a new digest."

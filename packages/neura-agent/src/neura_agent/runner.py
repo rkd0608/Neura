@@ -15,6 +15,7 @@ from neura_agent.core import AgentCore
 from neura_agent.gateway import GatewayRunner, SubprocessGateway
 from neura_agent.identity import Identity, IdentityStore
 from neura_agent.preflight import Runner, collect_facts, run_command
+from neura_agent.registry import NeuraRegistry
 from neura_agent.settings import AgentSettings
 from neura_contracts import ReasonCode
 
@@ -129,6 +130,7 @@ class AgentRuntime:
             return
         key = self.identities.load_or_create_key()
         self.core = AgentCore(self.settings, identity, self.gateway, cuda_indexes=self.cuda_indexes)
+        self.core.artifacts.registry = NeuraRegistry(self.settings, identity, key)
         self.core.recover()
         await self.core.reconcile()  # resume serving committed state immediately, cloud or not
         self.connection = ControlConnection(

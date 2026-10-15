@@ -157,9 +157,30 @@ class ContractDocument(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     digest: Mapped[str] = mapped_column(String(71), nullable=False)
     document: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    # Publisher signatures over a ModelArtifact's digest (neura_contracts.signing), sorted by key.
+    signatures: Mapped[list[Any]] = mapped_column(nullable=False, default=list)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+    created_by: Mapped[str] = mapped_column(String(256), nullable=False)
+
+
+class SealedWeights(Base):
+    """A weight file in Neura's registry, sealed with the customer's key (design §18.2). The
+    control plane stores the ciphertext only and cannot open it; sites fetch it by the plaintext
+    digest an artifact lists."""
+
+    __tablename__ = "sealed_weights"
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    digest: Mapped[str] = mapped_column(String(71), primary_key=True)
+    key_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    plaintext_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sealed_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sealed_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = _now()
     created_by: Mapped[str] = mapped_column(String(256), nullable=False)
 
 

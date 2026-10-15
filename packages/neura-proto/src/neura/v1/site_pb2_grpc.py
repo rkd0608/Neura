@@ -45,6 +45,11 @@ class SiteControlStub:
                 request_serializer=neura_dot_v1_dot_site__pb2.AgentMessage.SerializeToString,
                 response_deserializer=neura_dot_v1_dot_site__pb2.ControlPlaneMessage.FromString,
                 _registered_method=True)
+        self.FetchSealedWeights = channel.unary_stream(
+                '/neura.v1.SiteControl/FetchSealedWeights',
+                request_serializer=neura_dot_v1_dot_site__pb2.FetchSealedWeightsRequest.SerializeToString,
+                response_deserializer=neura_dot_v1_dot_site__pb2.SealedWeightsChunk.FromString,
+                _registered_method=True)
 
 
 class SiteControlServicer:
@@ -66,6 +71,14 @@ class SiteControlServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def FetchSealedWeights(self, request, context):
+        """A sealed weight file from Neura's registry (design §18.2), authenticated like Connect. The
+        control plane only ever holds weights sealed with the customer's key; the agent opens them.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_SiteControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -78,6 +91,11 @@ def add_SiteControlServicer_to_server(servicer, server):
                     servicer.Connect,
                     request_deserializer=neura_dot_v1_dot_site__pb2.AgentMessage.FromString,
                     response_serializer=neura_dot_v1_dot_site__pb2.ControlPlaneMessage.SerializeToString,
+            ),
+            'FetchSealedWeights': grpc.unary_stream_rpc_method_handler(
+                    servicer.FetchSealedWeights,
+                    request_deserializer=neura_dot_v1_dot_site__pb2.FetchSealedWeightsRequest.FromString,
+                    response_serializer=neura_dot_v1_dot_site__pb2.SealedWeightsChunk.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,6 +152,33 @@ class SiteControl:
             '/neura.v1.SiteControl/Connect',
             neura_dot_v1_dot_site__pb2.AgentMessage.SerializeToString,
             neura_dot_v1_dot_site__pb2.ControlPlaneMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchSealedWeights(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/neura.v1.SiteControl/FetchSealedWeights',
+            neura_dot_v1_dot_site__pb2.FetchSealedWeightsRequest.SerializeToString,
+            neura_dot_v1_dot_site__pb2.SealedWeightsChunk.FromString,
             options,
             channel_credentials,
             insecure,

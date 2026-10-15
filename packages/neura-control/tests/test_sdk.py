@@ -6,12 +6,15 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import time
+from pathlib import Path
 from typing import Any, cast
 
 import httpx
 import pytest
 
 from conftest import LiveApi, contract
+from neura_contracts import sealing
+from neura_control.settings import ControlPlaneSettings
 from neura_sdk import Client, NeuraApiError
 from neura_sdk.models import ContractDocument
 
@@ -86,6 +89,35 @@ def test_onboarding_through_the_sdk(live_api: LiveApi) -> None:
             )
             event = first.result(timeout=10)
         assert (event["type"], event["resource"]) == ("resource.updated", robot["metadata"]["id"])
+
+
+def test_sealed_weights_upload_through_the_sdk(
+    settings: ControlPlaneSettings, tmp_path: Path
+) -> None:
+    live = LiveApi(settings.model_copy(update={"sealed_weights_dir": tmp_path / "registry"}), {})
+    try:
+        (tmp_path / "ckpt").mkdir()
+        (tmp_path / "ckpt" / "model.safetensors").write_bytes(b"\x00weights" * 50_000)
+        sealing.generate_key_file(tmp_path / "kek")
+        sealed = sealing.seal_directory(
+            tmp_path / "ckpt", tmp_path / "sealed", sealing.FileKey(tmp_path / "kek")
+        )
+        digest = sealed[0][1]
+        with Client(live.url, token=live.token) as neura:
+            project = neura.create_project(
+                live.organization_id, body={"spec": {"name": "w", "display_name": "W"}}
+            )["metadata"]["id"]
+            blob = tmp_path / "sealed" / "sha256" / digest.removeprefix("sha256:")
+            record = neura.upload_sealed_weights(project, blob)
+            assert record["digest"] == digest
+            assert record["plaintext_bytes"] == 400_000
+            listed = neura.list_sealed_weights(project)["items"]
+            assert [w["digest"] for w in listed] == [digest]
+            with pytest.raises(NeuraApiError) as refused:
+                neura.upload_sealed_weights(project, tmp_path / "ckpt" / "model.safetensors")
+            assert refused.value.reason == "API_VALIDATION_FAILED"
+    finally:
+        live.close()
 
 
 def mock_client(handler: Any) -> Client:

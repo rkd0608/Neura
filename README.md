@@ -99,6 +99,23 @@ checkpoint onto the server and import it, and `prepare` loads it on the GPU and 
 neura-agent import-weights /path/to/checkpoint --artifact my-model.artifact.yaml
 ```
 
+A site runs an artifact only if a publisher key its operator trusts signed it (design §17.7). The
+customer's release process signs, and the site operator trusts the key on the server:
+
+```bash
+uv run neura-contracts publisher-key --out release.pem      # once; prints the public key
+uv run neura-contracts sign my-model.artifact.yaml --key release.pem   # register with this
+neura-agent trust-publisher <public key>                     # on the server
+```
+
+To keep weights in a store you do not fully control (a shared bucket, or Neura's registry), seal
+them with your own key first; only the site, holding that key, can open them:
+
+```bash
+uv run neura-contracts key-file --out weights.kek
+uv run neura-contracts seal /path/to/checkpoint --out sealed/ --key-file weights.kek
+```
+
 Watch the simulated robots being served:
 
 ```bash

@@ -50,7 +50,8 @@ RUN --mount=type=secret,id=ca_bundle,required=false \
 
 FROM ${PYTHON_IMAGE} AS runtime-base
 RUN useradd --uid 10001 --user-group --no-create-home --home-dir /app --shell /usr/sbin/nologin neura \
-    && mkdir -p /var/lib/neura/robot-certs && chown -R neura:neura /var/lib/neura
+    && mkdir -p /var/lib/neura/robot-certs /var/lib/neura/sealed-weights \
+    && chown -R neura:neura /var/lib/neura
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

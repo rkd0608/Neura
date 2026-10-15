@@ -131,11 +131,14 @@ def robot(row: models.Robot) -> dict[str, Any]:
 
 
 def contract(row: models.ContractDocument) -> dict[str, Any]:
-    return {
+    body: dict[str, Any] = {
         "metadata": metadata(row, project_id=row.project_id),
         "digest": row.digest,
         "document": row.document,
     }
+    if row.kind == "ModelArtifact":
+        body["signatures"] = list(row.signatures)
+    return body
 
 
 def deployment(row: models.Deployment) -> dict[str, Any]:

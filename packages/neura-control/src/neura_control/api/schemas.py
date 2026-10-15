@@ -81,6 +81,13 @@ class RobotCreate(Strict):
 
 class ContractCreate(Strict):
     document: dict[str, Any]
+    signatures: list[dict[str, Any]] | None = Field(default=None, max_length=16)
+
+
+class ArtifactSignatureCreate(Strict):
+    key_id: str
+    public_key: str
+    signature: str
 
 
 class CompatibilityCheckRequest(Strict):

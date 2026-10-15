@@ -12,6 +12,7 @@ from neura_sdk.models import (
     ApiTokenCreate,
     ApiTokenPage,
     ApiTokenWithSecret,
+    ArtifactSignature,
     AuditRecordPage,
     CompatibilityCheckRequest,
     CompatibilityReport,
@@ -53,6 +54,8 @@ from neura_sdk.models import (
     RobotProfilePage,
     RobotUpdate,
     RollbackCreate,
+    SealedWeights,
+    SealedWeightsPage,
     Server,
     ServerPage,
     ServerUpdate,
@@ -278,6 +281,25 @@ class Operations:
         return self._call(  # type: ignore[no-any-return]
             "GET",
             f"/v1/model-artifacts/{_segment(model_artifact_id)}",
+        )
+
+    def add_model_artifact_signature(
+        self,
+        model_artifact_id: str,
+        *,
+        body: ArtifactSignature,
+        idempotency_key: str | None = None,
+    ) -> ModelArtifact:
+        """
+        Add a publisher signature to a model artifact. (``POST /v1/model-
+        artifacts/{model_artifact_id}/signatures``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/model-artifacts/{_segment(model_artifact_id)}/signatures",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
         )
 
     def get_operation(
@@ -991,5 +1013,53 @@ class Operations:
         self._call(
             "DELETE",
             f"/v1/members/{_segment(member_id)}",
+            if_match=if_match,
+        )
+
+    def list_sealed_weights(
+        self,
+        project_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> SealedWeightsPage:
+        """
+        List the sealed weight files of a project. (``GET /v1/projects/{project_id}/sealed-
+        weights``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/projects/{_segment(project_id)}/sealed-weights",
+            query={"cursor": cursor, "page_size": page_size},
+        )
+
+    def get_sealed_weights(
+        self,
+        project_id: str,
+        digest: str,
+    ) -> SealedWeights:
+        """
+        Get a sealed weight file's record. (``GET /v1/projects/{project_id}/sealed-
+        weights/{digest}``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/projects/{_segment(project_id)}/sealed-weights/{_segment(digest)}",
+        )
+
+    def delete_sealed_weights(
+        self,
+        project_id: str,
+        digest: str,
+        *,
+        if_match: str,
+    ) -> None:
+        """
+        Remove a sealed weight file from Neura's registry. (``DELETE
+        /v1/projects/{project_id}/sealed-weights/{digest}``)
+        """
+        self._call(
+            "DELETE",
+            f"/v1/projects/{_segment(project_id)}/sealed-weights/{_segment(digest)}",
             if_match=if_match,
         )

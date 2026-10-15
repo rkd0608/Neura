@@ -348,7 +348,7 @@ Workers run the artifact's pinned OCI image, without network access beyond the s
   - no worker ready: `WORKER_UNAVAILABLE`; a policy error: `WORKER_INFERENCE_FAILED`; a model that cannot load: `WORKER_LOAD_FAILED` or the specific reason.
 
   A result is delivered only from the worker incarnation the batch was sent to. Batch groups key on the concrete device (`artifact:cuda:0:bf16`); a reload stops the workers of groups no deployment uses, freeing their memory. Workers report their peak memory. The simulated backend (mock policy, profile-sampled latency) remains for the Compose stack and tests. Until M7, workers run in the agent's environment (`neura-agent-gpu` image: PyTorch and LeRobot); the pinned artifact image and sandbox above are M7.
-- **Weights at the site** (§18.1). The agent keeps a content-addressed store (`<state>/artifacts`). Files arrive by `neura-agent import-weights DIR [--artifact FILE]` or from configured sources (`NEURA_AGENT_ARTIFACT_SOURCES`: directories or HTTPS base URLs laid out as `<source>/sha256/<hex>`, optional bearer token). Every file is verified against its digest before it is stored. A prepared artifact becomes a read-only checkout of hard links to verified blobs. Weights never pass through the control plane. Missing weights fail prepare with `AGENT_ARTIFACT_UNAVAILABLE`, naming the files and the fix.
+- **Weights at the site** (§18.1). The agent keeps a content-addressed store (`<state>/artifacts`). Files arrive by `neura-agent import-weights DIR [--artifact FILE]` or from configured sources (`NEURA_AGENT_ARTIFACT_SOURCES`: directories or HTTPS base URLs laid out as `<source>/sha256/<hex>`, optional bearer token). Every file is verified against its digest before it is stored. A prepared artifact becomes a read-only checkout of hard links to verified blobs. Plaintext weights never pass through the control plane; sealed ones do only if the customer chooses Neura's registry (§17.7). Missing weights fail prepare with `AGENT_ARTIFACT_UNAVAILABLE`, naming the files and the fix.
 - **Prepare with real workers** (`NEURA_AGENT_GATEWAY_BACKEND=workers`, the default):
   1. choose the device: the group's existing one, else the allowed GPU with the fewest groups (`AGENT_DEVICE_UNAVAILABLE` when the profile needs a GPU and none may be used);
   2. check out the weights;
@@ -601,6 +601,49 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - a database URL with `sslmode=verify-full`, unless `NEURA_CONTROL_DATABASE_TLS_LOCAL` declares that the database is reached over a local socket or sidecar.
 - In development, without CA files, the control plane creates an ephemeral agent CA.
 - The dev stack writes robot bundles (key and certificate) into a shared volume (`NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR`). Real robots never receive a key.
+
+**Publisher signatures on model artifacts**
+
+- An artifact's digest covers its whole canonical document: every weight file's digest and size, the runtime image pinned by digest, the adapter and its versions. A **publisher** (the customer's release process) signs that digest with an Ed25519 key:
+  - `neura-contracts publisher-key --out KEY` creates the key (PEM, mode 0600) and prints its public key;
+  - `neura-contracts sign ARTIFACT --key KEY` prints the signature;
+  - `neura-contracts verify` checks one against trusted keys.
+- The API takes signatures at registration or later (`POST /v1/model-artifacts/{id}/signatures`). It verifies each against the digest and keeps one per key. The document and its digest never change. The site manifest carries the signatures with the artifact.
+- **The site runs only what a publisher it trusts signed.** Before anything of an artifact is pulled or run, prepare needs a valid signature by a trusted key. Otherwise it fails with:
+  - `AGENT_ARTIFACT_UNTRUSTED` when no signature is from a trusted key;
+  - `AGENT_ARTIFACT_SIGNATURE_INVALID` when a trusted key's signature does not verify.
+- Trust is a boundary of the server (§17.4), not of the cloud. Keys come from `NEURA_AGENT_TRUSTED_PUBLISHER_KEYS` and from a trust file (`<state>/trusted-publishers` by default), which the site operator edits with `neura-agent trust-publisher`, `distrust-publisher` and `publishers`. The agent reads them on every prepare, so a change needs no restart.
+- Every decision is in the local audit log (`artifact.verified` with the publisher, `artifact.refused` with the reason). A compromised control plane can neither make a site run an unsigned artifact nor forge a signature: the private key never leaves the customer's release process.
+- Because the runtime image is pinned by digest inside the signed document, the publisher's signature also covers which image runs.
+- `NEURA_AGENT_REQUIRE_ARTIFACT_SIGNATURES=false` turns the check off, for development only.
+- The console shows each artifact's publishers and accepts signatures when registering or later.
+
+**Customer-managed keys: sealed weights**
+
+- `neura-contracts seal DIR --out OUT --key-file KEK` (or `--key-command CMD --key-id ID`) encrypts each file of a checkpoint into `OUT/sha256/<plaintext hex>`, the layout artifact sources use, and prints the artifact's `weights` list.
+- The format (`neura_contracts.sealing`):
+  - each file gets a fresh 256-bit data key, wrapped by the customer's key-encryption key;
+  - AES-256-GCM in 1 MiB chunks, each chunk bound to the header, its position and whether it is last, so tampering, truncation and reordering all fail authentication;
+  - the plaintext digest is checked again after decryption.
+- **Key providers** on the server (`NEURA_AGENT_ARTIFACT_KEYS`):
+  - a key file (`{"file": PATH}`, AES key wrap);
+  - a command (`{"key_id": ID, "command": [...]}`, run as `<command> wrap|unwrap` with the key on stdin). This is the bridge to AWS KMS, Google Cloud KMS, Azure Key Vault, Vault transit or an HSM, without the agent holding cloud credentials of its own.
+- Revoking or disabling the key in the customer's KMS stops every further unseal (`AGENT_ARTIFACT_KEY_UNAVAILABLE`).
+- Any source may hold sealed files. The agent recognizes them, opens them with the matching key and verifies them like any other file. A file that fails authentication is refused with `AGENT_ARTIFACT_DIGEST_MISMATCH`, and nothing partial is kept.
+- Opened weights are kept at rest in the site's own store, on the customer's server. Encrypted local storage is recommended.
+
+**Neura's registry (ciphertext only)**
+
+- With `NEURA_CONTROL_SEALED_WEIGHTS_DIR` set, the control plane keeps weights for customers who choose to:
+  - `PUT /v1/projects/{project_id}/sealed-weights/{digest}` stores a sealed file (SDK: `upload_sealed_weights`);
+  - list, get and delete endpoints manage them.
+- It accepts only a well-formed sealed file for the digest in the path: magic, header bounds, the header's plaintext digest, and the exact length the header implies. Uploads are staged and moved into place under the row lock, so a concurrent upload of the same digest never leaves the file and its record disagreeing. The control plane holds no key and cannot open what it stores.
+- Agents list the source `neura` in `NEURA_AGENT_ARTIFACT_SOURCES`. They fetch with `SiteControl.FetchSealedWeights` over their authenticated channel (the short-lived token and, with TLS, the client certificate), scoped to their project. The agent refuses anything unsealed from the registry.
+
+**Known limits, scheduled**
+
+- Signatures are checked at prepare. A revision prepared before its publisher was distrusted keeps running until it is replaced or prepared again.
+- The registry stores files in a directory: local disk, or a shared filesystem when several control-plane replicas run. An object-storage backend is not built yet.
 
 ### 17.5 Other connection modes (later, on demand)
 

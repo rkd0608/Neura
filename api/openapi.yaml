@@ -46,6 +46,8 @@ tags:
 - name: Events
 - name: Audit
 - name: Access
+- name: Weights
+  description: Neura's registry of weights sealed with customer-managed keys (design §18.2).
 paths:
   /v1/api-tokens/{api_token_id}:
     delete:
@@ -498,6 +500,49 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/model-artifacts/{model_artifact_id}/signatures:
+    post:
+      operationId: addModelArtifactSignature
+      tags:
+      - Contracts
+      summary: Add a publisher signature to a model artifact.
+      description: Verifies the signature against the artifact's digest and keeps one signature per key.
+        The document and its digest do not change; the resource version does when a signature is new.
+      parameters:
+      - $ref: '#/components/parameters/ModelArtifactId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactSignature'
+      responses:
+        '200':
+          description: OK.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelArtifact'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1267,7 +1312,7 @@ paths:
       - Contracts
       summary: Register an immutable model artifact document.
       description: The document is validated with neura-contracts; registering an identical document again
-        returns the existing resource.
+        returns the existing resource, with any new signatures added.
       parameters:
       - $ref: '#/components/parameters/ProjectId'
       - $ref: '#/components/parameters/IdempotencyKey'
@@ -2275,6 +2320,155 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/sealed-weights:
+    get:
+      operationId: listSealedWeights
+      tags:
+      - Weights
+      summary: List the sealed weight files of a project.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SealedWeightsPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/sealed-weights/{digest}:
+    put:
+      operationId: uploadSealedWeights
+      tags:
+      - Weights
+      summary: Upload a sealed weight file to Neura's registry.
+      description: The body is a file sealed with `neura-contracts seal`, for the plaintext digest in
+        the path. The control plane checks its header and length but cannot decrypt it. Uploading again
+        replaces the file (after re-sealing with a new key, for example). Returns 404 when this control
+        plane runs no registry.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WeightDigest'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SealedWeights'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SealedWeights'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Location:
+              $ref: '#/components/headers/Location'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      operationId: getSealedWeights
+      tags:
+      - Weights
+      summary: Get a sealed weight file's record.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WeightDigest'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SealedWeights'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteSealedWeights
+      tags:
+      - Weights
+      summary: Remove a sealed weight file from Neura's registry.
+      description: Sites that already opened it keep their verified copy; no site can fetch it afterwards.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WeightDigest'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Removed.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/IfMatchRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     oidc:
@@ -2360,6 +2554,12 @@ components:
           type: string
       style: form
       explode: true
+    MemberId:
+      name: member_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/MemberId'
     ModelArtifactId:
       name: model_artifact_id
       in: path
@@ -2440,12 +2640,13 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/SupportGrantId'
-    MemberId:
-      name: member_id
+    WeightDigest:
+      name: digest
       in: path
       required: true
+      description: The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>).
       schema:
-        $ref: '#/components/schemas/MemberId'
+        $ref: '#/components/schemas/Digest'
   headers:
     ETag:
       description: Resource version for optimistic concurrency.
@@ -2692,6 +2893,30 @@ components:
         secret:
           type: string
           description: Shown once, in this response only.
+    ArtifactSignature:
+      type: object
+      description: A publisher's Ed25519 signature over a model artifact's digest (design §17.3), made
+        with `neura-contracts sign`. Sites run an artifact only if a publisher key their operator trusts
+        signed it.
+      required:
+      - key_id
+      - public_key
+      - signature
+      properties:
+        key_id:
+          type: string
+          pattern: ^ed25519:[0-9a-f]{16}$
+          description: 'ed25519: and the first 16 hex characters of SHA-256 over the raw public key.'
+        public_key:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: The raw Ed25519 public key, hex.
+        signature:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{86}$
+          description: Ed25519 signature over `neura-artifact-signature-v1\0` and the digest, base64url
+            without padding.
+      additionalProperties: false
     AuditRecord:
       type: object
       readOnly: true
@@ -2752,6 +2977,106 @@ components:
             $ref: '#/components/schemas/AuditRecord'
         page:
           $ref: '#/components/schemas/PageInfo'
+    CapacityEstimate:
+      type: object
+      description: How many robots one batch group on this site's server can serve at this revision's
+        execution profile, from the same admission model the gateway enforces (design §9.3). `source`
+        says whether the latency profile was measured on the site's device at prepare or configured; `sharing_case`
+        says how this revision's group shares its device (design §9.5).
+      required:
+      - max_robots
+      - limiting_factor
+      - source
+      - assumptions
+      - estimated_at
+      properties:
+        max_robots:
+          type: integer
+          minimum: 0
+        limiting_factor:
+          enum:
+          - deadline
+          - dispatch_freshness
+          - acceptance_freshness
+          - memory
+          - throughput
+          - search_limit
+          description: 'What stopped one more robot from being admitted: its starvation deadline, observation
+            freshness at dispatch or acceptance, GPU memory, or sustained throughput (the reserve kept
+            free).'
+        source:
+          enum:
+          - configured_profile
+          - measured_profile
+        sharing_case:
+          enum:
+          - same_weights
+          - multi_adapter
+          - co_located_fine_tunes
+          - different_architectures
+          description: 'same_weights: robots running this revision share forward passes and nothing else
+            runs on the device. multi_adapter: one base forward pass serves several adapters. co_located_fine_tunes:
+            other fine-tunes of the same architecture have their own workers on the device. different_architectures:
+            other models share the device. With co-located groups the estimate assumes no contention from
+            them (see the benchmark reports).'
+        assumptions:
+          type: object
+          description: The inputs of the estimate, so it can be checked and reproduced.
+          properties:
+            control_period_ms:
+              type: number
+              minimum: 0
+            starvation_budget_ms:
+              type: number
+              minimum: 0
+            request_interval_ms:
+              type: number
+              minimum: 0
+            link_allowance_ms:
+              type: number
+              minimum: 0
+            dispatch_freshness_ms:
+              type:
+              - number
+              - 'null'
+              minimum: 0
+            acceptance_freshness_ms:
+              type:
+              - number
+              - 'null'
+              minimum: 0
+            max_batch:
+              type: integer
+              minimum: 1
+            batch_window_ms:
+              type: number
+              minimum: 0
+              description: How long a queued request may wait for others to share its batch.
+            reserve_fraction:
+              type: number
+              minimum: 0
+              maximum: 1
+            latency_p99_ms_by_batch:
+              type: object
+              additionalProperties:
+                type: number
+                minimum: 0
+            memory_available_mib:
+              type:
+              - integer
+              - 'null'
+              minimum: 0
+            device:
+              type:
+              - string
+              - 'null'
+              description: The device the group runs on, e.g. cuda:0.
+            co_located_groups:
+              type: integer
+              minimum: 0
+              description: Other batch groups on the same device.
+        estimated_at:
+          $ref: '#/components/schemas/Timestamp'
     CompatibilityCheckRequest:
       type: object
       required:
@@ -3227,6 +3552,88 @@ components:
       additionalProperties:
         type: string
         maxLength: 256
+    Member:
+      type: object
+      description: A person's membership in an organization. Invited by verified email or added by SSO
+        subject; an invitation becomes active when the person first signs in with that verified email.
+      required:
+      - metadata
+      - role
+      - state
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+        subject:
+          type:
+          - string
+          - 'null'
+          description: '`<issuer>|<sub>` once bound.'
+        state:
+          enum:
+          - Invited
+          - Active
+    MemberCreate:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 512
+      oneOf:
+      - required:
+        - email
+      - required:
+        - subject
+      additionalProperties: false
+      description: Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`).
+    MemberId:
+      type: string
+      pattern: ^mbr_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Member identifier: `mbr_` followed by a ULID.'
+      examples:
+      - mbr_01JA2B3C4D5E6F7G8H9JKMNPQR
+    MemberPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    MemberRole:
+      enum:
+      - viewer
+      - deployer
+      - site_operator
+      - admin
+      description: 'Organization role (design §19.2). Deploy and physical activation are separate: no
+        role lets the cloud approve motion.'
+    MemberUpdate:
+      type: object
+      description: JSON Merge Patch (RFC 7396).
+      properties:
+        role:
+          $ref: '#/components/schemas/MemberRole'
+      additionalProperties: false
     Metadata:
       type: object
       description: Identity and bookkeeping common to every resource (design §20.2).
@@ -3327,6 +3734,7 @@ components:
       - metadata
       - digest
       - document
+      - signatures
       properties:
         metadata:
           $ref: '#/components/schemas/Metadata'
@@ -3334,6 +3742,13 @@ components:
           $ref: '#/components/schemas/Digest'
         document:
           $ref: '#/components/schemas/ContractDocument'
+        signatures:
+          type: array
+          description: Publisher signatures, one per key, sorted by key_id. Adding one does not change
+            the document or its digest.
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/ArtifactSignature'
       additionalProperties: false
     ModelArtifactCreate:
       type: object
@@ -3342,6 +3757,12 @@ components:
       properties:
         document:
           $ref: '#/components/schemas/ContractDocument'
+        signatures:
+          type: array
+          description: Signatures to attach. Registering an identical document again adds any new ones.
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/ArtifactSignature'
       additionalProperties: false
     ModelArtifactId:
       type: string
@@ -3836,6 +4257,59 @@ components:
       description: 'Rollback identifier: `rbk_` followed by a ULID.'
       examples:
       - rbk_01JA2B3C4D5E6F7G8H9JKMNPQR
+    SealedWeights:
+      type: object
+      description: A weight file in Neura's registry, sealed with the customer's key (design §18.2). The
+        control plane stores the ciphertext only and cannot open it; sites fetch it by digest and open
+        it with the key configured on the server.
+      required:
+      - project_id
+      - digest
+      - key_id
+      - plaintext_bytes
+      - sealed_bytes
+      - sealed_sha256
+      - created_at
+      - created_by
+      - version
+      properties:
+        project_id:
+          $ref: '#/components/schemas/ProjectId'
+        digest:
+          $ref: '#/components/schemas/Digest'
+        key_id:
+          type: string
+          description: The customer key the file is sealed with (file:<hex> or the KMS key's name).
+        plaintext_bytes:
+          type: integer
+          minimum: 0
+        sealed_bytes:
+          type: integer
+          minimum: 1
+        sealed_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        version:
+          type: string
+          description: Changes when the file is replaced; the ETag.
+      additionalProperties: false
+    SealedWeightsPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SealedWeights'
+        page:
+          $ref: '#/components/schemas/PageInfo'
     Server:
       type: object
       required:
@@ -4241,185 +4715,3 @@ components:
     Timestamp:
       type: string
       format: date-time
-    MemberId:
-      type: string
-      pattern: ^mbr_[0-9A-HJKMNP-TV-Z]{26}$
-      description: 'Member identifier: `mbr_` followed by a ULID.'
-      examples:
-      - mbr_01JA2B3C4D5E6F7G8H9JKMNPQR
-    MemberRole:
-      enum:
-      - viewer
-      - deployer
-      - site_operator
-      - admin
-      description: 'Organization role (design §19.2). Deploy and physical activation are separate: no
-        role lets the cloud approve motion.'
-    Member:
-      type: object
-      description: A person's membership in an organization. Invited by verified email or added by SSO
-        subject; an invitation becomes active when the person first signs in with that verified email.
-      required:
-      - metadata
-      - role
-      - state
-      properties:
-        metadata:
-          $ref: '#/components/schemas/Metadata'
-        role:
-          $ref: '#/components/schemas/MemberRole'
-        email:
-          type:
-          - string
-          - 'null'
-          format: email
-        subject:
-          type:
-          - string
-          - 'null'
-          description: '`<issuer>|<sub>` once bound.'
-        state:
-          enum:
-          - Invited
-          - Active
-    MemberCreate:
-      type: object
-      required:
-      - role
-      properties:
-        role:
-          $ref: '#/components/schemas/MemberRole'
-        email:
-          type: string
-          format: email
-          maxLength: 320
-        subject:
-          type: string
-          minLength: 3
-          maxLength: 512
-      oneOf:
-      - required:
-        - email
-      - required:
-        - subject
-      additionalProperties: false
-      description: Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`).
-    MemberUpdate:
-      type: object
-      description: JSON Merge Patch (RFC 7396).
-      properties:
-        role:
-          $ref: '#/components/schemas/MemberRole'
-      additionalProperties: false
-    MemberPage:
-      type: object
-      required:
-      - items
-      - page
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Member'
-        page:
-          $ref: '#/components/schemas/PageInfo'
-    CapacityEstimate:
-      type: object
-      description: How many robots one batch group on this site's server can serve at this revision's
-        execution profile, from the same admission model the gateway enforces (design §9.3). `source`
-        says whether the latency profile was measured on the site's device at prepare or configured; `sharing_case`
-        says how this revision's group shares its device (design §9.5).
-      required:
-      - max_robots
-      - limiting_factor
-      - source
-      - assumptions
-      - estimated_at
-      properties:
-        max_robots:
-          type: integer
-          minimum: 0
-        limiting_factor:
-          enum:
-          - deadline
-          - dispatch_freshness
-          - acceptance_freshness
-          - memory
-          - throughput
-          - search_limit
-          description: 'What stopped one more robot from being admitted: its starvation deadline, observation
-            freshness at dispatch or acceptance, GPU memory, or sustained throughput (the reserve kept
-            free).'
-        source:
-          enum:
-          - configured_profile
-          - measured_profile
-        sharing_case:
-          enum:
-          - same_weights
-          - multi_adapter
-          - co_located_fine_tunes
-          - different_architectures
-          description: 'same_weights: robots running this revision share forward passes and nothing else
-            runs on the device. multi_adapter: one base forward pass serves several adapters. co_located_fine_tunes:
-            other fine-tunes of the same architecture have their own workers on the device. different_architectures:
-            other models share the device. With co-located groups the estimate assumes no contention from
-            them (see the benchmark reports).'
-        assumptions:
-          type: object
-          description: The inputs of the estimate, so it can be checked and reproduced.
-          properties:
-            control_period_ms:
-              type: number
-              minimum: 0
-            starvation_budget_ms:
-              type: number
-              minimum: 0
-            request_interval_ms:
-              type: number
-              minimum: 0
-            link_allowance_ms:
-              type: number
-              minimum: 0
-            dispatch_freshness_ms:
-              type:
-              - number
-              - 'null'
-              minimum: 0
-            acceptance_freshness_ms:
-              type:
-              - number
-              - 'null'
-              minimum: 0
-            max_batch:
-              type: integer
-              minimum: 1
-            batch_window_ms:
-              type: number
-              minimum: 0
-              description: How long a queued request may wait for others to share its batch.
-            reserve_fraction:
-              type: number
-              minimum: 0
-              maximum: 1
-            latency_p99_ms_by_batch:
-              type: object
-              additionalProperties:
-                type: number
-                minimum: 0
-            memory_available_mib:
-              type:
-              - integer
-              - 'null'
-              minimum: 0
-            device:
-              type:
-              - string
-              - 'null'
-              description: The device the group runs on, e.g. cuda:0.
-            co_located_groups:
-              type: integer
-              minimum: 0
-              description: Other batch groups on the same device.
-        estimated_at:
-          $ref: '#/components/schemas/Timestamp'

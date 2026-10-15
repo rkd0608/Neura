@@ -4,8 +4,11 @@ state, contact proofs and what a site's connectivity looks like through the API 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import io
 import ipaddress
 import json
+import os
 import socket
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -31,11 +34,13 @@ from sqlalchemy import update
 from conftest import AppFactory, contract
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
 from neura_agent.agent_tls import AgentTls
+from neura_agent.artifacts import ArtifactError, ArtifactStore
 from neura_agent.gateway import InProcessGateway
-from neura_agent.identity import IdentityStore, connection_token
+from neura_agent.identity import Identity, IdentityStore, connection_token
+from neura_agent.registry import NeuraRegistry
 from neura_agent.runner import AgentRuntime
 from neura_agent.settings import AgentSettings
-from neura_contracts import ReasonCode, pki
+from neura_contracts import ModelArtifact, ReasonCode, parse_document, pki, sealing
 from neura_contracts.site_protocol import contact_proof_payload
 from neura_control.clock import iso, utcnow
 from neura_control.db.engine import create_engine, session_factory
@@ -50,7 +55,7 @@ def free_port() -> int:
 
 
 class Harness:
-    def __init__(self, make_api: AppFactory, settings: Any) -> None:
+    def __init__(self, make_api: AppFactory, settings: Any, **overrides: Any) -> None:
         self.endpoint = f"127.0.0.1:{free_port()}"
         self.database_url = str(settings.database_url)
         self.client, org = make_api(
@@ -58,6 +63,7 @@ class Harness:
                 "agent_grpc_listen": self.endpoint,
                 "agent_endpoint": self.endpoint,
                 "agent_poll_interval_s": 0.1,
+                **overrides,
             }
         )
         c = self.client
@@ -300,6 +306,58 @@ def test_a_new_stream_from_a_server_replaces_its_previous_one(harness: Harness) 
         return second
 
     assert "desired_state" in kinds(asyncio.run(scenario()))
+
+
+def test_agents_fetch_sealed_weights_from_the_registry_and_open_them_at_the_site(
+    make_api: AppFactory, settings: Any, tmp_path: Path
+) -> None:
+    harness = Harness(make_api, settings, sealed_weights_dir=tmp_path / "registry")
+    enrolled, key = harness.enrolled()
+    files = {"model.safetensors": os.urandom(4000), "config.json": b'{"type": "act"}'}
+    for name, data in files.items():
+        (tmp_path / "ckpt" / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "ckpt" / name).write_bytes(data)
+    sealing.generate_key_file(tmp_path / "kek")
+    customer_key = sealing.FileKey(tmp_path / "kek")
+    sealing.seal_directory(tmp_path / "ckpt", tmp_path / "sealed", customer_key)
+    for blob in (tmp_path / "sealed" / "sha256").iterdir():
+        path = f"/v1/projects/{harness.project}/sealed-weights/sha256:{blob.name}"
+        assert harness.client.request("PUT", path, content=blob.read_bytes()).status_code == 201
+    document = contract("act-so101.artifact.yaml")
+    document["spec"]["weights"] = [
+        {"path": n, "digest": f"sha256:{hashlib.sha256(d).hexdigest()}", "size_bytes": len(d)}
+        for n, d in files.items()
+    ]
+    artifact = parse_document(document)
+    assert isinstance(artifact, ModelArtifact)
+    identity = Identity(
+        server_id=enrolled.server_id,
+        site_id=harness.site,
+        project_id=harness.project,
+        endpoint=harness.endpoint,
+        manifest_public_key_hex=enrolled.manifest_public_key.hex(),
+        manifest_key_id=enrolled.manifest_key_id,
+    )
+    agent_settings = AgentSettings(state_dir=tmp_path / "agent", control_plane_insecure=True)
+
+    def store(name: str, agent_key: Ed25519PrivateKey, **keys: Any) -> ArtifactStore:
+        return ArtifactStore(
+            tmp_path / name,
+            ["neura"],
+            keys=keys or {customer_key.key_id: customer_key},
+            registry=NeuraRegistry(agent_settings, identity, agent_key),
+        )
+
+    out = store("site", key).checkout(artifact)
+    for name, data in files.items():
+        assert (out / name).read_bytes() == data
+    # Without the customer's key the site cannot open them; another key cannot fetch them.
+    with pytest.raises(ArtifactError) as no_key:
+        store("no-key", key, other=customer_key).checkout(artifact)
+    assert no_key.value.code is ReasonCode.AGENT_ARTIFACT_KEY_UNAVAILABLE
+    with pytest.raises(ArtifactError) as stranger:
+        store("stranger", Ed25519PrivateKey.generate()).checkout(artifact)
+    assert stranger.value.code is ReasonCode.AGENT_ARTIFACT_UNAVAILABLE
 
 
 # --- desired state and contact ------------------------------------------------------------------
@@ -551,6 +609,7 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
             "agent_tls_key_file": key_file,
             "agent_poll_interval_s": 0.2,
             "manifest_signing_key": "x" * 43,
+            "sealed_weights_dir": tmp_path / "registry",
         }
     )
     project = client.post(
@@ -560,15 +619,14 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
         f"/v1/projects/{project}/sites",
         {"spec": {"name": "s", "display_name": "S", "offline_authorization_hours": 1}},
     ).json()["metadata"]["id"]
+    agent_settings = AgentSettings(
+        state_dir=tmp_path / "agent",
+        gateway_backend="simulated",
+        control_plane_ca_file=ca,
+        reconnect_max_backoff_s=0.5,
+    )
     agent = AgentRuntime(
-        AgentSettings(
-            state_dir=tmp_path / "agent",
-            gateway_backend="simulated",
-            control_plane_ca_file=ca,
-            reconnect_max_backoff_s=0.5,
-        ),
-        gateway=InProcessGateway(),
-        command_runner=lambda args: None,
+        agent_settings, gateway=InProcessGateway(), command_runner=lambda args: None
     )
     token = client.post(f"/v1/sites/{site}/enrollment-tokens", {}).json()["secret"]
     loop = asyncio.new_event_loop()
@@ -577,6 +635,24 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
     issued = tls.credentials()
     assert issued is not None
     assert pki.identity(issued[1]) == pki.server_uri(identity.server_id)
+
+    # Sealed weights come over the same mutual TLS, with the agent's client certificate.
+    (tmp_path / "weights").write_bytes(b"policy weights")
+    sealing.generate_key_file(tmp_path / "kek")
+    blob = io.BytesIO()
+    header = sealing.seal_file(tmp_path / "weights", blob, sealing.FileKey(tmp_path / "kek"))
+    uploaded = client.request(
+        "PUT",
+        f"/v1/projects/{project}/sealed-weights/{header.plaintext_digest}",
+        content=blob.getvalue(),
+    )
+    assert uploaded.status_code == 201
+    fetched = io.BytesIO()
+    registry = NeuraRegistry(
+        agent_settings, identity, IdentityStore(tmp_path / "agent").load_or_create_key()
+    )
+    assert registry(header.plaintext_digest, fetched)
+    assert fetched.getvalue() == blob.getvalue()
 
     async def connect_without_certificate() -> grpc.StatusCode:
         roots = ca.read_bytes()

@@ -31,6 +31,7 @@ from neura_control.api import (
     routes_core,
     routes_deployments,
     routes_observe,
+    routes_weights,
 )
 from neura_control.clock import utcnow
 from neura_control.database import database_reachable
@@ -48,6 +49,7 @@ from neura_control.problems import (
 from neura_control.security.oidc import OidcVerifier
 from neura_control.security.signing import ManifestSigner
 from neura_control.services import bootstrap
+from neura_control.services.sealed_weights import SealedWeightsStore
 from neura_control.settings import ControlPlaneSettings
 
 SERVICE_NAME = "neura-control"
@@ -179,7 +181,7 @@ def create_app(
         agent_server = None
         if settings.agent_grpc_listen:
             agent_server, app.state.site_control, app.state.agent_port = await start_agent_server(
-                app.state.sessions, signer, settings
+                app.state.sessions, signer, settings, weights=app.state.sealed_weights
             )
         stop_pruning = asyncio.Event()
         pruner = asyncio.create_task(_prune(app, settings, stop_pruning))
@@ -205,6 +207,11 @@ def create_app(
     )
     app.state.settings = settings
     app.state.oidc = oidc_verifier
+    app.state.sealed_weights = (
+        SealedWeightsStore(settings.sealed_weights_dir, settings.sealed_weights_max_bytes)
+        if settings.sealed_weights_dir is not None
+        else None
+    )
     limiter = RateLimiter(settings.rate_limit_per_minute)
 
     app.add_exception_handler(ProblemError, handle_problem)
@@ -289,6 +296,7 @@ def create_app(
         routes_deployments,
         routes_observe,
         routes_access,
+        routes_weights,
     ):
         app.include_router(module.router)
 

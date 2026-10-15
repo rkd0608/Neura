@@ -36,11 +36,17 @@ async function expectAccessible(page: Page, screen: string): Promise<void> {
 }
 
 /** Register a contract document through the console's dialog, as a file upload. */
-async function register(page: Page, button: string, file: string): Promise<void> {
+async function register(
+  page: Page,
+  button: string,
+  file: string,
+  signature?: string,
+): Promise<void> {
   await page.getByRole("button", { name: button }).click();
   const dialog = page.getByRole("dialog", { name: /^Register an? / });
   await dialog.getByLabel("File", { exact: true }).setInputFiles(path.join(CONTRACTS, file));
   await expect(dialog.getByLabel("Document", { exact: true })).not.toHaveValue("");
+  if (signature) await dialog.getByLabel("Publisher signatures (optional)").fill(signature);
   await dialog.getByRole("button", { name: "Register", exact: true }).click();
 }
 
@@ -91,8 +97,11 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await nav(page, "Models");
     await register(page, "Register robot profile", "so101.robot.yaml");
     await expect(page.getByRole("link", { name: "so101-follower r1" })).toBeVisible();
-    await register(page, "Register model artifact", "act-so101.artifact.yaml");
+    // Signed by the customer's release key, which the site operator trusts on the server.
+    const signature = site.publish(path.join(CONTRACTS, "act-so101.artifact.yaml"));
+    await register(page, "Register model artifact", "act-so101.artifact.yaml", signature);
     await expect(page.getByRole("link", { name: "act-so101 example-1" })).toBeVisible();
+    await expect(page.locator(".badge", { hasText: /^Signed$/ })).toBeVisible();
     // A wrong kind is refused before anything is sent.
     await nav(page, "Execution profiles");
     await register(page, "Register execution profile", "so101.robot.yaml");

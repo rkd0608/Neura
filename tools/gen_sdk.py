@@ -172,6 +172,9 @@ def operations(spec: dict[str, Any], models: ModelWriter) -> str:
             }
             if "text/event-stream" in content_types:
                 continue  # streams are hand-written: Client.events()
+            body_types = set(op.get("requestBody", {}).get("content", {}))
+            if body_types and not body_types & {"application/json", "application/merge-patch+json"}:
+                continue  # file uploads are hand-written: Client.upload_sealed_weights()
             params = [
                 parameters[p["$ref"].rsplit("/", 1)[1]] if "$ref" in p else p
                 for p in op.get("parameters", [])

@@ -73,6 +73,18 @@ class ApiTokenWithSecret(TypedDict):
     secret: str
 
 
+class ArtifactSignature(TypedDict):
+    """
+    A publisher's Ed25519 signature over a model artifact's digest (design §17.3), made with
+    `neura-contracts sign`. Sites run an artifact only if a publisher key their operator
+    trusts signed it.
+    """
+
+    key_id: str
+    public_key: str
+    signature: str
+
+
 class AuditRecord(TypedDict):
     metadata: Metadata
     actor: str
@@ -91,6 +103,50 @@ type AuditRecordId = str
 class AuditRecordPage(TypedDict):
     items: list[AuditRecord]
     page: PageInfo
+
+
+class CapacityEstimateAssumptions(TypedDict):
+    """The inputs of the estimate, so it can be checked and reproduced."""
+
+    control_period_ms: NotRequired[float]
+    starvation_budget_ms: NotRequired[float]
+    request_interval_ms: NotRequired[float]
+    link_allowance_ms: NotRequired[float]
+    dispatch_freshness_ms: NotRequired[float | None]
+    acceptance_freshness_ms: NotRequired[float | None]
+    max_batch: NotRequired[int]
+    batch_window_ms: NotRequired[float]
+    reserve_fraction: NotRequired[float]
+    latency_p99_ms_by_batch: NotRequired[dict[str, float]]
+    memory_available_mib: NotRequired[int | None]
+    device: NotRequired[str | None]
+    co_located_groups: NotRequired[int]
+
+
+class CapacityEstimate(TypedDict):
+    """
+    How many robots one batch group on this site's server can serve at this revision's
+    execution profile, from the same admission model the gateway enforces (design §9.3).
+    `source` says whether the latency profile was measured on the site's device at prepare or
+    configured; `sharing_case` says how this revision's group shares its device (design
+    §9.5).
+    """
+
+    max_robots: int
+    limiting_factor: Literal[
+        "deadline",
+        "dispatch_freshness",
+        "acceptance_freshness",
+        "memory",
+        "throughput",
+        "search_limit",
+    ]
+    source: Literal["configured_profile", "measured_profile"]
+    sharing_case: NotRequired[
+        Literal["same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"]
+    ]
+    assumptions: CapacityEstimateAssumptions
+    estimated_at: Timestamp
 
 
 class CompatibilityCheckRequest(TypedDict):
@@ -311,6 +367,45 @@ class GpuDevice(TypedDict):
 type Labels = dict[str, str]
 
 
+class Member(TypedDict):
+    """
+    A person's membership in an organization. Invited by verified email or added by SSO
+    subject; an invitation becomes active when the person first signs in with that verified
+    email.
+    """
+
+    metadata: Metadata
+    role: MemberRole
+    email: NotRequired[str | None]
+    subject: NotRequired[str | None]
+    state: Literal["Invited", "Active"]
+
+
+class MemberCreate(TypedDict):
+    """Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`)."""
+
+    role: MemberRole
+    email: NotRequired[str]
+    subject: NotRequired[str]
+
+
+type MemberId = str
+
+
+class MemberPage(TypedDict):
+    items: list[Member]
+    page: PageInfo
+
+
+type MemberRole = Literal["viewer", "deployer", "site_operator", "admin"]
+
+
+class MemberUpdate(TypedDict):
+    """JSON Merge Patch (RFC 7396)."""
+
+    role: NotRequired[MemberRole]
+
+
 class Metadata(TypedDict):
     """Identity and bookkeeping common to every resource (design §20.2)."""
 
@@ -362,10 +457,12 @@ class ModelArtifact(TypedDict):
     metadata: Metadata
     digest: Digest
     document: ContractDocument
+    signatures: list[ArtifactSignature]
 
 
 class ModelArtifactCreate(TypedDict):
     document: ContractDocument
+    signatures: NotRequired[list[ArtifactSignature]]
 
 
 type ModelArtifactId = str
@@ -602,6 +699,29 @@ class RollbackCreate(TypedDict):
 type RollbackId = str
 
 
+class SealedWeights(TypedDict):
+    """
+    A weight file in Neura's registry, sealed with the customer's key (design §18.2). The
+    control plane stores the ciphertext only and cannot open it; sites fetch it by digest and
+    open it with the key configured on the server.
+    """
+
+    project_id: ProjectId
+    digest: Digest
+    key_id: str
+    plaintext_bytes: int
+    sealed_bytes: int
+    sealed_sha256: str
+    created_at: str
+    created_by: str
+    version: str
+
+
+class SealedWeightsPage(TypedDict):
+    items: list[SealedWeights]
+    page: PageInfo
+
+
 class ServerStatus(TypedDict):
     phase: ConsolePhase
     reason: NotRequired[ReasonCode | None]
@@ -786,86 +906,3 @@ class SupportGrantPage(TypedDict):
 
 
 type Timestamp = str
-
-
-type MemberId = str
-
-
-type MemberRole = Literal["viewer", "deployer", "site_operator", "admin"]
-
-
-class Member(TypedDict):
-    """
-    A person's membership in an organization. Invited by verified email or added by SSO
-    subject; an invitation becomes active when the person first signs in with that verified
-    email.
-    """
-
-    metadata: Metadata
-    role: MemberRole
-    email: NotRequired[str | None]
-    subject: NotRequired[str | None]
-    state: Literal["Invited", "Active"]
-
-
-class MemberCreate(TypedDict):
-    """Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`)."""
-
-    role: MemberRole
-    email: NotRequired[str]
-    subject: NotRequired[str]
-
-
-class MemberUpdate(TypedDict):
-    """JSON Merge Patch (RFC 7396)."""
-
-    role: NotRequired[MemberRole]
-
-
-class MemberPage(TypedDict):
-    items: list[Member]
-    page: PageInfo
-
-
-class CapacityEstimateAssumptions(TypedDict):
-    """The inputs of the estimate, so it can be checked and reproduced."""
-
-    control_period_ms: NotRequired[float]
-    starvation_budget_ms: NotRequired[float]
-    request_interval_ms: NotRequired[float]
-    link_allowance_ms: NotRequired[float]
-    dispatch_freshness_ms: NotRequired[float | None]
-    acceptance_freshness_ms: NotRequired[float | None]
-    max_batch: NotRequired[int]
-    batch_window_ms: NotRequired[float]
-    reserve_fraction: NotRequired[float]
-    latency_p99_ms_by_batch: NotRequired[dict[str, float]]
-    memory_available_mib: NotRequired[int | None]
-    device: NotRequired[str | None]
-    co_located_groups: NotRequired[int]
-
-
-class CapacityEstimate(TypedDict):
-    """
-    How many robots one batch group on this site's server can serve at this revision's
-    execution profile, from the same admission model the gateway enforces (design §9.3).
-    `source` says whether the latency profile was measured on the site's device at prepare or
-    configured; `sharing_case` says how this revision's group shares its device (design
-    §9.5).
-    """
-
-    max_robots: int
-    limiting_factor: Literal[
-        "deadline",
-        "dispatch_freshness",
-        "acceptance_freshness",
-        "memory",
-        "throughput",
-        "search_limit",
-    ]
-    source: Literal["configured_profile", "measured_profile"]
-    sharing_case: NotRequired[
-        Literal["same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"]
-    ]
-    assumptions: CapacityEstimateAssumptions
-    estimated_at: Timestamp

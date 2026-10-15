@@ -14,6 +14,7 @@ export const ROBOT_PREFIX = "arm-";
 export class Site {
   readonly stateDir = mkdtempSync(path.join(tmpdir(), "neura-e2e-agent-"));
   private readonly processes: ChildProcess[] = [];
+  private readonly cleanup: string[] = [];
 
   constructor(private readonly robots: number) {}
 
@@ -42,6 +43,18 @@ export class Site {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
+  }
+
+  /** The customer's release process signs the artifact with its publisher key, and the site
+   *  operator trusts that key on the server. Returns the signature, for the console. */
+  publish(artifact: string): string {
+    const key = path.join(this.stateDir, "..", `${path.basename(this.stateDir)}-publisher.pem`);
+    const created = this.run(["neura-contracts", "publisher-key", "--out", key]);
+    const publicKey = /public_key\s+([0-9a-f]{64})/.exec(created)?.[1];
+    if (!publicKey) throw new Error(`no public key in: ${created}`);
+    this.run(["neura-agent", "trust-publisher", publicKey, "--note", "e2e release pipeline"]);
+    this.cleanup.push(key);
+    return this.run(["neura-contracts", "sign", artifact, "--key", key]);
   }
 
   /** Run the install command exactly as the console shows it, then start the agent. */
@@ -99,5 +112,6 @@ export class Site {
   stop(): void {
     for (const child of this.processes.reverse()) child.kill("SIGTERM");
     rmSync(this.stateDir, { recursive: true, force: true });
+    for (const file of this.cleanup) rmSync(file, { force: true });
   }
 }

@@ -41,10 +41,12 @@ from neura_control.security.signing import ManifestSigner
 from neura_control.security.tokens import ENROLLMENT_TOKEN_PREFIX, parse_token, verify_secret
 from neura_control.services import records, site_reports
 from neura_control.services.manifests import current_manifest
+from neura_control.services.sealed_weights import SealedUploadError, SealedWeightsStore
 from neura_control.settings import ControlPlaneSettings
 
 T = TypeVar("T")
 log = logging.getLogger("neura.control.sites")
+SEALED_CHUNK_BYTES = 1 << 20
 
 # Only these metrics are accepted from sites: the published telemetry schema (design §18.2).
 TELEMETRY_METRICS = frozenset(
@@ -88,10 +90,12 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         signer: ManifestSigner,
         settings: ControlPlaneSettings,
         authority: pki.CertificateAuthority | None = None,
+        weights: SealedWeightsStore | None = None,
     ) -> None:
         self._sessions = sessions
         self._signer = signer
         self._settings = settings
+        self._weights = weights
         self.authority = authority or agent_authority(settings)
         # The stream requires the agent's client certificate when this process terminates TLS.
         self.require_client_certificate = settings.agent_tls_cert_file is not None
@@ -264,6 +268,28 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             )
             raise AssertionError("unreachable") from None
         return server
+
+    async def FetchSealedWeights(  # noqa: N802 - gRPC method name
+        self,
+        request: site_pb2.FetchSealedWeightsRequest,
+        context: grpc.aio.ServicerContext[Any, Any],
+    ) -> AsyncIterator[site_pb2.SealedWeightsChunk]:
+        """A sealed weight file of the server's project, in chunks (design §18.2)."""
+        server = await self._authenticate(context)
+        if self._weights is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "this control plane has no registry")
+        assert self._weights is not None
+        try:
+            path = self._weights.read(server.project_id, request.digest)
+        except SealedUploadError:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "not a sha256 digest")
+            raise AssertionError("unreachable") from None
+        if path is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"{request.digest} is not registered")
+        assert path is not None
+        with path.open("rb") as f:
+            while block := await asyncio.to_thread(f.read, SEALED_CHUNK_BYTES):
+                yield site_pb2.SealedWeightsChunk(data=block)
 
     async def _server(self, server_id: str) -> Server | None:
         async with self._sessions.begin() as session:
@@ -737,6 +763,8 @@ async def start_agent_server(
     sessions: async_sessionmaker[AsyncSession],
     signer: ManifestSigner,
     settings: ControlPlaneSettings,
+    *,
+    weights: SealedWeightsStore | None = None,
 ) -> tuple[_Servers, SiteControlService, int]:
     assert settings.agent_grpc_listen is not None
     server = grpc.aio.server(
@@ -745,7 +773,7 @@ async def start_agent_server(
             ("grpc.max_receive_message_length", 8 * 1024 * 1024),
         ]
     )
-    service = SiteControlService(sessions, signer, settings)
+    service = SiteControlService(sessions, signer, settings, weights=weights)
     site_pb2_grpc.add_SiteControlServicer_to_server(service, server)
     servers = [server]
     if settings.agent_tls_cert_file is not None and settings.agent_tls_key_file is not None:

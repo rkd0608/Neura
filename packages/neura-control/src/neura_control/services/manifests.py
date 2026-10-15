@@ -72,7 +72,11 @@ async def manifest_content(session: AsyncSession, site: Site) -> dict[str, Any]:
 
     def doc(identifier: str) -> dict[str, Any]:
         row = documents[identifier]
-        return {"id": row.id, "digest": row.digest, "document": row.document}
+        entry = {"id": row.id, "digest": row.digest, "document": row.document}
+        if row.kind == "ModelArtifact":
+            # The site checks these against the publisher keys its operator trusts.
+            entry["signatures"] = list(row.signatures)
+        return entry
 
     by_deployment: dict[str, list[dict[str, Any]]] = {}
     for revision in revisions:

@@ -7,7 +7,12 @@ the store in one of two ways:
   it. Every file is hashed and stored under its SHA-256, so the import needs no manifest.
 - configured sources (``NEURA_AGENT_ARTIFACT_SOURCES``): directories (for example a mounted NFS
   share) or HTTPS base URLs (for example the customer's own registry or object store) laid out
-  as ``<source>/sha256/<hex>``. The agent fetches what a prepared revision needs.
+  as ``<source>/sha256/<hex>``, or ``neura`` for Neura's registry, which holds sealed files only.
+  The agent fetches what a prepared revision needs.
+
+A source may hold **sealed** files (``neura-contracts seal``: encrypted with a customer-managed
+key, §18.2) under the same names. The agent recognizes them, opens them with the keys configured
+on this server (``NEURA_AGENT_ARTIFACT_KEYS``) and verifies the plaintext like any other file.
 
 Every file is verified against its digest before it is stored; nothing unverified is ever read by
 a worker. A prepared artifact is materialized as a read-only checkout directory whose files are
@@ -21,15 +26,18 @@ import hashlib
 import os
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 import httpx
 
-from neura_contracts import ModelArtifact, ReasonCode
+from neura_agent.settings import ArtifactKey
+from neura_contracts import ModelArtifact, ReasonCode, sealing
 
 CHUNK = 1 << 20
+REGISTRY_SOURCE = "neura"  # Neura's registry of sealed weights (neura_agent.registry)
 
 
 class ArtifactError(Exception):
@@ -53,10 +61,21 @@ def _hex(digest: str) -> str:
 
 
 class ArtifactStore:
-    def __init__(self, root: Path, sources: list[str] | None = None, token: str | None = None):
+    def __init__(
+        self,
+        root: Path,
+        sources: list[str] | None = None,
+        token: str | None = None,
+        keys: Mapping[str, sealing.KeyProvider] | None = None,
+        registry: Callable[[str, BinaryIO], bool] | None = None,
+    ):
         self.root = root
         self.sources = list(sources or [])
         self._token = token
+        self.keys = dict(keys or {})
+        # The ``neura`` source: Neura's registry of sealed weights, reached through the agent's
+        # authenticated channel (set once the server is enrolled).
+        self.registry = registry
         self._blobs = root / "blobs" / "sha256"
         self._checkouts = root / "checkouts"
         self._incoming = root / "incoming"
@@ -91,24 +110,54 @@ class ArtifactStore:
         return target
 
     def add_file(self, source: Path, expected: str | None = None) -> ImportedFile:
-        """Copy a file into the store, hashing it on the way. Raises on a digest mismatch."""
-        with self._staging() as (staged, hasher), source.open("rb") as src:
-            with staged.open("wb") as dst:
-                while block := src.read(CHUNK):
-                    hasher.update(block)
-                    dst.write(block)
-                dst.flush()
-                os.fsync(dst.fileno())
-            digest = f"sha256:{hasher.hexdigest()}"
-            if expected is not None and digest != expected:
+        """Copy a file into the store, hashing it on the way, or open it if it is sealed. Raises
+        on a digest mismatch."""
+        with source.open("rb") as src:
+            if sealing.is_sealed(src.read(len(sealing.MAGIC))):
+                src.seek(0)
+                return self._unseal(src, str(source), expected)
+            src.seek(0)
+            with self._staging() as (staged, hasher):
+                with staged.open("wb") as dst:
+                    while block := src.read(CHUNK):
+                        hasher.update(block)
+                        dst.write(block)
+                    dst.flush()
+                    os.fsync(dst.fileno())
+                digest = f"sha256:{hasher.hexdigest()}"
+                self._check(digest, expected, str(source))
+                size = staged.stat().st_size
+                if not self.has(digest):
+                    self._commit(staged, digest)
+        return ImportedFile(str(source), digest, size)
+
+    @staticmethod
+    def _check(digest: str, expected: str | None, origin: str) -> None:
+        if expected is not None and digest != expected:
+            raise ArtifactError(
+                ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                f"{origin} has digest {digest}, expected {expected}",
+            )
+
+    def _unseal(self, stream: BinaryIO, origin: str, expected: str | None) -> ImportedFile:
+        with self._staging() as (staged, _):
+            try:
+                with staged.open("wb") as dst:
+                    digest, size = sealing.unseal(stream, dst, self.keys)
+                    dst.flush()
+                    os.fsync(dst.fileno())
+            except sealing.KeyUnavailable as exc:
                 raise ArtifactError(
-                    ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
-                    f"{source} has digest {digest}, expected {expected}",
-                )
-            size = staged.stat().st_size
+                    ReasonCode.AGENT_ARTIFACT_KEY_UNAVAILABLE, f"{origin}: {exc}"
+                ) from exc
+            except sealing.SealError as exc:
+                raise ArtifactError(
+                    ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH, f"{origin}: {exc}"
+                ) from exc
+            self._check(digest, expected, origin)
             if not self.has(digest):
                 self._commit(staged, digest)
-        return ImportedFile(str(source), digest, size)
+        return ImportedFile(origin, digest, size)
 
     def import_directory(self, directory: Path) -> list[ImportedFile]:
         """Import every regular file under a directory (e.g. a LeRobot checkpoint)."""
@@ -123,7 +172,10 @@ class ArtifactStore:
         """Try each configured source. Returns True once the blob is stored."""
         value = _hex(digest)
         for source in self.sources:
-            if source.startswith(("https://", "http://")):
+            if source == REGISTRY_SOURCE:
+                if self.registry is not None and self._from_registry(self.registry, digest):
+                    return True
+            elif source.startswith(("https://", "http://")):
                 if self._download(f"{source.rstrip('/')}/sha256/{value}", digest):
                     return True
             else:
@@ -132,6 +184,22 @@ class ArtifactStore:
                     self.add_file(candidate, expected=digest)
                     return True
         return False
+
+    def _from_registry(self, registry: Callable[[str, BinaryIO], bool], digest: str) -> bool:
+        with self._staging() as (staged, _):
+            with staged.open("wb") as out:
+                if not registry(digest, out):
+                    return False
+            with staged.open("rb") as fetched:
+                if not sealing.is_sealed(fetched.read(len(sealing.MAGIC))):
+                    # Neura holds sealed weights only (design §18.2); anything else is refused.
+                    raise ArtifactError(
+                        ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                        f"Neura's registry returned an unsealed file for {digest}",
+                    )
+                fetched.seek(0)
+                self._unseal(fetched, f"{REGISTRY_SOURCE}:{digest}", digest)
+        return True
 
     def _download(self, url: str, digest: str) -> bool:
         headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
@@ -151,6 +219,11 @@ class ArtifactStore:
                         dst.write(block)
             except httpx.HTTPError:
                 return False
+            with staged.open("rb") as downloaded:
+                if sealing.is_sealed(downloaded.read(len(sealing.MAGIC))):
+                    downloaded.seek(0)
+                    self._unseal(downloaded, url, digest)
+                    return True
             if f"sha256:{hasher.hexdigest()}" != digest:
                 raise ArtifactError(
                     ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
@@ -214,6 +287,23 @@ class ArtifactStore:
             for path in self._checkouts.iterdir():
                 if path.name not in names and not path.name.startswith(".staging-"):
                     shutil.rmtree(path, ignore_errors=True)
+
+
+def load_keys(configs: Sequence[ArtifactKey]) -> dict[str, sealing.KeyProvider]:
+    """The configured key providers by key id. A key file that cannot be read fails startup."""
+    keys: dict[str, sealing.KeyProvider] = {}
+    for config in configs:
+        provider: sealing.KeyProvider
+        if config.file is not None:
+            provider = sealing.FileKey(config.file)
+            if config.key_id and config.key_id != provider.key_id:
+                raise ValueError(f"{config.file} is key {provider.key_id}, not {config.key_id}")
+        else:
+            assert config.command is not None  # ArtifactKey requires file or command
+            assert config.key_id  # and a key_id with a command
+            provider = sealing.CommandKey(config.key_id, config.command)
+        keys[provider.key_id] = provider
+    return keys
 
 
 def _tail(item: ImportedFile) -> tuple[str, int]:

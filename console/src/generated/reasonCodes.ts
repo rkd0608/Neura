@@ -426,6 +426,24 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: true,
     message: "The model's weights are not available at this site; import them or configure a source.",
   },
+  AGENT_ARTIFACT_UNTRUSTED: {
+    area: "agent",
+    severity: "error",
+    retryable: false,
+    message: "The model artifact carries no signature from a publisher key this server trusts.",
+  },
+  AGENT_ARTIFACT_SIGNATURE_INVALID: {
+    area: "agent",
+    severity: "error",
+    retryable: false,
+    message: "A signature on the model artifact from a trusted publisher key does not verify.",
+  },
+  AGENT_ARTIFACT_KEY_UNAVAILABLE: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "The key that decrypts the model's sealed weights is not available to this server.",
+  },
   AGENT_DEVICE_UNAVAILABLE: {
     area: "agent",
     severity: "error",

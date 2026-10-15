@@ -115,6 +115,7 @@ class ConformanceClient:
         content_type: str | None = None,
         params: Any = None,
         validate: bool = True,
+        content: bytes | None = None,
     ) -> httpx.Response:
         merged: dict[str, str] = dict(headers or {})
         bearer = self.token if token is True else token
@@ -130,7 +131,10 @@ class ConformanceClient:
                 content_type
                 or ("application/merge-patch+json" if method == "PATCH" else "application/json"),
             )
-        content = None if json is None else jsonlib.dumps(json)
+        if content is not None:
+            merged.setdefault("Content-Type", content_type or "application/octet-stream")
+        elif json is not None:
+            content = jsonlib.dumps(json).encode()
         response = self.client.request(method, path, content=content, headers=merged, params=params)
         if validate and path.startswith("/v1/"):
             VALIDATOR.validate(

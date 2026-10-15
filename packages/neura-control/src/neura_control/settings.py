@@ -71,6 +71,12 @@ class ControlPlaneSettings(BaseSettings):
     agent_client_ca_key_file: Path | None = None
     agent_certificate_days: int = Field(default=30, ge=1, le=397)
 
+    # Neura's registry of sealed weights (design §18.2): a directory (local disk, or a shared
+    # filesystem when several control-plane replicas run). Unset: the registry is off and
+    # customers keep weights in their own stores.
+    sealed_weights_dir: Path | None = None
+    sealed_weights_max_bytes: int = Field(default=64 << 30, ge=1)
+
     # Development only: on startup, ensure an organization "dev" and an admin API token with this
     # exact value exist. Refused outside development.
     dev_bootstrap_token: str | None = None

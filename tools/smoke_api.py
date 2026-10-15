@@ -2,7 +2,8 @@
 
 1. Onboard through the management API: project, site, contracts, robots, deployment, revision.
 2. Enroll the site agent with the install command the API returned (run on the "server").
-3. Prepare the revision: the site verifies the contracts it received in signed desired state.
+3. Trust the customer's publisher key at the site, then prepare the revision: the site verifies
+   the contracts it received in signed desired state and the artifact's publisher signature.
 4. Request activation; approve it locally at the site, as the site operator.
 5. Check that every robot runs the revision and that the cloud sees it.
 6. Stop the control plane: the robots keep running. Start it again: the site reconnects.
@@ -20,6 +21,7 @@ import secrets
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -28,8 +30,9 @@ from typing import Any
 import httpx
 import yaml
 
+from neura_contracts import parse_document, sealing, signing
 from neura_sdk import Client, NeuraApiError
-from neura_sdk.models import ContractDocument
+from neura_sdk.models import ArtifactSignature, ContractDocument
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples" / "contracts"
@@ -39,6 +42,9 @@ DATAPLANE_URL = "http://127.0.0.1:8091/v1/local/dataplane"
 # DEVELOPMENT ONLY: the public operator credential of the Compose stack's site agent.
 DEV_OPERATOR_TOKEN = "ntop_dev_operator_public_token"  # noqa: S105 - public dev value
 ROBOTS = 4
+# The customer's release key, made for this run: it signs the artifact, and the site operator
+# trusts it on the server (design §17.3).
+PUBLISHER = signing.load_private_key(signing.generate_key())
 
 
 def dev_token() -> str:
@@ -113,8 +119,14 @@ def onboard(neura: Client) -> dict[str, Any]:
     robot_profile = neura.register_robot_profile(
         project, body={"document": document("so101.robot.yaml")}
     )["metadata"]["id"]
+    # The customer's release process signs the artifact; the site runs only trusted signatures.
+    artifact_document = document("act-so101.artifact.yaml")
+    signed = signing.sign(parse_document(artifact_document).digest(), PUBLISHER)
+    signature = ArtifactSignature(
+        key_id=signed["key_id"], public_key=signed["public_key"], signature=signed["signature"]
+    )
     artifact = neura.register_model_artifact(
-        project, body={"document": document("act-so101.artifact.yaml")}
+        project, body={"document": artifact_document, "signatures": [signature]}
     )["metadata"]["id"]
     execution_profile = neura.register_execution_profile(
         project, body={"document": document("act-so101-30hz.profile.yaml")}
@@ -184,6 +196,25 @@ def chunks() -> dict[str, int]:
     return {s["robot_id"]: int(s["chunks"]) for s in sessions}
 
 
+def sealed_weights(neura: Client, project: str) -> str:
+    """Seal a file with a customer key and upload it: the registry holds ciphertext only."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "ckpt").mkdir()
+        (root / "ckpt" / "model.safetensors").write_bytes(secrets.token_bytes(64 * 1024))
+        sealing.generate_key_file(root / "kek")
+        [(_, digest, _)] = sealing.seal_directory(
+            root / "ckpt", root / "sealed", sealing.FileKey(root / "kek")
+        )
+        record = neura.upload_sealed_weights(
+            project, root / "sealed" / "sha256" / digest.removeprefix("sha256:")
+        )
+    listed = [w["digest"] for w in neura.list_sealed_weights(project)["items"]]
+    if digest not in listed:
+        raise SystemExit(f"the registry does not list {digest}")
+    return f"{digest[:19]}… sealed with {record['key_id']}, {record['sealed_bytes']} bytes"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8080")
@@ -194,6 +225,8 @@ def main() -> int:
 
     step("onboarding a customer through the management API")
     ids = onboard(neura)
+    step("storing weights sealed with a customer key in Neura's registry")
+    print(f"    {sealed_weights(neura, ids['project'])}")
     if args.api_only:
         return 0
 
@@ -207,6 +240,10 @@ def main() -> int:
     servers = neura.list_servers(ids["site"])["items"]
     checks = {c["name"]: c["passed"] for c in servers[0]["status"].get("preflight", [])}
     print(f"    server {servers[0]['metadata']['id']} connected; preflight {checks}")
+
+    step("trusting the customer's publisher key on the server, as the site operator")
+    public = signing.raw_public_key(PUBLISHER).hex()
+    print("    " + on_server("neura-agent", "trust-publisher", public, "--note", "smoke").strip())
 
     step("preparing the revision at the site")
     prepare = neura.prepare_revision(ids["revision"])

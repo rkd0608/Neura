@@ -82,6 +82,33 @@ export function parseDocument(text: string, kind: Kind): Schemas["ContractDocume
   return doc as Schemas["ContractDocument"];
 }
 
+export type Signature = Schemas["ArtifactSignature"];
+
+/** Signatures pasted as printed by `neura-contracts sign`: one JSON object, or a list. The server
+ *  verifies them against the artifact's digest. */
+export function parseSignatures(text: string): Signature[] {
+  if (!text.trim()) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("Paste the JSON that `neura-contracts sign` printed.");
+  }
+  const items = Array.isArray(value) ? value : [value];
+  for (const item of items) {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof (item as Record<string, unknown>).key_id !== "string" ||
+      typeof (item as Record<string, unknown>).public_key !== "string" ||
+      typeof (item as Record<string, unknown>).signature !== "string"
+    ) {
+      throw new Error("Each signature has key_id, public_key and signature.");
+    }
+  }
+  return items as Signature[];
+}
+
 export function RegisterContract({
   kind,
   open,
@@ -95,12 +122,20 @@ export function RegisterContract({
 }) {
   const toasts = useToasts();
   const [text, setText] = useState("");
+  const [signatureText, setSignatureText] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
   const register = useApiMutation(
-    async (document: Schemas["ContractDocument"]) => {
+    async ({
+      document,
+      signatures,
+    }: {
+      document: Schemas["ContractDocument"];
+      signatures: Signature[];
+    }) => {
       const result = await api.POST(PATHS[kind], {
         params: { path: { project_id: projectId }, header: idempotent() },
-        body: { document },
+        body: signatures.length > 0 ? { document, signatures } : { document },
       });
       const registered: Registered = unwrap(result);
       return registered;
@@ -120,21 +155,32 @@ export function RegisterContract({
         onSubmit={(event) => {
           event.preventDefault();
           let document: Schemas["ContractDocument"];
+          let signatures: Signature[];
           try {
             document = parseDocument(text, kind);
           } catch (error) {
             setParseError(error instanceof Error ? error.message : String(error));
             return;
           }
-          register.mutate(document, {
-            onSuccess: (registered) => {
-              toasts.ok(
-                `Registered ${documentTitle(registered)} (${shortDigest(registered.digest)}).`,
-              );
-              setText("");
-              onClose();
+          try {
+            signatures = parseSignatures(signatureText);
+          } catch (error) {
+            setSignatureError(error instanceof Error ? error.message : String(error));
+            return;
+          }
+          register.mutate(
+            { document, signatures },
+            {
+              onSuccess: (registered) => {
+                toasts.ok(
+                  `Registered ${documentTitle(registered)} (${shortDigest(registered.digest)}).`,
+                );
+                setText("");
+                setSignatureText("");
+                onClose();
+              },
             },
-          });
+          );
         }}
       >
         <div className="dialog-body">
@@ -165,6 +211,26 @@ export function RegisterContract({
               }}
             />
           </Field>
+          {kind === "ModelArtifact" ? (
+            <Field
+              id="ModelArtifact-signatures"
+              label="Publisher signatures (optional)"
+              hint="The JSON that `neura-contracts sign` printed. Sites run an artifact only if a publisher key they trust signed it; you can add signatures later."
+              error={signatureError}
+            >
+              <textarea
+                id="ModelArtifact-signatures"
+                value={signatureText}
+                spellCheck={false}
+                rows={4}
+                aria-invalid={signatureError ? true : undefined}
+                onChange={(event) => {
+                  setSignatureText(event.target.value);
+                  setSignatureError(null);
+                }}
+              />
+            </Field>
+          ) : null}
           {register.isError ? (
             <ErrorState error={register.error} title={`The ${label} was not accepted`} />
           ) : null}

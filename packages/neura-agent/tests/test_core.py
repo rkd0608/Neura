@@ -23,13 +23,23 @@ from neura_agent.gateway import build_gateway_config
 from neura_agent.identity import AUDIENCE, Identity, IdentityStore, atomic_write, connection_token
 from neura_agent.settings import AgentSettings
 from neura_agent.state import AgentState, StateStore
-from neura_contracts import ReasonCode, canonical_json, content_digest, parse_document, pki
+from neura_contracts import (
+    ReasonCode,
+    canonical_json,
+    content_digest,
+    parse_document,
+    pki,
+    signing,
+)
 from neura_contracts.site_protocol import MANIFEST_API_VERSION, contact_proof_payload
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 SITE = "sit_01J0000000000000000000000S"
 ROBOTS = {"rbt_01J000000000000000000000R0": "robot-0", "rbt_01J000000000000000000000R1": "robot-1"}
 KEY_ID = "mfk_test"
+# The customer's release key: every test artifact is signed with it and the site trusts it.
+PUBLISHER = Ed25519PrivateKey.generate()
+PUBLISHER_HEX = signing.raw_public_key(PUBLISHER).hex()
 
 
 def _example(name: str) -> dict[str, Any]:
@@ -42,6 +52,7 @@ def revision(
     refill: int | None = None,
     *,
     artifact: dict[str, Any] | None = None,
+    publishers: tuple[Ed25519PrivateKey, ...] = (PUBLISHER,),
 ) -> dict[str, Any]:
     profile = _example("act-so101-30hz.profile.yaml")
     if refill is not None:
@@ -54,10 +65,12 @@ def revision(
         "robot_profile": _example("so101.robot.yaml"),
         "execution_profile": profile,
     }
-    documents = {
+    documents: dict[str, dict[str, Any]] = {
         role: {"id": f"doc_{role}", "digest": parse_document(doc).digest(), "document": doc}
         for role, doc in raw.items()
     }
+    artifact_entry = documents["model_artifact"]
+    artifact_entry["signatures"] = [signing.sign(artifact_entry["digest"], k) for k in publishers]
     digest = content_digest({role: entry["digest"] for role, entry in documents.items()})
     return {"id": revision_id, "revision_digest": digest, "documents": documents}
 
@@ -114,7 +127,12 @@ class Site:
             manifest_key_id=KEY_ID,
         )
         self.settings = AgentSettings(
-            state_dir=tmp_path / "agent", **{"gateway_backend": "simulated", **settings}
+            state_dir=tmp_path / "agent",
+            **{
+                "gateway_backend": "simulated",
+                "trusted_publisher_keys": [PUBLISHER_HEX],
+                **settings,
+            },
         )
         self.gateway = FakeGateway()
         self.clock = Clock()
@@ -328,6 +346,57 @@ async def test_revision_digest_must_match_its_documents(site: Site) -> None:
     await site.commit([bad])
     await site.core.on_command(site.prepare(bad["id"]))
     assert site.reports()[-1].reason.code == ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH.value
+
+
+async def failed_prepare(site: Site, rev: dict[str, Any]) -> site_pb2.OperationReport:
+    assert (await site.commit([rev])).accepted
+    await site.core.on_command(site.prepare(rev["id"]))
+    final = site.reports()[-1]
+    assert final.state == "Failed"
+    assert rev["id"] not in site.core.state.prepared
+    return final
+
+
+async def test_an_artifact_without_a_trusted_publishers_signature_is_not_run(
+    site: Site,
+) -> None:
+    unsigned = revision("rev_01J0000000000000000000003", publishers=())
+    final = await failed_prepare(site, unsigned)
+    assert final.reason.code == ReasonCode.AGENT_ARTIFACT_UNTRUSTED.value
+    stranger = revision("rev_01J0000000000000000000004", publishers=(Ed25519PrivateKey.generate(),))
+    final = await failed_prepare(site, stranger)
+    assert final.reason.code == ReasonCode.AGENT_ARTIFACT_UNTRUSTED.value
+    assert "signed by ed25519:" in final.message
+    refused = [r for r in site.core.audit.tail() if r["event"] == "artifact.refused"]
+    assert [r["revision"] for r in refused] == [unsigned["id"], stranger["id"]]
+
+
+async def test_a_trusted_signature_for_another_artifact_is_invalid(site: Site) -> None:
+    rev = revision("rev_01J0000000000000000000003")
+    rev["documents"]["model_artifact"]["signatures"] = [
+        signing.sign("sha256:" + "0" * 64, PUBLISHER)
+    ]
+    final = await failed_prepare(site, rev)
+    assert final.reason.code == ReasonCode.AGENT_ARTIFACT_SIGNATURE_INVALID.value
+
+
+async def test_publisher_trust_is_read_from_a_file_on_every_prepare(tmp_path: Path) -> None:
+    trust = tmp_path / "publishers"
+    trust.write_text("# nobody yet\n")
+    site = Site(tmp_path, trusted_publisher_keys=[], trusted_publisher_keys_file=trust)
+    assert (await failed_prepare(site, REV1)).reason.code == (
+        ReasonCode.AGENT_ARTIFACT_UNTRUSTED.value
+    )
+    trust.write_text(f"{PUBLISHER_HEX}  # release pipeline\n")
+    await site.core.on_command(site.prepare(REV1["id"]))
+    assert site.reports()[-1].state == "Succeeded"
+    verified = [r for r in site.core.audit.tail() if r["event"] == "artifact.verified"]
+    assert verified[-1]["publisher"] == signing.key_id(signing.raw_public_key(PUBLISHER))
+
+
+async def test_signatures_can_be_waived_for_development(tmp_path: Path) -> None:
+    site = Site(tmp_path, trusted_publisher_keys=[], require_artifact_signatures=False)
+    await prepared(site, revision("rev_01J0000000000000000000003", publishers=()))
 
 
 async def test_prepare_of_a_revision_not_in_the_manifest_fails(site: Site) -> None:
@@ -781,3 +850,36 @@ def test_robot_keygen_keeps_the_key_private(tmp_path: Path) -> None:
     assert pki.load_certificate(cert).public_key() == key.public_key()
     with pytest.raises(SystemExit):  # never overwrites a key
         robot_main(["keygen", "robot-0", "--dir", str(tmp_path)])
+
+
+def test_operators_trust_and_distrust_publishers_with_the_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    from neura_agent import trust
+    from neura_agent.__main__ import main
+
+    monkeypatch.setenv("NEURA_AGENT_STATE_DIR", str(tmp_path / "agent"))
+    assert main(["publishers"]) == 0
+    assert capsys.readouterr().out == ""
+    assert main(["trust-publisher", PUBLISHER_HEX, "--note", "release pipeline"]) == 0
+    assert "trusting ed25519:" in capsys.readouterr().out
+    assert main(["trust-publisher", PUBLISHER_HEX]) == 0
+    assert "already trusted" in capsys.readouterr().out
+    other = Ed25519PrivateKey.generate()
+    pem = tmp_path / "ci.pub"
+    pem.write_bytes(
+        other.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+    )
+    assert main(["trust-publisher", str(pem)]) == 0
+    settings = AgentSettings(state_dir=tmp_path / "agent")
+    assert trust.trusted_publishers(settings) == [
+        signing.raw_public_key(PUBLISHER),
+        signing.raw_public_key(other),
+    ]
+    assert "release pipeline" in trust.trust_file(settings).read_text()
+    assert main(["distrust-publisher", signing.key_id(signing.raw_public_key(PUBLISHER))]) == 0
+    assert trust.trusted_publishers(settings) == [signing.raw_public_key(other)]
+    assert main(["distrust-publisher", signing.key_id(signing.raw_public_key(PUBLISHER))]) == 1
+    assert main(["trust-publisher", "not-a-key"]) == 1

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import VALIDATOR, AppFactory, ConformanceClient, OidcIssuer, contract
+from neura_contracts import parse_document, signing
 from neura_control.app import create_app, iter_routes
 from neura_control.db.models import Base
 from neura_control.security.principal import Role
@@ -51,7 +52,7 @@ def test_every_spec_operation_is_implemented(api: Api) -> None:
         (method.upper(), path)
         for path, item in VALIDATOR.spec["paths"].items()
         for method in item
-        if method in {"get", "post", "patch", "delete"}
+        if method in {"get", "post", "put", "patch", "delete"}
         and (method.upper(), path) not in implemented
     ]
     assert missing == []
@@ -308,6 +309,40 @@ def test_contract_validation(api: Api) -> None:
     )
     assert unbound.status_code == 422  # its artifact and robot profile are not registered yet
     assert "not registered" in unbound.json()["detail"]
+
+
+def test_artifact_signatures_are_verified_and_kept_one_per_key(api: Api) -> None:
+    client, org = api
+    project = new_project(client, org)["metadata"]["id"]
+    document = contract("act-so101.artifact.yaml")
+    digest = parse_document(document).digest()
+    first, second = (signing.load_private_key(signing.generate_key()) for _ in range(2))
+    sig1, sig2 = signing.sign(digest, first), signing.sign(digest, second)
+    path = f"/v1/projects/{project}/model-artifacts"
+    created = client.post(path, {"document": document, "signatures": [sig1]})
+    assert created.status_code == 201
+    assert created.json()["signatures"] == [sig1]
+    artifact_id = created.json()["metadata"]["id"]
+    # Registering the same document again adds a new publisher's signature.
+    again = client.post(path, {"document": document, "signatures": [sig2]}).json()
+    assert again["metadata"]["id"] == artifact_id
+    assert again["signatures"] == sorted([sig1, sig2], key=lambda s: s["key_id"])
+    assert again["metadata"]["version"] == "2"
+    assert again["digest"] == digest  # the document did not change
+    signatures = f"/v1/model-artifacts/{artifact_id}/signatures"
+    unchanged = client.post(signatures, sig1).json()
+    assert unchanged["metadata"]["version"] == "2"
+    # A signature over another digest, or a forged key id, is refused.
+    other = signing.sign("sha256:" + "0" * 64, first)
+    assert client.post(signatures, other).status_code == 422
+    assert client.post(signatures, {**sig1, "key_id": "ed25519:" + "0" * 16}).status_code == 422
+    robot = client.post(
+        f"/v1/projects/{project}/robot-profiles",
+        {"document": contract("so101.robot.yaml"), "signatures": [sig1]},
+    )
+    assert robot.status_code == 422
+    audit = client.get(f"/v1/projects/{project}/audit-records").json()["items"]
+    assert any(r["action"] == "model_artifact.sign" and r["target"] == artifact_id for r in audit)
 
 
 def test_incompatible_revision_is_refused_with_reasons(api: Api) -> None:

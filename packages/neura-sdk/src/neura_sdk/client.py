@@ -7,6 +7,7 @@ import json
 import secrets
 import time
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 from urllib.parse import quote
@@ -14,7 +15,7 @@ from urllib.parse import quote
 import httpx
 
 from neura_sdk._operations import Operations
-from neura_sdk.models import Event, Operation
+from neura_sdk.models import Event, Operation, SealedWeights
 
 RETRYABLE_STATUS = frozenset({429, 503})
 TERMINAL_OPERATION_STATES = frozenset({"Succeeded", "Failed", "Cancelled"})
@@ -174,6 +175,25 @@ class Client(Operations):
                         continue
                     cursor = item["cursor"]
                     yield item
+
+    def upload_sealed_weights(self, project_id: str, path: str | Path) -> SealedWeights:
+        """Upload one file sealed with ``neura-contracts seal`` (``PUT
+        /v1/projects/{project_id}/sealed-weights/{digest}``). The sealed layout names each file
+        by its plaintext digest, which the upload is stored under."""
+        file = Path(path)
+        digest = f"sha256:{file.name}"
+        url = f"/v1/projects/{quote(project_id, safe='')}/sealed-weights/{quote(digest, safe='')}"
+        with file.open("rb") as f:
+            response = self._http.put(
+                url,
+                content=iter(lambda: f.read(1 << 20), b""),
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=None,
+            )
+        if response.status_code >= 400:
+            raise NeuraApiError(response.status_code, response.json())
+        result: SealedWeights = response.json()
+        return result
 
 
 def _retry_delay(response: httpx.Response, attempt: int) -> float:

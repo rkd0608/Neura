@@ -20,8 +20,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from neura.v1 import common_pb2, site_pb2
-from neura_agent import placement, site_pki
-from neura_agent.artifacts import ArtifactError, ArtifactStore
+from neura_agent import placement, site_pki, trust
+from neura_agent.artifacts import ArtifactError, ArtifactStore, load_keys
 from neura_agent.gateway import (
     GatewayRunner,
     build_gateway_config,
@@ -43,6 +43,7 @@ from neura_contracts import (
     content_digest,
     parse_document,
     pki,
+    signing,
 )
 from neura_contracts.site_protocol import (
     CONTACT_NONCE_BYTES,
@@ -94,7 +95,10 @@ class AgentCore:
             settings.state_dir / "artifacts",
             settings.artifact_sources,
             token.get_secret_value() if token is not None else None,
+            keys=load_keys(settings.artifact_keys),
         )
+        if not settings.require_artifact_signatures:
+            log.warning("artifact signatures are not required (development only)")
         self.store = StateStore(settings.state_dir / "state.json")
         self.audit = AuditLog(settings.state_dir / "audit.jsonl")
         self.gateway_dir = settings.state_dir / "gateway"
@@ -443,6 +447,14 @@ class AgentCore:
                 message="revision digest does not match its documents",
             )
             return
+        try:
+            self._verify_publisher(revision["documents"]["model_artifact"])
+        except signing.SignatureError as exc:
+            self.audit.write(
+                "artifact.refused", revision=revision_id, reason=exc.code.value, detail=str(exc)
+            )
+            self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
+            return
         artifact, robot, profile = (
             parsed["model_artifact"],
             parsed["robot_profile"],
@@ -496,6 +508,21 @@ class AgentCore:
                 ),
             },
         )
+
+    def _verify_publisher(self, entry: dict[str, Any]) -> None:
+        """Before anything of the artifact is pulled or run: a publisher this server trusts must
+        have signed its digest (design §17.3, §17.4). Raises SignatureError."""
+        if not self.settings.require_artifact_signatures:
+            return
+        try:
+            trusted = trust.trusted_publishers(self.settings)
+        except (OSError, signing.SignatureError) as exc:
+            raise signing.SignatureError(
+                f"the trusted publisher keys cannot be read: {exc}",
+                ReasonCode.AGENT_ARTIFACT_UNTRUSTED,
+            ) from exc
+        signer = signing.trusted_signer(entry["digest"], entry.get("signatures", []), trusted)
+        self.audit.write("artifact.verified", artifact=entry["digest"], publisher=signer)
 
     def _placed_groups(self, excluding: str) -> list[placement.PlacedGroup]:
         """Batch groups of the other prepared revisions, and their devices."""

@@ -11,12 +11,31 @@ import sys
 from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import AnyHttpUrl, Field, SecretStr
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RemoteOperation = Literal[
     "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel"
 ]
+
+
+class ArtifactKey(BaseModel):
+    """A customer-managed key that opens sealed weights (design §18.2): a key-encryption key in a
+    file on this server, or a KMS reached through a command (``<command> wrap|unwrap``)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file: Path | None = None
+    command: list[str] | None = None
+    key_id: str | None = None  # required with command; a file key's id derives from the key
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> ArtifactKey:
+        if (self.file is None) == (self.command is None):
+            raise ValueError("an artifact key has either file or command")
+        if self.command is not None and not self.key_id:
+            raise ValueError("a command key needs its key_id")
+        return self
 
 
 class AgentSettings(BaseSettings):
@@ -77,6 +96,16 @@ class AgentSettings(BaseSettings):
     # out as <source>/sha256/<hex>. Empty: only weights imported with `neura-agent import-weights`.
     artifact_sources: list[str] = Field(default_factory=list)
     artifact_source_token: SecretStr | None = None
+    # Keys that open sealed weights from those sources, e.g.
+    # [{"file": "/etc/neura/weights.kek"}] or [{"key_id": "aws-kms:alias/neura", "command": [...]}].
+    artifact_keys: list[ArtifactKey] = Field(default_factory=list)
+    # Publisher keys (Ed25519, hex or PEM) whose signature an artifact needs before this server
+    # pulls its weights or runs it (design §17.3, §17.4): inline, and one per line in a trust
+    # file (default <state_dir>/trusted-publishers, edited with `neura-agent trust-publisher`).
+    trusted_publisher_keys: list[str] = Field(default_factory=list)
+    trusted_publisher_keys_file: Path | None = None
+    # DEVELOPMENT ONLY when false: run artifacts whatever their signatures.
+    require_artifact_signatures: bool = True
     # Round trip to robots assumed by capacity estimates until robots report measured ones.
     capacity_rtt_p99_ms: float = Field(default=20.0, gt=0)
 

@@ -13,6 +13,11 @@
     neura-agent robot-token ROBOT_NAME      a device token, for a development gateway without TLS
     neura-agent import-weights DIR [--artifact FILE]
                                             add a checkpoint's files to the site's artifact store
+    neura-agent trust-publisher KEY [--note TEXT]
+                                            trust a publisher key (hex, or a PEM file) to sign
+                                            the artifacts this server runs
+    neura-agent distrust-publisher KEY_ID   stop trusting a publisher key
+    neura-agent publishers                  list the trusted publisher keys
 
 Local commands talk to the agent's local API and read the operator credential from
 NEURA_AGENT_OPERATOR_TOKEN.
@@ -31,11 +36,12 @@ from typing import Any
 import httpx
 import uvicorn
 
+from neura_agent import trust
 from neura_agent.app import create_app
 from neura_agent.artifacts import ArtifactError, ArtifactStore
 from neura_agent.runner import AgentRuntime, EnrollmentError
 from neura_agent.settings import AgentSettings
-from neura_contracts import ModelArtifact, load_document
+from neura_contracts import ModelArtifact, load_document, signing
 
 
 def _local(settings: AgentSettings, method: str, path: str, body: Any = None) -> int:
@@ -95,6 +101,26 @@ def _import_weights(settings: AgentSettings, directory: Path, manifest: Path | N
     return 0
 
 
+def _publishers(settings: AgentSettings, args: argparse.Namespace) -> int:
+    try:
+        if args.command == "trust-publisher":
+            text = Path(args.key).read_text() if Path(args.key).is_file() else args.key
+            key_id, added = trust.trust(settings, text, args.note)
+            print(f"{'trusting' if added else 'already trusted:'} {key_id}")
+        elif args.command == "distrust-publisher":
+            if not trust.distrust(settings, args.key_id):
+                print(f"{args.key_id} is not in {trust.trust_file(settings)}", file=sys.stderr)
+                return 1
+            print(f"no longer trusting {args.key_id}")
+        else:
+            for key in trust.trusted_publishers(settings):
+                print(signing.key_id(key), key.hex())
+    except (OSError, signing.SignatureError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="neura-agent",
@@ -127,6 +153,12 @@ def main(argv: list[str] | None = None) -> int:
     weights.add_argument(
         "--artifact", type=Path, default=None, help="check the files against this manifest"
     )
+    publisher = sub.add_parser("trust-publisher")
+    publisher.add_argument("key", help="public key: 64 hex characters, or a PEM file")
+    publisher.add_argument("--note", default="", help="who or what the key is, for the file")
+    distrust = sub.add_parser("distrust-publisher")
+    distrust.add_argument("key_id")
+    sub.add_parser("publishers")
     args = parser.parse_args(argv)
     settings = AgentSettings()
 
@@ -167,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
         return _local(settings, "DELETE", f"/v1/local/robots/{args.robot_name}/certificate")
     if args.command == "import-weights":
         return _import_weights(settings, args.directory, args.artifact)
+    if args.command in ("trust-publisher", "distrust-publisher", "publishers"):
+        return _publishers(settings, args)
 
     runtime = AgentRuntime(settings)
     uvicorn.run(

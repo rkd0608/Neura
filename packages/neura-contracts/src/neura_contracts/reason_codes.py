@@ -84,6 +84,9 @@ class ReasonCode(StrEnum):
     AGENT_MANIFEST_SIGNATURE_INVALID = "AGENT_MANIFEST_SIGNATURE_INVALID"
     AGENT_ARTIFACT_DIGEST_MISMATCH = "AGENT_ARTIFACT_DIGEST_MISMATCH"
     AGENT_ARTIFACT_UNAVAILABLE = "AGENT_ARTIFACT_UNAVAILABLE"
+    AGENT_ARTIFACT_UNTRUSTED = "AGENT_ARTIFACT_UNTRUSTED"
+    AGENT_ARTIFACT_SIGNATURE_INVALID = "AGENT_ARTIFACT_SIGNATURE_INVALID"
+    AGENT_ARTIFACT_KEY_UNAVAILABLE = "AGENT_ARTIFACT_KEY_UNAVAILABLE"
     AGENT_DEVICE_UNAVAILABLE = "AGENT_DEVICE_UNAVAILABLE"
     AGENT_ENROLLMENT_INVALID = "AGENT_ENROLLMENT_INVALID"
     AGENT_UNAUTHENTICATED = "AGENT_UNAUTHENTICATED"
@@ -600,6 +603,27 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="error",
         retryable=True,
         message="The model's weights are not available at this site; import them or configure a source.",
+    ),
+    ReasonCode.AGENT_ARTIFACT_UNTRUSTED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ARTIFACT_UNTRUSTED,
+        area="agent",
+        severity="error",
+        retryable=False,
+        message='The model artifact carries no signature from a publisher key this server trusts.',
+    ),
+    ReasonCode.AGENT_ARTIFACT_SIGNATURE_INVALID: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ARTIFACT_SIGNATURE_INVALID,
+        area="agent",
+        severity="error",
+        retryable=False,
+        message='A signature on the model artifact from a trusted publisher key does not verify.',
+    ),
+    ReasonCode.AGENT_ARTIFACT_KEY_UNAVAILABLE: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ARTIFACT_KEY_UNAVAILABLE,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message="The key that decrypts the model's sealed weights is not available to this server.",
     ),
     ReasonCode.AGENT_DEVICE_UNAVAILABLE: ReasonCodeInfo(
         code=ReasonCode.AGENT_DEVICE_UNAVAILABLE,

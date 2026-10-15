@@ -23,6 +23,7 @@ from conftest import AppFactory, ConformanceClient, contract
 from neura_agent.gateway import InProcessGateway
 from neura_agent.runner import AgentRuntime, EnrollmentError
 from neura_agent.settings import AgentSettings
+from neura_contracts import parse_document, signing
 from neura_control.app import create_app
 from neura_runtime.grpc_client import RobotCredentials
 from neura_sim.grpc_robots import AssignedRobot
@@ -83,6 +84,10 @@ def site_loop() -> Iterator[BackgroundLoop]:
     loop.close()
 
 
+# The customer's release key: the artifact is registered with its signature and the site trusts it.
+PUBLISHER = signing.load_private_key(signing.generate_key())
+
+
 def setup_customer(client: ConformanceClient, org: str) -> dict[str, Any]:
     project = client.post(
         f"/v1/organizations/{org}/projects",
@@ -101,9 +106,13 @@ def setup_customer(client: ConformanceClient, org: str) -> dict[str, Any]:
     rp = client.post(
         f"/v1/projects/{project}/robot-profiles", {"document": contract("so101.robot.yaml")}
     ).json()
+    artifact = contract("act-so101.artifact.yaml")
+    signature = signing.sign(parse_document(artifact).digest(), PUBLISHER)
     art = client.post(
-        f"/v1/projects/{project}/model-artifacts", {"document": contract("act-so101.artifact.yaml")}
+        f"/v1/projects/{project}/model-artifacts",
+        {"document": artifact, "signatures": [signature]},
     ).json()
+    assert art["signatures"] == [signature]
     exp = client.post(
         f"/v1/projects/{project}/execution-profiles",
         {"document": contract("act-so101-30hz.profile.yaml")},
@@ -202,6 +211,7 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         dev_robot_certificate_dir=tmp_path / "robot-certs",
         activation_timeout_s=60,
         gateway_backend="simulated",
+        trusted_publisher_keys=[signing.raw_public_key(PUBLISHER).hex()],
     )
     gateway = InProcessGateway()
     agent = AgentRuntime(agent_settings, gateway=gateway, command_runner=lambda args: None)

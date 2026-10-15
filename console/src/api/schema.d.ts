@@ -181,6 +181,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/model-artifacts/{model_artifact_id}/signatures": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Add a publisher signature to a model artifact.
+     * @description Verifies the signature against the artifact's digest and keeps one signature per key. The document and its digest do not change; the resource version does when a signature is new.
+     */
+    post: operations["addModelArtifactSignature"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/operations/{operation_id}": {
     parameters: {
       query?: never;
@@ -449,7 +469,7 @@ export interface paths {
     put?: never;
     /**
      * Register an immutable model artifact document.
-     * @description The document is validated with neura-contracts; registering an identical document again returns the existing resource.
+     * @description The document is validated with neura-contracts; registering an identical document again returns the existing resource, with any new signatures added.
      */
     post: operations["registerModelArtifact"];
     delete?: never;
@@ -747,6 +767,48 @@ export interface paths {
     patch: operations["updateMember"];
     trace?: never;
   };
+  "/v1/projects/{project_id}/sealed-weights": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the sealed weight files of a project. */
+    get: operations["listSealedWeights"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/projects/{project_id}/sealed-weights/{digest}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a sealed weight file's record. */
+    get: operations["getSealedWeights"];
+    /**
+     * Upload a sealed weight file to Neura's registry.
+     * @description The body is a file sealed with `neura-contracts seal`, for the plaintext digest in the path. The control plane checks its header and length but cannot decrypt it. Uploading again replaces the file (after re-sealing with a new key, for example). Returns 404 when this control plane runs no registry.
+     */
+    put: operations["uploadSealedWeights"];
+    post?: never;
+    /**
+     * Remove a sealed weight file from Neura's registry.
+     * @description Sites that already opened it keep their verified copy; no site can fetch it afterwards.
+     */
+    delete: operations["deleteSealedWeights"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -811,6 +873,15 @@ export interface components {
       /** @description Shown once, in this response only. */
       secret: string;
     } & components["schemas"]["ApiToken"];
+    /** @description A publisher's Ed25519 signature over a model artifact's digest (design §17.3), made with `neura-contracts sign`. Sites run an artifact only if a publisher key their operator trusts signed it. */
+    ArtifactSignature: {
+      /** @description ed25519: and the first 16 hex characters of SHA-256 over the raw public key. */
+      key_id: string;
+      /** @description The raw Ed25519 public key, hex. */
+      public_key: string;
+      /** @description Ed25519 signature over `neura-artifact-signature-v1\0` and the digest, base64url without padding. */
+      signature: string;
+    };
     AuditRecord: {
       metadata: components["schemas"]["Metadata"];
       actor: string;
@@ -836,6 +907,51 @@ export interface components {
     AuditRecordPage: {
       items: components["schemas"]["AuditRecord"][];
       page: components["schemas"]["PageInfo"];
+    };
+    /** @description How many robots one batch group on this site's server can serve at this revision's execution profile, from the same admission model the gateway enforces (design §9.3). `source` says whether the latency profile was measured on the site's device at prepare or configured; `sharing_case` says how this revision's group shares its device (design §9.5). */
+    CapacityEstimate: {
+      max_robots: number;
+      /**
+       * @description What stopped one more robot from being admitted: its starvation deadline, observation freshness at dispatch or acceptance, GPU memory, or sustained throughput (the reserve kept free).
+       * @enum {unknown}
+       */
+      limiting_factor:
+        | "deadline"
+        | "dispatch_freshness"
+        | "acceptance_freshness"
+        | "memory"
+        | "throughput"
+        | "search_limit";
+      /** @enum {unknown} */
+      source: "configured_profile" | "measured_profile";
+      /**
+       * @description same_weights: robots running this revision share forward passes and nothing else runs on the device. multi_adapter: one base forward pass serves several adapters. co_located_fine_tunes: other fine-tunes of the same architecture have their own workers on the device. different_architectures: other models share the device. With co-located groups the estimate assumes no contention from them (see the benchmark reports).
+       * @enum {unknown}
+       */
+      sharing_case?:
+        "same_weights" | "multi_adapter" | "co_located_fine_tunes" | "different_architectures";
+      /** @description The inputs of the estimate, so it can be checked and reproduced. */
+      assumptions: {
+        control_period_ms?: number;
+        starvation_budget_ms?: number;
+        request_interval_ms?: number;
+        link_allowance_ms?: number;
+        dispatch_freshness_ms?: number | null;
+        acceptance_freshness_ms?: number | null;
+        max_batch?: number;
+        /** @description How long a queued request may wait for others to share its batch. */
+        batch_window_ms?: number;
+        reserve_fraction?: number;
+        latency_p99_ms_by_batch?: {
+          [key: string]: number;
+        };
+        memory_available_mib?: number | null;
+        /** @description The device the group runs on, e.g. cuda:0. */
+        device?: string | null;
+        /** @description Other batch groups on the same device. */
+        co_located_groups?: number;
+      };
+      estimated_at: components["schemas"]["Timestamp"];
     };
     CompatibilityCheckRequest: {
       model_artifact_id: components["schemas"]["ModelArtifactId"];
@@ -1029,6 +1145,42 @@ export interface components {
     Labels: {
       [key: string]: string;
     };
+    /** @description A person's membership in an organization. Invited by verified email or added by SSO subject; an invitation becomes active when the person first signs in with that verified email. */
+    Member: {
+      metadata: components["schemas"]["Metadata"];
+      role: components["schemas"]["MemberRole"];
+      /** Format: email */
+      email?: string | null;
+      /** @description `<issuer>|<sub>` once bound. */
+      subject?: string | null;
+      /** @enum {unknown} */
+      state: "Invited" | "Active";
+    };
+    /** @description Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`). */
+    MemberCreate: {
+      role: components["schemas"]["MemberRole"];
+      /** Format: email */
+      email?: string;
+      subject?: string;
+    } & (unknown | unknown);
+    /**
+     * @description Member identifier: `mbr_` followed by a ULID.
+     * @example mbr_01JA2B3C4D5E6F7G8H9JKMNPQR
+     */
+    MemberId: string;
+    MemberPage: {
+      items: components["schemas"]["Member"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /**
+     * @description Organization role (design §19.2). Deploy and physical activation are separate: no role lets the cloud approve motion.
+     * @enum {unknown}
+     */
+    MemberRole: "viewer" | "deployer" | "site_operator" | "admin";
+    /** @description JSON Merge Patch (RFC 7396). */
+    MemberUpdate: {
+      role?: components["schemas"]["MemberRole"];
+    };
     /** @description Identity and bookkeeping common to every resource (design §20.2). */
     Metadata: {
       /** @description Typed identifier, e.g. `rbt_<ULID>`. */
@@ -1075,9 +1227,13 @@ export interface components {
       metadata: components["schemas"]["Metadata"];
       digest: components["schemas"]["Digest"];
       document: components["schemas"]["ContractDocument"];
+      /** @description Publisher signatures, one per key, sorted by key_id. Adding one does not change the document or its digest. */
+      signatures: components["schemas"]["ArtifactSignature"][];
     };
     ModelArtifactCreate: {
       document: components["schemas"]["ContractDocument"];
+      /** @description Signatures to attach. Registering an identical document again adds any new ones. */
+      signatures?: components["schemas"]["ArtifactSignature"][];
     };
     /**
      * @description ModelArtifact identifier: `art_` followed by a ULID.
@@ -1285,6 +1441,25 @@ export interface components {
      * @example rbk_01JA2B3C4D5E6F7G8H9JKMNPQR
      */
     RollbackId: string;
+    /** @description A weight file in Neura's registry, sealed with the customer's key (design §18.2). The control plane stores the ciphertext only and cannot open it; sites fetch it by digest and open it with the key configured on the server. */
+    SealedWeights: {
+      project_id: components["schemas"]["ProjectId"];
+      digest: components["schemas"]["Digest"];
+      /** @description The customer key the file is sealed with (file:<hex> or the KMS key's name). */
+      key_id: string;
+      plaintext_bytes: number;
+      sealed_bytes: number;
+      sealed_sha256: string;
+      /** Format: date-time */
+      created_at: string;
+      created_by: string;
+      /** @description Changes when the file is replaced; the ETag. */
+      version: string;
+    };
+    SealedWeightsPage: {
+      items: components["schemas"]["SealedWeights"][];
+      page: components["schemas"]["PageInfo"];
+    };
     Server: {
       metadata: components["schemas"]["Metadata"];
       spec: components["schemas"]["ServerSpec"];
@@ -1437,87 +1612,6 @@ export interface components {
     };
     /** Format: date-time */
     Timestamp: string;
-    /**
-     * @description Member identifier: `mbr_` followed by a ULID.
-     * @example mbr_01JA2B3C4D5E6F7G8H9JKMNPQR
-     */
-    MemberId: string;
-    /**
-     * @description Organization role (design §19.2). Deploy and physical activation are separate: no role lets the cloud approve motion.
-     * @enum {unknown}
-     */
-    MemberRole: "viewer" | "deployer" | "site_operator" | "admin";
-    /** @description A person's membership in an organization. Invited by verified email or added by SSO subject; an invitation becomes active when the person first signs in with that verified email. */
-    Member: {
-      metadata: components["schemas"]["Metadata"];
-      role: components["schemas"]["MemberRole"];
-      /** Format: email */
-      email?: string | null;
-      /** @description `<issuer>|<sub>` once bound. */
-      subject?: string | null;
-      /** @enum {unknown} */
-      state: "Invited" | "Active";
-    };
-    /** @description Exactly one of `email` (invite) or `subject` (an SSO subject `<issuer>|<sub>`). */
-    MemberCreate: {
-      role: components["schemas"]["MemberRole"];
-      /** Format: email */
-      email?: string;
-      subject?: string;
-    } & (unknown | unknown);
-    /** @description JSON Merge Patch (RFC 7396). */
-    MemberUpdate: {
-      role?: components["schemas"]["MemberRole"];
-    };
-    MemberPage: {
-      items: components["schemas"]["Member"][];
-      page: components["schemas"]["PageInfo"];
-    };
-    /** @description How many robots one batch group on this site's server can serve at this revision's execution profile, from the same admission model the gateway enforces (design §9.3). `source` says whether the latency profile was measured on the site's device at prepare or configured; `sharing_case` says how this revision's group shares its device (design §9.5). */
-    CapacityEstimate: {
-      max_robots: number;
-      /**
-       * @description What stopped one more robot from being admitted: its starvation deadline, observation freshness at dispatch or acceptance, GPU memory, or sustained throughput (the reserve kept free).
-       * @enum {unknown}
-       */
-      limiting_factor:
-        | "deadline"
-        | "dispatch_freshness"
-        | "acceptance_freshness"
-        | "memory"
-        | "throughput"
-        | "search_limit";
-      /** @enum {unknown} */
-      source: "configured_profile" | "measured_profile";
-      /**
-       * @description same_weights: robots running this revision share forward passes and nothing else runs on the device. multi_adapter: one base forward pass serves several adapters. co_located_fine_tunes: other fine-tunes of the same architecture have their own workers on the device. different_architectures: other models share the device. With co-located groups the estimate assumes no contention from them (see the benchmark reports).
-       * @enum {unknown}
-       */
-      sharing_case?:
-        "same_weights" | "multi_adapter" | "co_located_fine_tunes" | "different_architectures";
-      /** @description The inputs of the estimate, so it can be checked and reproduced. */
-      assumptions: {
-        control_period_ms?: number;
-        starvation_budget_ms?: number;
-        request_interval_ms?: number;
-        link_allowance_ms?: number;
-        dispatch_freshness_ms?: number | null;
-        acceptance_freshness_ms?: number | null;
-        max_batch?: number;
-        /** @description How long a queued request may wait for others to share its batch. */
-        batch_window_ms?: number;
-        reserve_fraction?: number;
-        latency_p99_ms_by_batch?: {
-          [key: string]: number;
-        };
-        memory_available_mib?: number | null;
-        /** @description The device the group runs on, e.g. cuda:0. */
-        device?: string | null;
-        /** @description Other batch groups on the same device. */
-        co_located_groups?: number;
-      };
-      estimated_at: components["schemas"]["Timestamp"];
-    };
   };
   responses: {
     /** @description API_CONFLICT */
@@ -1636,6 +1730,7 @@ export interface components {
     IfMatch: string;
     /** @description Filter by label, `key=value`. Repeat to AND several labels. */
     LabelSelector: string[];
+    MemberId: components["schemas"]["MemberId"];
     ModelArtifactId: components["schemas"]["ModelArtifactId"];
     OperationId: components["schemas"]["OperationId"];
     OrganizationId: components["schemas"]["OrganizationId"];
@@ -1649,7 +1744,8 @@ export interface components {
     SessionId: components["schemas"]["SessionId"];
     SiteId: components["schemas"]["SiteId"];
     SupportGrantId: components["schemas"]["SupportGrantId"];
-    MemberId: components["schemas"]["MemberId"];
+    /** @description The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>). */
+    WeightDigest: components["schemas"]["Digest"];
   };
   requestBodies: never;
   headers: {
@@ -2112,6 +2208,44 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  addModelArtifactSignature: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        model_artifact_id: components["parameters"]["ModelArtifactId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ArtifactSignature"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelArtifact"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];
@@ -3857,6 +3991,151 @@ export interface operations {
         };
       };
       412: components["responses"]["PreconditionFailed"];
+      428: components["responses"]["IfMatchRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listSealedWeights: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SealedWeightsPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getSealedWeights: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+        /** @description The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>). */
+        digest: components["parameters"]["WeightDigest"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SealedWeights"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  uploadSealedWeights: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+        /** @description The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>). */
+        digest: components["parameters"]["WeightDigest"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/octet-stream": string;
+      };
+    };
+    responses: {
+      /** @description Replaced. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SealedWeights"];
+        };
+      };
+      /** @description Stored. */
+      201: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          Location: components["headers"]["Location"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SealedWeights"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  deleteSealedWeights: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description The resource version (ETag) the change is based on. */
+        "If-Match": components["parameters"]["IfMatch"];
+      };
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+        /** @description The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>). */
+        digest: components["parameters"]["WeightDigest"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Removed. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      412: components["responses"]["PreconditionFailed"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];

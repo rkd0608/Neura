@@ -8,6 +8,18 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class FetchSealedWeightsRequest(_message.Message):
+    __slots__ = ("digest",)
+    DIGEST_FIELD_NUMBER: _ClassVar[int]
+    digest: str
+    def __init__(self, digest: _Optional[str] = ...) -> None: ...
+
+class SealedWeightsChunk(_message.Message):
+    __slots__ = ("data",)
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
+
 class EnrollRequest(_message.Message):
     __slots__ = ("protocol_version", "enrollment_token", "public_key", "agent_version", "facts", "tls_csr")
     PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]

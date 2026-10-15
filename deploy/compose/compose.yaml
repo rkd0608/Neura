@@ -50,6 +50,10 @@ services:
       NEURA_CONTROL_MANIFEST_SIGNING_KEY: YuKYhVBPES3lvjs-KJFKdi1VMCeKSHS7O877vb76GQA
       NEURA_CONTROL_AGENT_GRPC_LISTEN: 0.0.0.0:8081
       NEURA_CONTROL_AGENT_ENDPOINT: control-plane:8081
+      # Neura's registry of weights sealed with customer keys (design §18.2).
+      NEURA_CONTROL_SEALED_WEIGHTS_DIR: /var/lib/neura/sealed-weights
+    volumes:
+      - sealed-weights:/var/lib/neura/sealed-weights
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"
@@ -133,6 +137,7 @@ volumes:
   postgres-data:
   agent-state:
   robot-certs:
+  sealed-weights:
 
 secrets:
   # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.

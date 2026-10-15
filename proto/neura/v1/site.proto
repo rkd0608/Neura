@@ -16,6 +16,18 @@ service SiteControl {
   // Long-lived bidirectional stream opened by the site agent. Authenticated with a short-lived
   // token the agent signs with its enrolled key ("authorization: Bearer <JWT>", EdDSA).
   rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+  // A sealed weight file from Neura's registry (design §18.2), authenticated like Connect. The
+  // control plane only ever holds weights sealed with the customer's key; the agent opens them.
+  rpc FetchSealedWeights(FetchSealedWeightsRequest) returns (stream SealedWeightsChunk);
+}
+
+message FetchSealedWeightsRequest {
+  // Digest of the plaintext weight file, "sha256:<hex>", as the artifact lists it.
+  string digest = 1;
+}
+
+message SealedWeightsChunk {
+  bytes data = 1;
 }
 
 message EnrollRequest {

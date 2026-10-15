@@ -244,9 +244,10 @@ def markdown(data: dict[str, Any]) -> str:
         "",
         "## Results",
         "",
-        "Per 1,000 requests: deadline misses (served after the predicted starvation time, too "
-        "old to dispatch, or failed). Per robot-hour: starvation events and faults. Age: from "
-        "the robot's capture to the start of the forward pass.",
+        "Per 1,000 requests: deadline misses (served after the predicted starvation time or "
+        "rejected by the robot as too old, too old to dispatch, or failed). Per robot-hour: "
+        "starvation events and faults. Age: from the robot's capture to the start of the "
+        "forward pass.",
         "",
     ]
     cells = data["cells"]
@@ -360,6 +361,10 @@ def markdown(data: dict[str, Any]) -> str:
         "level; the data plane does not group robots by base model yet (design §9.5: built "
         "only if this benchmark shows it pays). Measured overheads below 1 are timing noise and "
         "are not credited.",
+        "- Simulated robots tick with no timing noise, and the simulated gateway decodes an "
+        "observation in no time. Real robots drift by milliseconds, so near-simultaneous "
+        "requests sometimes miss the batching window: the simulation is somewhat optimistic for "
+        "synchronized arrivals near a freshness limit (compare the validation table).",
         "- Admission control is set aside in the benchmark so it can measure what N robots "
         "get; production refuses sessions beyond the admission estimate.",
         "- Robots that latch a fault are reset by a simulated operator after one second and "
@@ -419,10 +424,17 @@ def _crossovers(capacity: dict[str, Any]) -> list[str]:
                 if failure
                 else "; it met the SLO at every robot count measured"
             )
+            verdict = (
+                "sharing pays, and Neura's batching serves the most robots"
+                if n > shared
+                else "sharing a device pays, but here one process per robot serves as many or "
+                f"more ({shared} against {n}): on this device batching does not beat "
+                "co-location"
+            )
             lines.append(
-                f"- **{CASE_NAMES[case]}:** sharing pays. {CONFIG_NAMES[best]} serves {n} robots "
+                f"- **{CASE_NAMES[case]}:** {verdict}. {CONFIG_NAMES[best]} serves {n} robots "
                 f"per device ({1 / n:.3f} device-hours per robot-hour, against 1 with a device "
-                f"per robot and {shared} robots with a process per robot){beyond}."
+                f"per robot){beyond}."
             )
         else:
             lines.append(

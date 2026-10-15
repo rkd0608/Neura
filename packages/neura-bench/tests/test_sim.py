@@ -160,3 +160,15 @@ def test_the_link_fit_reproduces_the_measured_median_and_tail() -> None:
     heavy = suite.fit_link(1.0, 9.0)  # a tail no uniform delay with a positive base can match
     assert heavy.base_us == 200
     assert heavy.base_us + heavy.jitter_us / 2 == pytest.approx(1000)
+
+
+def test_chunks_the_robot_rejects_are_misses_counted_once() -> None:
+    from neura_bench.metrics import Window, summarize
+
+    window = Window(duration_s=60, robots=2, devices=1, requests=100)
+    window.chunks_rejected_at_robot = 5
+    assert summarize(window).deadline_misses == 5
+    window.served_late = 3  # late ones are also rejected as too old: not added again
+    assert summarize(window).deadline_misses == 5
+    window.expired = 2
+    assert summarize(window).deadline_misses == 7

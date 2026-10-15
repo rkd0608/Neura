@@ -3,8 +3,9 @@
 Over a measurement window (after warmup):
 
 - deadline misses per 1,000 requests: requests the robot did not get a usable chunk for in time:
-  served after their predicted starvation time, expired before dispatch (too old to dispatch),
-  or failed in a worker. Superseded and fenced requests are the robot's own choice, not misses.
+  served after their predicted starvation time or rejected by the robot (too old to accept),
+  expired before dispatch (too old to dispatch), or failed in a worker. Superseded and fenced
+  requests are the robot's own choice, not misses.
 - starvation events per robot-hour: a running robot's action queue ran dry (BUFFER_STARVED).
 - robot faults per robot-hour: starvation lasted past its grace period and the robot latched a
   fault (an operator reset it).
@@ -99,7 +100,12 @@ class Slo:
 
 def summarize(window: Window) -> Result:
     robot_hours = window.robots * window.duration_s / 3600
-    misses = window.served_late + window.expired + window.failed
+    # A chunk the robot rejected (too old, unexpected, corrupt) did not serve it either. A request
+    # served after its starvation time is almost always also too old to accept, so the two are
+    # not added: the larger count is a lower bound that never counts one request twice.
+    misses = (
+        window.expired + window.failed + max(window.served_late, window.chunks_rejected_at_robot)
+    )
     ages = np.array(window.ages_at_dispatch_us, dtype=np.float64) / 1000
 
     def pct(q: float) -> float | None:

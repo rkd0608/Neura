@@ -570,6 +570,12 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: false,
     message: "The request body failed validation.",
   },
+  API_PAYLOAD_TOO_LARGE: {
+    area: "api",
+    severity: "error",
+    retryable: false,
+    message: "The request body is larger than this operation accepts.",
+  },
   API_CURSOR_EXPIRED: {
     area: "api",
     severity: "warning",

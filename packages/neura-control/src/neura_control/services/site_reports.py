@@ -361,6 +361,9 @@ async def upsert_session(
         await session.flush()
         await _emit(session, robot.project_id, row, "resource.created")
         return row
+    if row.robot_id != robot.id or row.site_id != robot.site_id:
+        # Session ids come from the reporting site: one never updates another robot's session.
+        raise LookupError(session_id)
     row.task_epoch, row.state, row.reason = task_epoch, state, reason
     row.metrics = metrics or row.metrics
     row.observed_at = now

@@ -32,7 +32,14 @@ class OidcVerifier:
         jwks_url: str | None = None,
         key_resolver: KeyResolver | None = None,
         leeway_s: int = 30,
+        allowed_clients: frozenset[str] = frozenset(),
+        required_amr: frozenset[str] = frozenset(),
     ) -> None:
+        """``allowed_clients``: when set, a token issued to any other client (its ``azp``, or
+        ``client_id``) is refused, so a token minted for another application of the same
+        identity provider cannot be replayed here. ``required_amr``: when set, the token's
+        authentication methods (``amr``) must include one of them, e.g. ``mfa``, to enforce
+        multi-factor sign-in here as well as at the identity provider."""
         if key_resolver is None:
             if jwks_url is None:
                 raise ValueError("an OIDC verifier needs a jwks_url or a key resolver")
@@ -42,6 +49,8 @@ class OidcVerifier:
         self._audience = audience
         self._resolve = key_resolver
         self._leeway = leeway_s
+        self._clients = allowed_clients
+        self._amr = required_amr
 
     def subject(self, token: str) -> str:
         """Verify signature, issuer, audience and expiry; return ``"<issuer>|<sub>"``."""
@@ -65,6 +74,12 @@ class OidcVerifier:
             )
         except jwt.PyJWTError as exc:
             raise TokenInvalidError(str(exc)) from exc
+        client = claims.get("azp", claims.get("client_id"))
+        if self._clients and client not in self._clients:
+            raise TokenInvalidError("the token was issued to another client")
+        methods = claims.get("amr")
+        if self._amr and not (isinstance(methods, list) and self._amr.intersection(methods)):
+            raise TokenInvalidError(f"sign-in must use one of: {', '.join(sorted(self._amr))}")
         email = claims.get("email")
         verified = claims.get("email_verified") is True
         return OidcIdentity(

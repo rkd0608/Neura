@@ -8,6 +8,7 @@ import hashlib
 import logging
 import secrets
 import time
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -69,24 +70,31 @@ def _package_version() -> str:
 
 
 class RateLimiter:
-    """Per-credential token bucket. Per process; a shared store is needed with many replicas."""
+    """Token buckets by key. Per process; a shared store is needed with many replicas.
 
-    def __init__(self, per_minute: int) -> None:
+    Memory is bounded by evicting the least recently used bucket. An evicted bucket had been idle
+    longest, so it had refilled anyway: eviction never resets a limit someone is running into.
+    """
+
+    def __init__(self, per_minute: int, *, max_keys: int = 100_000) -> None:
         self.capacity = float(per_minute)
         self.rate = per_minute / 60.0
-        self._buckets: dict[str, tuple[float, float]] = {}
+        self.max_keys = max_keys
+        self._buckets: OrderedDict[str, tuple[float, float]] = OrderedDict()
 
     def take(self, key: str, now: float) -> float | None:
         """Consume one token; return None if allowed, else seconds to wait."""
-        tokens, last = self._buckets.get(key, (self.capacity, now))
+        tokens, last = self._buckets.pop(key, (self.capacity, now))
         tokens = min(self.capacity, tokens + (now - last) * self.rate)
         if tokens < 1.0:
             self._buckets[key] = (tokens, now)
-            return (1.0 - tokens) / self.rate
-        self._buckets[key] = (tokens - 1.0, now)
-        if len(self._buckets) > 100_000:
-            self._buckets.clear()  # bound memory against key floods
-        return None
+            wait: float | None = (1.0 - tokens) / self.rate
+        else:
+            self._buckets[key] = (tokens - 1.0, now)
+            wait = None
+        while len(self._buckets) > self.max_keys:
+            self._buckets.popitem(last=False)
+        return wait
 
 
 async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event) -> None:
@@ -172,6 +180,8 @@ def create_app(
                 issuer=settings.oidc_issuer,
                 audience=settings.oidc_audience,
                 jwks_url=settings.oidc_jwks_url,
+                allowed_clients=frozenset(settings.oidc_allowed_clients),
+                required_amr=frozenset(settings.oidc_required_amr),
             )
         else:
             app.state.oidc = None
@@ -218,6 +228,7 @@ def create_app(
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.event_streams = [0]  # open change-event streams (routes_observe)
     app.state.oidc = oidc_verifier
     metrics = ControlPlaneMetrics()
     app.state.metrics = metrics
@@ -227,6 +238,7 @@ def create_app(
         else None
     )
     limiter = RateLimiter(settings.rate_limit_per_minute)
+    address_limiter = RateLimiter(settings.rate_limit_per_address_per_minute)
 
     app.add_exception_handler(ProblemError, handle_problem)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
@@ -245,11 +257,12 @@ def create_app(
         )
         request.state.request_id = request_id
         if request.url.path.startswith("/v1/") and request.url.path != "/v1/meta":
-            credential = request.headers.get("Authorization") or (
-                request.client.host if request.client else ""
-            )
-            key = hashlib.sha256(credential.encode()).hexdigest()
-            wait = limiter.take(key, time.monotonic())
+            now = time.monotonic()
+            address = request.client.host if request.client else ""
+            wait = address_limiter.take(address, now)
+            credential = request.headers.get("Authorization")
+            if wait is None and credential:
+                wait = limiter.take(hashlib.sha256(credential.encode()).hexdigest(), now)
             if wait is not None:
                 response: Response = problem_response(
                     ReasonCode.API_RATE_LIMITED, instance=request.url.path

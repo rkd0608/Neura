@@ -1747,6 +1747,15 @@ export interface components {
         "application/problem+json": components["schemas"]["Problem"];
       };
     };
+    /** @description API_PAYLOAD_TOO_LARGE */
+    PayloadTooLarge: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/problem+json": components["schemas"]["Problem"];
+      };
+    };
   };
   parameters: {
     ActivationRequestId: components["schemas"]["ActivationRequestId"];
@@ -1920,6 +1929,7 @@ export interface operations {
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -1992,6 +2002,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2066,6 +2077,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2105,6 +2117,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2277,6 +2290,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2442,6 +2456,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2514,6 +2529,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2587,6 +2603,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2655,6 +2672,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
@@ -2723,6 +2741,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];
@@ -2795,6 +2814,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2921,6 +2941,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -2989,6 +3010,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];
@@ -3071,6 +3093,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3155,6 +3178,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3229,6 +3253,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3337,6 +3362,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3531,6 +3557,7 @@ export interface operations {
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -3630,6 +3657,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -3667,6 +3695,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3797,6 +3826,7 @@ export interface operations {
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -3835,6 +3865,7 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -3974,6 +4005,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
@@ -4062,6 +4094,7 @@ export interface operations {
         };
       };
       412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];

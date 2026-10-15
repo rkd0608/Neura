@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import sys
 
 import uvicorn
@@ -23,12 +24,18 @@ from neura_control.settings import ControlPlaneSettings
 
 
 def serve(settings: ControlPlaneSettings) -> None:
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     uvicorn.run(
         create_app(settings),
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level,
         proxy_headers=True,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
+        limit_concurrency=settings.max_concurrent_requests,
         server_header=False,
     )
 

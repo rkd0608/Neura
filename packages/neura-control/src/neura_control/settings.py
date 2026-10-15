@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import parse_qs, urlsplit
 
 from pydantic import Field, PostgresDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,12 +34,29 @@ class ControlPlaneSettings(BaseSettings):
     oidc_issuer: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
+    # Accept only tokens issued to these clients (azp or client_id): the console's and any CLI's.
+    # Empty: any client of the issuer whose token names this audience.
+    oidc_allowed_clients: list[str] = Field(default_factory=list)
+    # Require these authentication methods (amr), e.g. ["mfa"], when the identity provider
+    # reports them. Empty: multi-factor sign-in is enforced by the identity provider's policy.
+    oidc_required_amr: list[str] = Field(default_factory=list)
     # The console signs people in with authorization code + PKCE as a public client registered at
     # the IdP. Published in /v1/meta; without it the console offers API-token sign-in only.
     console_oidc_client_id: str | None = None
     console_oidc_scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
 
     rate_limit_per_minute: int = Field(default=1200, ge=1)
+    # Every request also counts against its client address, so a flood of distinct (invalid)
+    # credentials from one place is limited too. Behind a proxy, list it in forwarded_allow_ips so
+    # the address is the client's, not the proxy's.
+    rate_limit_per_address_per_minute: int = Field(default=6000, ge=1)
+    forwarded_allow_ips: str = "127.0.0.1"
+    # Beyond this many requests in progress the server answers 503 at once.
+    max_concurrent_requests: int = Field(default=1000, ge=1)
+    # Open change-event streams per process; beyond it a new stream is told to retry.
+    events_max_streams: int = Field(default=200, ge=1)
+    # Concurrent RPCs per site-agent gRPC listener.
+    agent_max_concurrent_rpcs: int = Field(default=2000, ge=1)
     event_retention_hours: int = Field(default=24, ge=1)
     events_poll_interval_s: float = Field(default=1.0, gt=0, le=30)
     events_keepalive_s: float = Field(default=15.0, gt=0)
@@ -128,10 +146,11 @@ class ControlPlaneSettings(BaseSettings):
                 "site agents need client certificates in staging and production: set"
                 " agent_client_ca_cert_file and agent_client_ca_key_file"
             )
+        sslmode = parse_qs(urlsplit(str(self.database_url)).query).get("sslmode", [""])[-1]
         if (
             self.environment in ("staging", "production")
             and not self.database_tls_local
-            and "sslmode=verify-full" not in str(self.database_url)
+            and sslmode != "verify-full"
         ):
             raise ValueError(
                 "staging and production connect to Postgres with sslmode=verify-full (or set"

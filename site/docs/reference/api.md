@@ -72,7 +72,7 @@ Responses: `200`, `401`, `403`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `ProjectCreate`.
 
-Responses: `201`, `401`, `403`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a project
 
@@ -95,7 +95,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `ProjectUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `412`, `422`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ## Sites
 
@@ -123,7 +123,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `SiteCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a site
 
@@ -146,7 +146,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `SiteUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
 
 ### Delete a site
 
@@ -172,7 +172,7 @@ The secret is returned once. It enrolls one server, then cannot be reused (desig
 
 Request body: `application/json`, `EnrollmentTokenCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ## Servers
 
@@ -197,7 +197,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `ServerUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `412`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `412`, `413`, `428`, `429`, `500`, `503`.
 
 ### Unenroll a server and revoke its certificate
 
@@ -223,7 +223,7 @@ A signed agent release for one server (design §17.3). The site verifies the bun
 
 Request body: `application/json`, `AgentUpgradeCreate`.
 
-Responses: `202`, `401`, `403`, `404`, `422`, `428`, `429`, `500`, `503`.
+Responses: `202`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List servers enrolled at a site
 
@@ -264,7 +264,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `RobotCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a robot
 
@@ -287,7 +287,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `RobotUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
 
 ### Delete a robot
 
@@ -335,7 +335,7 @@ Verifies the signature against the artifact's digest and keeps one signature per
 
 Request body: `application/json`, `ArtifactSignature`.
 
-Responses: `200`, `401`, `403`, `404`, `422`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Check a model artifact, robot profile and execution profile together
 
@@ -349,7 +349,7 @@ A read-only computation; safe to repeat, so no Idempotency-Key is required.
 
 Request body: `application/json`, `CompatibilityCheckRequest`.
 
-Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `413`, `429`, `500`, `503`.
 
 ### List registered execution profiles
 
@@ -377,7 +377,7 @@ The document is validated with neura-contracts; registering an identical documen
 
 Request body: `application/json`, `ExecutionProfileCreate`.
 
-Responses: `200`, `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `200`, `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List registered model artifacts
 
@@ -405,7 +405,7 @@ The document is validated with neura-contracts; registering an identical documen
 
 Request body: `application/json`, `ModelArtifactCreate`.
 
-Responses: `200`, `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `200`, `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List registered robot profiles
 
@@ -433,7 +433,7 @@ The document is validated with neura-contracts; registering an identical documen
 
 Request body: `application/json`, `RobotProfileCreate`.
 
-Responses: `200`, `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `200`, `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a registered robot profile
 
@@ -468,7 +468,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `DeploymentUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
 
 ### Delete a deployment
 
@@ -507,7 +507,7 @@ Creates an ActivationRequest and an Operation. The operation succeeds only when 
 
 Request body: `application/json`, `ActivationRequestCreate`.
 
-Responses: `202`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `202`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List a deployment's revisions
 
@@ -533,7 +533,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `RevisionCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Roll back to an earlier compatible revision
 
@@ -546,7 +546,7 @@ Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
 
 Request body: `application/json`, `RollbackCreate`.
 
-Responses: `202`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `202`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List deployments
 
@@ -572,7 +572,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `DeploymentCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Get a revision
 
@@ -655,7 +655,7 @@ A read-only query; safe to repeat, so no Idempotency-Key is required.
 
 Request body: `application/json`, `MetricsQuery`.
 
-Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `413`, `429`, `500`, `503`.
 
 ### List live and recent robot sessions
 
@@ -754,7 +754,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `ApiTokenCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### List support access grants
 
@@ -780,7 +780,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `SupportGrantCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Revoke a support grant
 
@@ -817,7 +817,7 @@ Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
 Request body: `application/json`, `MemberCreate`.
 
-Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Change a member's role
 
@@ -830,7 +830,7 @@ Responses: `201`, `401`, `403`, `404`, `409`, `422`, `428`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `MemberUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
 
 ### Remove a member or withdraw an invitation
 

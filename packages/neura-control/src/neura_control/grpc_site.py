@@ -583,17 +583,23 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 continue
             seen.add(robot.name)
             state = item.state if item.state in SESSION_STATES else "Ready"
-            await site_reports.upsert_session(
-                session,
-                session_id=item.session_id,
-                robot_id=robot.id,
-                revision_id=item.revision_id,
-                lease_generation=int(item.lease_generation),
-                task_epoch=int(item.task_epoch),
-                state=state,
-                reason=item.reason.code or None,
-                metrics=_session_metrics(item.metrics),
-            )
+            try:
+                await site_reports.upsert_session(
+                    session,
+                    session_id=item.session_id,
+                    robot_id=robot.id,
+                    revision_id=item.revision_id,
+                    lease_generation=int(item.lease_generation),
+                    task_epoch=int(item.task_epoch),
+                    state=state,
+                    reason=item.reason.code or None,
+                    metrics=_session_metrics(item.metrics),
+                )
+            except LookupError:
+                log.warning(
+                    "site %s reported session %s of another robot", site_id, item.session_id
+                )
+                continue
             await site_reports.report_robot(
                 session,
                 robot.id,
@@ -798,7 +804,8 @@ async def start_agent_server(
         options=[
             ("grpc.max_send_message_length", 64 * 1024 * 1024),
             ("grpc.max_receive_message_length", 8 * 1024 * 1024),
-        ]
+        ],
+        maximum_concurrent_rpcs=settings.agent_max_concurrent_rpcs,
     )
     service = SiteControlService(sessions, signer, settings, weights=weights, metrics=metrics)
     site_pb2_grpc.add_SiteControlServicer_to_server(service, server)
@@ -814,7 +821,10 @@ async def start_agent_server(
         port = server.add_secure_port(settings.agent_grpc_listen, credentials)
         # Enrollment, before a server has a certificate: server-authenticated TLS, Enroll only.
         assert settings.agent_enroll_listen is not None  # checked by the settings
-        enrollment = grpc.aio.server()
+        enrollment = grpc.aio.server(
+            options=[("grpc.max_receive_message_length", 256 * 1024)],  # Enroll requests are small
+            maximum_concurrent_rpcs=64,
+        )
         site_pb2_grpc.add_SiteControlServicer_to_server(_EnrollOnly(service), enrollment)
         enrollment.add_secure_port(
             settings.agent_enroll_listen, grpc.ssl_server_credentials([pair])

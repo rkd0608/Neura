@@ -108,6 +108,7 @@ class ReasonCode(StrEnum):
     API_PRECONDITION_REQUIRED = "API_PRECONDITION_REQUIRED"
     API_IDEMPOTENCY_KEY_REUSED = "API_IDEMPOTENCY_KEY_REUSED"
     API_VALIDATION_FAILED = "API_VALIDATION_FAILED"
+    API_PAYLOAD_TOO_LARGE = "API_PAYLOAD_TOO_LARGE"
     API_CURSOR_EXPIRED = "API_CURSOR_EXPIRED"
     API_RATE_LIMITED = "API_RATE_LIMITED"
     API_INTERNAL_ERROR = "API_INTERNAL_ERROR"
@@ -784,6 +785,14 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message='The request body failed validation.',
         http_status=422,
+    ),
+    ReasonCode.API_PAYLOAD_TOO_LARGE: ReasonCodeInfo(
+        code=ReasonCode.API_PAYLOAD_TOO_LARGE,
+        area="api",
+        severity="error",
+        retryable=False,
+        message='The request body is larger than this operation accepts.',
+        http_status=413,
     ),
     ReasonCode.API_CURSOR_EXPIRED: ReasonCodeInfo(
         code=ReasonCode.API_CURSOR_EXPIRED,

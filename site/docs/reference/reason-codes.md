@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 97 codes.
+Catalog version 1, 98 codes.
 
 ## Contracts
 
@@ -141,6 +141,7 @@ Catalog version 1, 97 codes.
 | `API_PRECONDITION_REQUIRED` | error | no | 428 | This request requires an If-Match header with the resource version. |
 | `API_IDEMPOTENCY_KEY_REUSED` | error | no | 422 | The Idempotency-Key was already used with a different request body. |
 | `API_VALIDATION_FAILED` | error | no | 422 | The request body failed validation. |
+| `API_PAYLOAD_TOO_LARGE` | error | no | 413 | The request body is larger than this operation accepts. |
 | `API_CURSOR_EXPIRED` | warning | no | 410 | The event cursor is older than the retention window; list resources again. |
 | `API_RATE_LIMITED` | warning | yes | 429 | Too many requests; retry after the indicated delay. |
 | `API_INTERNAL_ERROR` | error | yes | 500 | An internal error occurred. |

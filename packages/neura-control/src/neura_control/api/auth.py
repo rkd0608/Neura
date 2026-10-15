@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 from fastapi import Request
@@ -75,7 +76,8 @@ async def _oidc_principal(request: Request, credential: str) -> Principal:
     if verifier is None:
         raise ProblemError(ReasonCode.API_UNAUTHENTICATED)
     try:
-        identity = verifier.identity(credential)
+        # In a thread: a key-cache miss fetches the identity provider's keys over the network.
+        identity = await asyncio.to_thread(verifier.identity, credential)
     except TokenInvalidError as exc:
         raise ProblemError(ReasonCode.API_UNAUTHENTICATED) from exc
     async with transaction(request) as session:

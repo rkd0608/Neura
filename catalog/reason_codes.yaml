@@ -512,6 +512,12 @@ codes:
     retryable: false
     http_status: 422
     message: The request body failed validation.
+  - code: API_PAYLOAD_TOO_LARGE
+    area: api
+    severity: error
+    retryable: false
+    http_status: 413
+    message: The request body is larger than this operation accepts.
   - code: API_CURSOR_EXPIRED
     area: api
     severity: warning

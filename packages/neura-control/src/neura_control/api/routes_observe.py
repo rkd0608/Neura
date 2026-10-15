@@ -187,6 +187,11 @@ async def stream_events(
         oldest = await session.scalar(
             select(func.min(Event.cursor)).where(Event.project_id == project_id)
         )
+    streams: list[int] = request.app.state.event_streams
+    if streams[0] >= settings.events_max_streams:
+        limited = problem_response(ReasonCode.API_RATE_LIMITED, instance=request.url.path)
+        limited.headers["Retry-After"] = "5"
+        return limited
     if raw_cursor is None:
         position = latest
     else:
@@ -200,37 +205,47 @@ async def stream_events(
             return problem_response(ReasonCode.API_CURSOR_EXPIRED, instance=request.url.path)
 
     async def generate() -> AsyncIterator[bytes]:
-        nonlocal position
-        idle = 0.0
-        deadline = asyncio.get_running_loop().time() + settings.events_max_stream_s
-        # The starting position as an id-only message: a client that reconnects before any
-        # event arrives resumes from here and misses nothing (SSE sets lastEventId from it).
-        yield f"retry: 1000\nid: {position}\n\n".encode()
-        while asyncio.get_running_loop().time() < deadline and not await request.is_disconnected():
-            async with transaction(request) as session:
-                rows = (
-                    await session.scalars(
-                        select(Event)
-                        .where(Event.project_id == project_id, Event.cursor > position)
-                        .order_by(Event.cursor)
-                        .limit(200)
-                    )
-                ).all()
-            for row in rows:
-                position = row.cursor
-                payload = json.dumps(_event_json(row), separators=(",", ":"))
-                yield f"id: {row.cursor}\nevent: {row.type}\ndata: {payload}\n\n".encode()
-            if rows:
-                idle = 0.0
-                continue
-            await asyncio.sleep(settings.events_poll_interval_s)
-            idle += settings.events_poll_interval_s
-            if idle >= settings.events_keepalive_s:
-                idle = 0.0
-                yield b": keepalive\n\n"
+        streams[0] += 1
+        try:
+            async for chunk in _events(request, settings, project_id, position):
+                yield chunk
+        finally:
+            streams[0] -= 1
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+async def _events(
+    request: Request, settings: ControlPlaneSettings, project_id: str, position: int
+) -> AsyncIterator[bytes]:
+    idle = 0.0
+    deadline = asyncio.get_running_loop().time() + settings.events_max_stream_s
+    # The starting position as an id-only message: a client that reconnects before any
+    # event arrives resumes from here and misses nothing (SSE sets lastEventId from it).
+    yield f"retry: 1000\nid: {position}\n\n".encode()
+    while asyncio.get_running_loop().time() < deadline and not await request.is_disconnected():
+        async with transaction(request) as session:
+            rows = (
+                await session.scalars(
+                    select(Event)
+                    .where(Event.project_id == project_id, Event.cursor > position)
+                    .order_by(Event.cursor)
+                    .limit(200)
+                )
+            ).all()
+        for row in rows:
+            position = row.cursor
+            payload = json.dumps(_event_json(row), separators=(",", ":"))
+            yield f"id: {row.cursor}\nevent: {row.type}\ndata: {payload}\n\n".encode()
+        if rows:
+            idle = 0.0
+            continue
+        await asyncio.sleep(settings.events_poll_interval_s)
+        idle += settings.events_poll_interval_s
+        if idle >= settings.events_keepalive_s:
+            idle = 0.0
+            yield b": keepalive\n\n"

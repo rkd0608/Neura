@@ -62,11 +62,14 @@ class Principal:
         self, organization_id: str, project_id: str | None = None
     ) -> frozenset[Permission]:
         granted = self.grants.get(organization_id, frozenset())
-        if (
-            project_id is not None
-            and self.project_ids is not None
-            and project_id not in self.project_ids
-        ):
+        if self.project_ids is None:
+            return granted
+        if project_id is None:
+            # A principal limited to some projects may see its organization but never act on it:
+            # members, API tokens, support grants and new projects are organization-wide, so
+            # allowing them would let a project-limited token grant itself the whole organization.
+            return granted & {Permission.READ}
+        if project_id not in self.project_ids:
             return frozenset()
         return granted
 

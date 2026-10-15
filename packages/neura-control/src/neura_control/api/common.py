@@ -6,11 +6,16 @@ import base64
 import binascii
 import hashlib
 import json
+import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ValidationError
@@ -64,6 +69,38 @@ async def transaction(request: Request) -> AsyncIterator[AsyncSession]:
         yield session
 
 
+class _ResponseBox:
+    """Seals a stored response under a key derived from the client's Idempotency-Key.
+
+    Only the key's SHA-256 is stored, so the response (which can hold a secret shown once, such as
+    a new API token or enrollment token) can be opened only by a retry that presents the same key,
+    never by someone reading the database. Clients should use random keys; the SDK and the console
+    use 128 random bits.
+    """
+
+    def __init__(self, key: str, principal: str) -> None:
+        derived = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"neura-idempotency-v1|" + principal.encode(),
+        ).derive(key.encode())
+        self._aead = AESGCM(derived)
+
+    def seal(self, value: dict[str, Any]) -> dict[str, Any]:
+        nonce = os.urandom(12)
+        sealed = self._aead.encrypt(nonce, json.dumps(value).encode(), None)
+        return {"sealed": base64.b64encode(nonce + sealed).decode()}
+
+    def open(self, stored: dict[str, Any]) -> dict[str, Any]:
+        raw = base64.b64decode(stored["sealed"])
+        try:
+            value: dict[str, Any] = json.loads(self._aead.decrypt(raw[:12], raw[12:], None))
+        except InvalidTag as exc:  # a key whose hash collides, or a tampered row
+            raise ProblemError(ReasonCode.API_IDEMPOTENCY_KEY_REUSED) from exc
+        return value
+
+
 async def idempotent(
     request: Request,
     principal: Principal,
@@ -72,7 +109,8 @@ async def idempotent(
     """Run a POST exactly once per (principal, Idempotency-Key) (design §20.4).
 
     The key row is written in the same transaction as the change, so a crash never leaves a
-    recorded key without its effect. Errors are not recorded: a retry re-evaluates.
+    recorded key without its effect. Errors are not recorded: a retry re-evaluates. The row holds
+    the key's hash and the response sealed with the key itself (``_ResponseBox``).
     """
     key = request.headers.get("Idempotency-Key")
     if key is None:
@@ -81,14 +119,16 @@ async def idempotent(
         raise ProblemError(
             ReasonCode.API_VALIDATION_FAILED, "Idempotency-Key must be 16-128 characters"
         )
-    body_hash = hashlib.sha256(await request.body()).hexdigest()
+    body_hash = hashlib.sha256(await bounded_body(request)).hexdigest()
+    key_hash = hashlib.sha256(key.encode()).hexdigest()
+    box = _ResponseBox(key, principal.subject)
     path = request.url.path
     async with transaction(request) as session:
         inserted = await session.execute(
             insert(IdempotencyKey)
             .values(
                 principal=principal.subject,
-                key=key,
+                key=key_hash,
                 method=request.method,
                 path=path,
                 body_hash=body_hash,
@@ -97,7 +137,7 @@ async def idempotent(
             .returning(IdempotencyKey.key)
         )
         if inserted.first() is None:
-            stored = await session.get(IdempotencyKey, (principal.subject, key))
+            stored = await session.get(IdempotencyKey, (principal.subject, key_hash))
             assert stored is not None
             if (
                 stored.body_hash != body_hash
@@ -106,15 +146,15 @@ async def idempotent(
             ):
                 raise ProblemError(ReasonCode.API_IDEMPOTENCY_KEY_REUSED)
             assert stored.status_code is not None
-            return ApiResult(
-                stored.status_code, stored.response, dict(stored.response_headers or {})
-            ).response()
+            assert stored.response is not None
+            replay = box.open(stored.response)
+            return ApiResult(stored.status_code, replay["body"], replay["headers"]).response()
         result = await work(session)
-        row = await session.get(IdempotencyKey, (principal.subject, key))
+        row = await session.get(IdempotencyKey, (principal.subject, key_hash))
         assert row is not None
         row.status_code = result.status
-        row.response = result.body
-        row.response_headers = result.headers
+        row.response = box.seal({"body": result.body, "headers": result.headers})
+        row.response_headers = {}
     return result.response()
 
 
@@ -141,10 +181,29 @@ def check_version(current: int, expected: int) -> None:
 # --- bodies ------------------------------------------------------------------------------------
 
 
+async def bounded_body(request: Request, limit: int = MAX_BODY_BYTES) -> bytes:
+    """The request body, refused with 413 as soon as it is known to exceed ``limit``: from its
+    Content-Length before anything is read, or while reading a body sent without one."""
+    cached: bytes | None = getattr(request, "_body", None)
+    if cached is not None:
+        return cached
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise ProblemError(ReasonCode.API_PAYLOAD_TOO_LARGE, f"the limit is {limit} bytes")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise ProblemError(ReasonCode.API_PAYLOAD_TOO_LARGE, f"the limit is {limit} bytes")
+        chunks.append(chunk)
+    body = b"".join(chunks)
+    request._body = body  # Starlette's cache: later reads of the body reuse it
+    return body
+
+
 async def read_json(request: Request) -> Any:
-    raw = await request.body()
-    if len(raw) > MAX_BODY_BYTES:
-        raise ProblemError(ReasonCode.API_VALIDATION_FAILED, "request body is too large")
+    raw = await bounded_body(request)
     try:
         return json.loads(raw) if raw else None
     except json.JSONDecodeError as exc:

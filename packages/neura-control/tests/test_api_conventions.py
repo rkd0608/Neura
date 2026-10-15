@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import jwt
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -134,6 +135,48 @@ def test_scoped_tokens(api: Api) -> None:
     )
 
 
+def test_a_project_limited_admin_token_cannot_act_on_the_organization(api: Api) -> None:
+    client, org = api
+    project = new_project(client, org, "limited")["metadata"]["id"]
+    created = client.post(
+        f"/v1/organizations/{org}/api-tokens",
+        {
+            "display_name": "project admin",
+            "scopes": ["admin"],
+            "project_ids": [project],
+            "expires_in_days": 7,
+        },
+    )
+    limited = client.as_token(created.json()["secret"])
+    # Admin of its project...
+    site = limited.post(
+        f"/v1/projects/{project}/sites",
+        {"spec": {"name": "s", "display_name": "S", "offline_authorization_hours": 1}},
+    )
+    assert site.status_code == 201
+    # ...but it cannot widen its own reach through organization-wide resources.
+    escalate = limited.post(
+        f"/v1/organizations/{org}/api-tokens",
+        {"display_name": "everything", "scopes": ["admin"], "expires_in_days": 7},
+    )
+    assert escalate.status_code == 403
+    assert (
+        limited.post(
+            f"/v1/organizations/{org}/members",
+            {"email": "new@example.com", "role": "admin"},
+        ).status_code
+        == 403
+    )
+    assert (
+        limited.post(
+            f"/v1/organizations/{org}/projects",
+            {"spec": {"name": "other", "display_name": "Other"}},
+        ).status_code
+        == 403
+    )
+    assert limited.get(f"/v1/organizations/{org}").status_code == 200
+
+
 def test_expired_token_is_rejected(api: Api, database_url: str) -> None:
     client, org = api
     created = client.post(
@@ -148,6 +191,48 @@ def test_expired_token_is_rejected(api: Api, database_url: str) -> None:
     assert (
         client.as_token(created.json()["secret"]).get(f"/v1/organizations/{org}").status_code == 401
     )
+
+
+def test_oidc_tokens_are_verified_strictly() -> None:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from neura_control.security.oidc import OidcVerifier, TokenInvalidError
+
+    issuer = OidcIssuer()
+    assert issuer.verifier.subject(issuer.token("alice")) == "https://sso.example.com|alice"
+    forged_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    claims = {
+        "iss": "https://sso.example.com",
+        "aud": "neura",
+        "sub": "alice",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 300,
+    }
+    refused = [
+        issuer.token("alice", iss="https://evil.example.com"),  # another issuer
+        jwt.encode(claims, forged_key, algorithm="RS256"),  # signed by someone else
+        jwt.encode(claims, "a shared secret, never accepted" * 2, algorithm="HS256"),  # HMAC
+        jwt.encode(claims, "", algorithm="none"),  # unsigned
+        issuer.token("alice", expires_in=-120),  # expired beyond the leeway
+    ]
+    for token in refused:
+        with pytest.raises(TokenInvalidError):
+            issuer.verifier.subject(token)
+    strict = OidcVerifier(
+        issuer="https://sso.example.com",
+        audience="neura",
+        key_resolver=lambda _: issuer.key.public_key(),
+        allowed_clients=frozenset({"neura-console"}),
+        required_amr=frozenset({"mfa"}),
+    )
+    assert strict.subject(issuer.token("alice", azp="neura-console", amr=["pwd", "mfa"]))
+    for token in (
+        issuer.token("alice", azp="another-app", amr=["mfa"]),
+        issuer.token("alice", azp="neura-console", amr=["pwd"]),
+        issuer.token("alice", azp="neura-console"),
+    ):
+        with pytest.raises(TokenInvalidError):
+            strict.subject(token)
 
 
 def test_oidc_users_get_their_role(make_api: AppFactory) -> None:

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+from typing import Any
+
 import httpx
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from neura_agent import AgentSettings, create_app
 from neura_agent.connectivity import ControlPlaneProbe
@@ -102,3 +107,40 @@ def test_local_status_after_failed_probe() -> None:
         client.portal.call(app.state.probe.check_once)  # type: ignore[union-attr]
         status = client.get("/v1/local/status").json()
     assert status["control_plane"]["reason"] == "AGENT_CONTROL_PLANE_UNREACHABLE"
+
+
+def test_local_approvals_need_the_operator_credential() -> None:
+    token = "ntop_" + "k" * 43
+    settings = AgentSettings(operator_token_sha256=hashlib.sha256(token.encode()).hexdigest())
+    app = create_app(settings, transport=_failing(), start_probe=False)
+    body = {"operator": "ops@site"}
+    with TestClient(app) as client:
+        for headers in ({}, {"Authorization": "Bearer wrong"}, {"Authorization": token}):
+            refused = client.post("/v1/local/approvals/cmd_1/approve", json=body, headers=headers)
+            assert refused.status_code == 401
+        accepted = client.post(
+            "/v1/local/approvals/cmd_1/approve",
+            json=body,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    # Past the credential check: this test agent is not enrolled, so there is nothing to approve.
+    assert accepted.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "insecure",
+    [
+        {"control_plane_insecure": True},
+        {"gateway_tls": False},
+        {"gateway_backend": "simulated"},
+        {"worker_sandbox": "process"},
+        {"require_artifact_signatures": False},
+        {"worker_image_override": "sha256:" + "0" * 64},
+        {"dev_robot_tokens": {"robot-0": "t"}},
+        {"artifact_sources": ["http://weights.example/neura"]},
+    ],
+)
+def test_insecure_settings_need_a_development_machine(insecure: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="development only"):
+        AgentSettings(**insecure)
+    assert AgentSettings(development=True, **insecure)

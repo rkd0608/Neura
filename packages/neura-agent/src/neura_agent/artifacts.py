@@ -202,7 +202,9 @@ class ArtifactStore:
         return True
 
     def _download(self, url: str, digest: str) -> bool:
-        headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
+        # The source token travels only over TLS (httpx drops it on a redirect to another host).
+        secure = url.startswith("https://")
+        headers = {"Authorization": f"Bearer {self._token}"} if self._token and secure else {}
         with self._staging() as (staged, hasher):
             try:
                 with (

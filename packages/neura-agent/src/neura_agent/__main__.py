@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -230,6 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "outbound":
         return _outbound(settings, args)
 
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     runtime = AgentRuntime(settings)
     uvicorn.run(
         create_app(settings, runtime=runtime, start_runtime=True),

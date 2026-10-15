@@ -74,6 +74,8 @@ services:
       NEURA_AGENT_STATE_DIR: /var/lib/neura/agent
       NEURA_AGENT_CONTROL_PLANE_URL: http://control-plane:8080
       NEURA_AGENT_PROBE_INTERVAL_S: "2"
+      # A development stack: the settings marked DEVELOPMENT ONLY below are refused without it.
+      NEURA_AGENT_DEVELOPMENT: "true"
       # DEVELOPMENT ONLY: plaintext to the control plane inside the Compose network.
       NEURA_AGENT_CONTROL_PLANE_INSECURE: "true"
       NEURA_AGENT_GATEWAY_LISTEN: 0.0.0.0:50051

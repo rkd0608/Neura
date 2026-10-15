@@ -381,3 +381,16 @@ def test_remote_upgrades_are_off_until_the_site_operator_allows_them() -> None:
     assert "upgrade_agent" not in AgentSettings().allowed_operations
     allowed = AgentSettings(allowed_operations=["prepare", "upgrade_agent"])
     assert "upgrade_agent" in allowed.allowed_operations
+
+
+async def test_a_remote_upgrade_never_goes_back_to_an_older_release(
+    installed: dict[str, Any],
+) -> None:
+    settings = installed["settings"]
+    request = installed["request"]  # 9.9.2, signed and available
+    newer, core, restarts = upgrader(settings, "9.10.0")
+    await newer.run("cmd_1", "opr_1", request)
+    assert core.reports[-1]["state"] == "Failed"
+    assert core.reports[-1]["reason"] == "AGENT_UPGRADE_REFUSED"
+    assert restarts == []
+    assert Installation(settings.install_dir).current_version() == "9.9.1"

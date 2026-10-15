@@ -129,6 +129,7 @@ class Site:
         self.settings = AgentSettings(
             state_dir=tmp_path / "agent",
             **{
+                "development": True,
                 "gateway_backend": "simulated",
                 "trusted_publisher_keys": [PUBLISHER_HEX],
                 "worker_sandbox": "process",

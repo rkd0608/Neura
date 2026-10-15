@@ -8,6 +8,7 @@ of commands already executed so none runs twice.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -102,7 +103,8 @@ class AuditLog:
     def write(self, event: str, **fields: Any) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps({"at": time.time(), "event": event, **fields}, sort_keys=True)
-        with self.path.open("a", encoding="utf-8") as handle:
+        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
             handle.write(line + "\n")
 
     def tail(self, limit: int = 200) -> list[dict[str, Any]]:

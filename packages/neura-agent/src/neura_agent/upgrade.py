@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from packaging.version import InvalidVersion, Version
 
 from neura.v1 import site_pb2
 from neura_agent.releases import (
@@ -101,6 +102,14 @@ class Upgrader:
                 ReasonCode.AGENT_UPGRADE_REFUSED,
                 "this agent was not installed with the installer; upgrade it the way it was "
                 "installed",
+            )
+            return
+        if _older(request.version, self.version):
+            fail(
+                ReasonCode.AGENT_UPGRADE_REFUSED,
+                f"{request.version} is older than the running {self.version}: an upgrade never "
+                "goes back (an older signed release may have known flaws); downgrade at the site "
+                "with the installer",
             )
             return
         if request.version == self.version:
@@ -258,3 +267,11 @@ class Upgrader:
     @staticmethod
     def _result(state: UpgradeState) -> dict[str, Any]:
         return {"agent_version_from": state.from_version, "agent_version_to": state.to_version}
+
+
+def _older(candidate: str, current: str) -> bool:
+    """Whether ``candidate`` is an older release than ``current`` (PEP 440 ordering)."""
+    try:
+        return Version(candidate) < Version(current)
+    except InvalidVersion:
+        return True  # not a version we can order: never treat it as newer

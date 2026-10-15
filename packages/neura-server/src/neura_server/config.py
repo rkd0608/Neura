@@ -166,6 +166,8 @@ class GatewayConfig(_Model):
     lease_ttl_ms: int = Field(default=2000, ge=100)
     lease_store: Path | None = None  # None: in memory (development only)
     max_message_bytes: int = Field(default=16 * 1024 * 1024, ge=1024)
+    # RPCs in progress at once (each robot holds one stream plus short control calls).
+    max_concurrent_rpcs: int = Field(default=4096, ge=16)
     default_rtt_ms: float = Field(default=20, gt=0)
     devices: list[DeviceConfig] = Field(default_factory=list)
     deployments: list[DeploymentConfig] = Field(default_factory=list)

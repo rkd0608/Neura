@@ -276,7 +276,9 @@ class GatewayServer:
             ("grpc.max_receive_message_length", self.config.max_message_bytes),
             ("grpc.max_send_message_length", self.config.max_message_bytes),
         ]
-        self._server = grpc.aio.server(options=options)
+        self._server = grpc.aio.server(
+            options=options, maximum_concurrent_rpcs=self.config.max_concurrent_rpcs
+        )
         dataplane_pb2_grpc.add_RobotGatewayServicer_to_server(_Servicer(self), self._server)
         if self.config.tls is not None:
             self._tls = _RotatingTls(self.config.tls)

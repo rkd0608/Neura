@@ -44,6 +44,10 @@ class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="NEURA_AGENT_", frozen=True, extra="ignore")
 
     state_dir: Path = Path("/var/lib/neura-agent")
+    # Development stacks and tests only. Every setting below marked DEVELOPMENT ONLY, and every
+    # insecure choice (plaintext to the control plane, robots without TLS, the simulated policy,
+    # workers outside the sandbox, unsigned artifacts), is refused unless this is set.
+    development: bool = False
     # Used before enrollment for the reachability probe; afterwards the enrolled endpoint is used.
     control_plane_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8080")
     # The local site API binds to loopback by default; operators expose it deliberately.
@@ -154,3 +158,29 @@ class AgentSettings(BaseSettings):
     # DEVELOPMENT ONLY: robot name -> plain device token, so a local stack works without issuing
     # credentials through the local API.
     dev_robot_tokens: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _insecure_only_in_development(self) -> AgentSettings:
+        insecure = {
+            "control_plane_insecure": self.control_plane_insecure,
+            "gateway_tls=false": not self.gateway_tls,
+            "gateway_backend=simulated": self.gateway_backend == "simulated",
+            "worker_sandbox=process": (
+                self.gateway_backend == "workers" and self.worker_sandbox == "process"
+            ),
+            "require_artifact_signatures=false": not self.require_artifact_signatures,
+            "worker_image_override": self.worker_image_override is not None,
+            "dev_adapter_override": self.dev_adapter_override is not None,
+            "dev_robot_certificate_dir": self.dev_robot_certificate_dir is not None,
+            "dev_robot_tokens": self.dev_robot_tokens is not None,
+            "artifact_sources over plain http": any(
+                source.startswith("http://") for source in self.artifact_sources
+            ),
+        }
+        chosen = [name for name, on in insecure.items() if on]
+        if chosen and not self.development:
+            raise ValueError(
+                f"{', '.join(chosen)}: development only; set NEURA_AGENT_DEVELOPMENT=true on a "
+                "development machine"
+            )
+        return self

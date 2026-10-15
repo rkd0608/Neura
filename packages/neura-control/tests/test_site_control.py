@@ -338,7 +338,9 @@ def test_agents_fetch_sealed_weights_from_the_registry_and_open_them_at_the_site
         manifest_public_key_hex=enrolled.manifest_public_key.hex(),
         manifest_key_id=enrolled.manifest_key_id,
     )
-    agent_settings = AgentSettings(state_dir=tmp_path / "agent", control_plane_insecure=True)
+    agent_settings = AgentSettings(
+        state_dir=tmp_path / "agent", control_plane_insecure=True, development=True
+    )
 
     def store(name: str, agent_key: Ed25519PrivateKey, **keys: Any) -> ArtifactStore:
         return ArtifactStore(
@@ -533,7 +535,12 @@ def test_agents_enroll_over_tls_and_refuse_an_unknown_server(
 
     def runtime(name: str, **settings: Any) -> AgentRuntime:
         return AgentRuntime(
-            AgentSettings(state_dir=tmp_path / name, gateway_backend="simulated", **settings),
+            AgentSettings(
+                state_dir=tmp_path / name,
+                gateway_backend="simulated",
+                development=True,
+                **settings,
+            ),
             command_runner=lambda args: None,
         )
 
@@ -622,6 +629,7 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
     agent_settings = AgentSettings(
         state_dir=tmp_path / "agent",
         gateway_backend="simulated",
+        development=True,
         control_plane_ca_file=ca,
         reconnect_max_backoff_s=0.5,
     )

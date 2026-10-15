@@ -130,7 +130,8 @@ def test_weights_are_fetched_from_an_http_source_and_verified(
     store = ArtifactStore(tmp_path / "store", [url], token="registry-token")
     out = store.checkout(artifact_for(files))
     assert (out / "model.safetensors").read_bytes() == files["model.safetensors"]
-    assert set(seen) == {"Bearer registry-token"}
+    # The source token is sent over TLS only, never to a plain-http mirror like this one.
+    assert set(seen) == {""}
 
     # A source serving the wrong bytes under a digest is refused.
     bad = {"config.json": b"original"}

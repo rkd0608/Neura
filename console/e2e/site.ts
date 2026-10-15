@@ -23,6 +23,7 @@ export class Site {
       ...process.env,
       NEURA_AGENT_STATE_DIR: this.stateDir,
       NEURA_AGENT_CONTROL_PLANE_URL: "http://127.0.0.1:18080",
+      NEURA_AGENT_DEVELOPMENT: "true",
       NEURA_AGENT_CONTROL_PLANE_INSECURE: "true",
       NEURA_AGENT_LOCAL_PORT: "18090",
       NEURA_AGENT_GATEWAY_LISTEN: "127.0.0.1:18051",

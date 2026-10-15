@@ -17,6 +17,7 @@ dependencies = [
     "neura-runtime",
     "neura-server",
     "prometheus-client>=0.21",
+    "packaging>=24",
 ]
 
 [project.scripts]

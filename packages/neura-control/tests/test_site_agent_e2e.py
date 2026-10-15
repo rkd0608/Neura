@@ -207,6 +207,7 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
     token = client.post(f"/v1/sites/{ids['site']}/enrollment-tokens", {}).json()["secret"]
     agent_settings = AgentSettings(
         state_dir=tmp_path / "agent",
+        development=True,
         control_plane_insecure=True,
         gateway_listen="127.0.0.1:0",
         gateway_status_listen=None,

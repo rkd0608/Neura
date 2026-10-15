@@ -339,6 +339,8 @@ class GatewayCore:
             now_us + freshness.max_observation_age_at_dispatch_us - rtt,
             now_us + freshness.request_timeout_us - 2 * rtt,
         )
+        # After this the chunk would reach the robot too old to accept.
+        accept_by = now_us + freshness.max_observation_age_at_acceptance_us - 2 * rtt
         request = InferenceRequest(
             session_id=env.session_id,
             envelope=env,
@@ -347,6 +349,7 @@ class GatewayCore:
             received_at_us=now_us,
             deadline_us=deadline,
             dispatch_by_us=dispatch_by,
+            accept_by_us=accept_by,
         )
         dropped = session.group.scheduler.submit(request)
         return self._rejections(dropped)

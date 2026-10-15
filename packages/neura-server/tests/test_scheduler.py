@@ -230,3 +230,23 @@ def test_the_window_never_costs_a_deadline_or_freshness() -> None:
     ):
         scheduler.submit(request("a"))
         assert sessions(scheduler.next_batch(0)[0]) == ["a"]
+
+
+def test_batches_do_not_grow_past_what_robots_can_accept() -> None:
+    s = Scheduler(profile(), max_batch=8)
+    # Three (15 ms, interpolated) would reach a's robot too old; two (12 ms) still in time.
+    s.submit(request("a", received_ms=0))
+    accept = s._queued["a"]
+    accept.accept_by_us = 14 * MS
+    for name in "bcdefgh":
+        s.submit(request(name))
+    batch, _ = s.next_batch(0)
+    assert len(sessions(batch)) == 2
+    assert "a" in sessions(batch)
+
+
+def test_the_window_respects_acceptance_freshness() -> None:
+    s = Scheduler(profile(), max_batch=4, batch_window_us=5 * MS)
+    s.submit(request("a"))
+    s._queued["a"].accept_by_us = 14 * MS  # 5 ms wait + 12 ms for two would be too late
+    assert sessions(s.next_batch(0)[0]) == ["a"]

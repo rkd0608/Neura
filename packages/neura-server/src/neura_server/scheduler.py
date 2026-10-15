@@ -34,6 +34,8 @@ class InferenceRequest:
     received_at_us: int
     deadline_us: int  # when the robot's queue is predicted to starve
     dispatch_by_us: int  # after this the observation is too old to dispatch
+    # A result completed after this reaches the robot too old to be accepted.
+    accept_by_us: int = 2**62
     arrival: int = 0
     skips: int = 0
 
@@ -186,11 +188,15 @@ class Scheduler:
             trial = [*members, candidate]
             completion = now_us + self.profile.p99_us(len(trial))
             # Late members do not constrain batching: delaying them further costs less than
-            # leaving the GPU underused while others wait. Feasible members must stay feasible.
-            feasible = [
-                r.deadline_us for r in trial if r.deadline_us >= now_us + self.profile.p99_us(1)
-            ]
+            # leaving the GPU underused while others wait. Feasible members must stay feasible,
+            # and a batch must not grow until its chunks would be too old for robots to accept:
+            # a forward pass the robot discards is wasted.
+            alone = now_us + self.profile.p99_us(1)
+            feasible = [r.deadline_us for r in trial if r.deadline_us >= alone]
             if feasible and completion > min(feasible):
+                continue
+            acceptable = [r.accept_by_us for r in trial if r.accept_by_us >= alone]
+            if acceptable and completion > min(acceptable):
                 continue
             members = trial
         chosen = {r.session_id for r in members}
@@ -228,12 +234,13 @@ class Scheduler:
         # Every queued request must still be dispatchable and, if it can still make its
         # deadline now, make it after the wait with one more request in the batch.
         completion = until + self.profile.p99_us(len(queued) + 1)
+        now_completion = now_us + self.profile.p99_us(len(queued))
         for request in queued:
             if request.dispatch_by_us < until:
                 return None
-            feasible_now = request.deadline_us >= now_us + self.profile.p99_us(len(queued))
-            if feasible_now and completion > request.deadline_us:
-                return None
+            for limit in (request.deadline_us, request.accept_by_us):
+                if limit >= now_completion and completion > limit:
+                    return None
         return until
 
     def complete(self, batch: Batch, now_us: int) -> list[InferenceRequest]:

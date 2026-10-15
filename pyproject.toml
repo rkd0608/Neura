@@ -57,6 +57,7 @@ target-version = "py313"
 extend-exclude = [
     "packages/neura-proto/src/neura",
     "packages/neura-contracts/src/neura_contracts/reason_codes.py",
+    "packages/neura-contracts/src/neura_contracts/outbound_schema.py",
 ]
 
 [tool.ruff.lint]

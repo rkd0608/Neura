@@ -38,6 +38,7 @@ from neura_control.database import database_reachable
 from neura_control.db.engine import create_engine, session_factory
 from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey
 from neura_control.grpc_site import start_agent_server
+from neura_control.metrics import ControlPlaneMetrics, route_template
 from neura_control.problems import (
     ProblemError,
     handle_http_exception,
@@ -178,10 +179,17 @@ def create_app(
             await _dev_bootstrap(app, settings)
         signer = ManifestSigner(settings.manifest_signing_key)
         app.state.signer = signer
+        metrics_server = None
+        if settings.metrics_listen:
+            metrics_server, metrics_thread = metrics.serve(settings.metrics_listen)
         agent_server = None
         if settings.agent_grpc_listen:
             agent_server, app.state.site_control, app.state.agent_port = await start_agent_server(
-                app.state.sessions, signer, settings, weights=app.state.sealed_weights
+                app.state.sessions,
+                signer,
+                settings,
+                weights=app.state.sealed_weights,
+                metrics=metrics,
             )
         stop_pruning = asyncio.Event()
         pruner = asyncio.create_task(_prune(app, settings, stop_pruning))
@@ -194,6 +202,10 @@ def create_app(
             stop_pruning.set()
             await pruner
             await engine.dispose()
+            if metrics_server is not None:
+                metrics_server.shutdown()
+                metrics_server.server_close()
+                metrics_thread.join(timeout=5)
 
     app = FastAPI(
         title="Neura control plane",
@@ -207,6 +219,8 @@ def create_app(
     )
     app.state.settings = settings
     app.state.oidc = oidc_verifier
+    metrics = ControlPlaneMetrics()
+    app.state.metrics = metrics
     app.state.sealed_weights = (
         SealedWeightsStore(settings.sealed_weights_dir, settings.sealed_weights_max_bytes)
         if settings.sealed_weights_dir is not None
@@ -243,8 +257,15 @@ def create_app(
                 response.headers["Retry-After"] = str(max(1, round(wait)))
                 response.headers["X-Request-Id"] = request_id
                 return response
+        started = time.perf_counter()
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
+        metrics.request(
+            route_template(request.scope),
+            request.method,
+            response.status_code,
+            time.perf_counter() - started,
+        )
         return response
 
     @app.get("/healthz", include_in_schema=False)

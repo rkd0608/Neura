@@ -1,0 +1,152 @@
+# What a site agent may send to Neura's control plane (design §18.2). This is the published,
+# versioned allowlist: the agent sends only the fields listed here and drops anything else before
+# it leaves the server. Every message it sends is recorded in the site's outbound ledger, so the
+# customer can check what was sent instead of trusting this file.
+#
+# Telemetry modes (NEURA_AGENT_TELEMETRY_MODE):
+# - standard: every field listed here.
+# - minimal: only fields marked `minimal: true`. Neura then receives what it needs to deploy and
+#   operate the site (health, versions, identifiers, states and reason codes) and nothing else:
+#   no free text, no hostnames or hardware serial numbers, no metrics. Metrics stay at the site,
+#   on the components' Prometheus endpoints, for the customer's own monitoring.
+#
+# Paths are dotted protobuf field names (repeated fields and maps by their own name). Result paths
+# are keys of operation.result_json; `*` matches any key of a map. Payloads (camera images, robot
+# state, actions, instructions) are not in any message, by construction of the protocol.
+#
+# Regenerate the Python module after editing: `make gen` (tools/gen_outbound.py).
+schema_version: 1
+
+messages:
+  # SiteControl.Connect: the agent's stream.
+  agent:
+    hello.protocol_version: {minimal: true, description: "Protocol version the agent speaks."}
+    hello.site_id: {minimal: true, description: "The site this server belongs to."}
+    hello.agent_version: {minimal: true, description: "Agent software version."}
+    hello.committed_generation: {minimal: true, description: "Highest desired-state generation committed at the site."}
+    ack.desired_state_generation: {minimal: true, description: "Generation of desired state acknowledged."}
+    ack.command_id: {minimal: true, description: "Command acknowledged."}
+    ack.accepted: {minimal: true, description: "Whether it was accepted."}
+    ack.reason.code: {minimal: true, description: "Reason code from the catalog."}
+    ack.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
+    status.agent_time_us: {minimal: true, description: "Agent monotonic time, for ordering reports."}
+    status.components.kind: {minimal: true, description: "Kind of a reported component (robot, server, revision)."}
+    status.components.id: {minimal: true, description: "Its Neura identifier."}
+    status.components.phase: {minimal: true, description: "Its phase (Ready, Running, NeedsAttention, ...)."}
+    status.components.reason.code: {minimal: true, description: "Reason code from the catalog."}
+    status.components.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
+    status.components.observed_revision_id: {minimal: true, description: "Revision observed on it."}
+    status.sessions.session_id: {minimal: true, description: "Robot session identifier."}
+    status.sessions.robot_name: {minimal: true, description: "Robot name, as registered in the control plane."}
+    status.sessions.revision_id: {minimal: true, description: "Revision the robot runs."}
+    status.sessions.lease_generation: {minimal: true, description: "Serving lease generation."}
+    status.sessions.task_epoch: {minimal: true, description: "Robot task epoch."}
+    status.sessions.state: {minimal: true, description: "Robot runtime state."}
+    status.sessions.reason.code: {minimal: true, description: "Reason code from the catalog."}
+    status.sessions.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
+    status.sessions.metrics: {minimal: false, description: "Session counters: chunks, observations, rtt_p99_us, dispatched_actions, queued_actions."}
+    status.faults.fault_key: {minimal: true, description: "Stable fault identifier, for deduplication."}
+    status.faults.robot_name: {minimal: true, description: "Robot the fault is on."}
+    status.faults.session_id: {minimal: true, description: "Session the fault is on."}
+    status.faults.revision_id: {minimal: true, description: "Revision the robot ran."}
+    status.faults.reason.code: {minimal: true, description: "Reason code from the catalog."}
+    status.faults.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
+    status.faults.latched: {minimal: true, description: "Whether the fault is latched."}
+    status.faults.local_response: {minimal: true, description: "What the robot did locally (hold, stop, ...)."}
+    status.faults.occurred_at_unix_us: {minimal: true, description: "When it occurred (site wall clock)."}
+    status.offline_authorization_remaining_s: {minimal: true, description: "Offline authorization left."}
+    status.contact_nonce: {minimal: true, description: "Random bytes the control plane signs to prove contact."}
+    telemetry.schema_version: {minimal: false, description: "Version of the metric catalog below."}
+    telemetry.sequence: {minimal: false, description: "Batch sequence number."}
+    telemetry.metrics.name: {minimal: false, description: "A metric from the catalog below."}
+    telemetry.metrics.labels: {minimal: false, description: "Its labels, from the catalog below."}
+    telemetry.metrics.value: {minimal: false, description: "Its value."}
+    telemetry.metrics.agent_time_us: {minimal: false, description: "Agent monotonic time."}
+    operation.command_id: {minimal: true, description: "Command the report is for."}
+    operation.operation_id: {minimal: true, description: "Operation the report is for."}
+    operation.state: {minimal: true, description: "Running, Succeeded, Failed or Cancelled."}
+    operation.reason.code: {minimal: true, description: "Reason code from the catalog."}
+    operation.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
+    operation.message: {minimal: false, description: "Progress or failure detail (free text)."}
+    operation.result_json: {minimal: true, description: "The operation's result; only the keys under `results` below."}
+    facts.hostname: {minimal: false, description: "The server's host name."}
+    facts.driver_version: {minimal: true, description: "NVIDIA driver version."}
+    facts.cuda_version: {minimal: true, description: "CUDA version."}
+    facts.gpus.index: {minimal: true, description: "GPU index."}
+    facts.gpus.uuid: {minimal: false, description: "GPU UUID (a hardware identifier)."}
+    facts.gpus.model: {minimal: true, description: "GPU model."}
+    facts.gpus.memory_mib: {minimal: true, description: "GPU memory."}
+    facts.gpus.mig_enabled: {minimal: true, description: "Whether MIG is on."}
+    facts.preflight.name: {minimal: true, description: "Preflight check name."}
+    facts.preflight.passed: {minimal: true, description: "Whether it passed."}
+    facts.preflight.reason: {minimal: true, description: "Reason code when it failed."}
+    facts.preflight.detail: {minimal: false, description: "What was found (free text)."}
+    facts.preflight.fix: {minimal: false, description: "How to fix it (free text)."}
+    certificate_request.csr: {minimal: true, description: "Signing request for the agent's next TLS client certificate (public key only)."}
+  # SiteControl.Enroll: sent once, with the one-time enrollment token.
+  enroll:
+    protocol_version: {minimal: true, description: "Protocol version the agent speaks."}
+    enrollment_token: {minimal: true, description: "The one-time enrollment token."}
+    public_key: {minimal: true, description: "The agent's Ed25519 public key."}
+    agent_version: {minimal: true, description: "Agent software version."}
+    tls_csr: {minimal: true, description: "Signing request for the agent's TLS client certificate (public key only)."}
+    facts.hostname: {minimal: false, description: "The server's host name."}
+    facts.driver_version: {minimal: true, description: "NVIDIA driver version."}
+    facts.cuda_version: {minimal: true, description: "CUDA version."}
+    facts.gpus.index: {minimal: true, description: "GPU index."}
+    facts.gpus.uuid: {minimal: false, description: "GPU UUID (a hardware identifier)."}
+    facts.gpus.model: {minimal: true, description: "GPU model."}
+    facts.gpus.memory_mib: {minimal: true, description: "GPU memory."}
+    facts.gpus.mig_enabled: {minimal: true, description: "Whether MIG is on."}
+    facts.preflight.name: {minimal: true, description: "Preflight check name."}
+    facts.preflight.passed: {minimal: true, description: "Whether it passed."}
+    facts.preflight.reason: {minimal: true, description: "Reason code when it failed."}
+    facts.preflight.detail: {minimal: false, description: "What was found (free text)."}
+    facts.preflight.fix: {minimal: false, description: "How to fix it (free text)."}
+  # SiteControl.FetchSealedWeights: a request for a sealed weight file from Neura's registry.
+  fetch_sealed_weights:
+    digest: {minimal: true, description: "Digest of the weight file, as the artifact lists it."}
+
+# Keys of operation.result_json.
+results:
+  revision_digest: {minimal: true, description: "Prepare: the revision digest verified at the site."}
+  capacity.max_robots: {minimal: true, description: "Prepare: robots this server can serve at the profile."}
+  capacity.limiting_factor: {minimal: true, description: "Prepare: what limits that number."}
+  capacity.source: {minimal: true, description: "Prepare: configured or measured latency profile."}
+  capacity.sharing_case: {minimal: true, description: "Prepare: how the batch group shares its device."}
+  capacity.assumptions.control_period_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.starvation_budget_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.request_interval_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.link_allowance_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.dispatch_freshness_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.acceptance_freshness_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.max_batch: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.batch_window_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.reserve_fraction: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.latency_p99_ms_by_batch.*: {minimal: false, description: "Prepare: measured latency per batch size."}
+  capacity.assumptions.memory_available_mib: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.device: {minimal: false, description: "Prepare: device the model was placed on."}
+  capacity.assumptions.co_located_groups: {minimal: false, description: "Prepare: other models on that device."}
+  approved_by: {minimal: false, description: "Activation: the site operator who approved."}
+  refused: {minimal: true, description: "Activation: refused locally."}
+  refused_by: {minimal: false, description: "Activation: the site operator who refused."}
+  revision_id: {minimal: true, description: "Activation: the revision robots now run."}
+  robot_ids: {minimal: true, description: "Activation: the robots that switched."}
+  manifest_generation: {minimal: true, description: "Diagnostics: committed generation."}
+  prepared: {minimal: true, description: "Diagnostics: prepared revisions."}
+  assignments.*.current: {minimal: true, description: "Diagnostics: revision a robot runs."}
+  assignments.*.next: {minimal: true, description: "Diagnostics: revision it switches to."}
+  pending_activations: {minimal: true, description: "Diagnostics: activations awaiting approval."}
+  gateway_running: {minimal: true, description: "Diagnostics: whether the gateway runs."}
+  gateway_suspended: {minimal: true, description: "Diagnostics: whether serving is suspended."}
+
+# TelemetryBatch metrics (standard mode only). Labels not listed are dropped.
+metrics:
+  deadline_miss_rate:
+    labels: []
+    unit: ratio
+    description: Share of dispatched inference requests that finished after their robot's deadline, per batch group.
+  robots_per_gpu:
+    labels: []
+    unit: robots
+    description: Robot sessions served per GPU Neura may use.

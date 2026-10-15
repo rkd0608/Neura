@@ -1,0 +1,20 @@
+# Prometheus for a Neura deployment (the dev stack's `observability` profile, or as a template).
+# Each component serves /metrics for the customer's own monitoring (design §18.2): nothing here
+# is sent to Neura.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: neura-control-plane
+    static_configs:
+      - targets: ["control-plane:9464"]
+  - job_name: neura-site-agent
+    static_configs:
+      - targets: ["site-agent:8090"]
+  - job_name: neura-gateway
+    static_configs:
+      - targets: ["site-agent:8091"]

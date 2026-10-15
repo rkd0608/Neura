@@ -130,6 +130,13 @@ class ControlConnection:
             )
 
     async def _outgoing(self, stop: asyncio.Event) -> AsyncIterator[site_pb2.AgentMessage]:
+        """Every message on the stream, through the outbound schema and into the ledger."""
+        async for message in self._messages(stop):
+            sent = self.core.outbound.prepare("agent", message)
+            if sent is not None:
+                yield sent
+
+    async def _messages(self, stop: asyncio.Event) -> AsyncIterator[site_pb2.AgentMessage]:
         yield site_pb2.AgentMessage(
             hello=site_pb2.AgentHello(
                 protocol_version=common_pb2.PROTOCOL_VERSION_1,

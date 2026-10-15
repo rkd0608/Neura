@@ -109,6 +109,13 @@ class AgentSettings(BaseSettings):
     # Round trip to robots assumed by capacity estimates until robots report measured ones.
     capacity_rtt_p99_ms: float = Field(default=20.0, gt=0)
 
+    # --- what leaves the site (design §18.2) ---
+    # standard: every field of the published outbound schema (catalog/outbound.yaml). minimal:
+    # only health, versions, identifiers, states and reason codes; metrics stay at the site.
+    telemetry_mode: Literal["standard", "minimal"] = "standard"
+    # The outbound ledger (<state_dir>/outbound) keeps at most this much, newest first.
+    outbound_ledger_max_mib: int = Field(default=256, ge=32, le=1 << 20)
+
     # --- preflight ---
     require_gpu: bool = False
     min_free_disk_mib: int = Field(default=1024, ge=0)

@@ -930,8 +930,8 @@ export interface components {
        */
       sharing_case?:
         "same_weights" | "multi_adapter" | "co_located_fine_tunes" | "different_architectures";
-      /** @description The inputs of the estimate, so it can be checked and reproduced. */
-      assumptions: {
+      /** @description The inputs of the estimate, so it can be checked and reproduced. Absent when the site runs minimal telemetry (design §18.2): its inputs, including measured latency, stay at the site. */
+      assumptions?: {
         control_period_ms?: number;
         starvation_budget_ms?: number;
         request_interval_ms?: number;

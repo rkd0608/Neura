@@ -883,3 +883,46 @@ def test_operators_trust_and_distrust_publishers_with_the_cli(
     assert trust.trusted_publishers(settings) == [signing.raw_public_key(other)]
     assert main(["distrust-publisher", signing.key_id(signing.raw_public_key(PUBLISHER))]) == 1
     assert main(["trust-publisher", "not-a-key"]) == 1
+
+
+async def test_the_agent_exports_its_state_for_the_customers_monitoring(site: Site) -> None:
+    from types import SimpleNamespace
+
+    from prometheus_client.parser import text_string_to_metric_families
+
+    from neura_agent.identity import IdentityStore
+    from neura_agent.metrics import EXPORTED, AgentMetrics
+
+    await prepared(site, REV1)
+    site.core.outbound.prepare(
+        "agent", site_pb2.AgentMessage(hello=site_pb2.AgentHello(site_id=SITE))
+    )
+    identities = IdentityStore(site.settings.state_dir)
+    identities.save(site.identity)
+    runtime = SimpleNamespace(
+        settings=site.settings,
+        identities=identities,
+        outbound=site.core.outbound,
+        core=site.core,
+        connection=None,
+    )
+    exposition = AgentMetrics(runtime, "9.9").exposition().decode()  # type: ignore[arg-type]
+    families = {f.name: f for f in text_string_to_metric_families(exposition)}
+    assert set(families) <= EXPORTED
+
+    def value(name: str, **labels: str) -> float:
+        return next(
+            s.value
+            for s in families[name].samples
+            if all(s.labels.get(k) == v for k, v in labels.items())
+        )
+
+    assert value("neura_agent_info", telemetry_mode="standard", site_id=SITE) == 1
+    assert value("neura_agent_enrolled") == 1
+    assert value("neura_agent_manifest_generation") == 1
+    assert value("neura_agent_prepared_revisions") == 1
+    assert value("neura_agent_operations", state="Succeeded") == 1
+    assert value("neura_agent_artifact_checks", result="verified") == 1
+    assert value("neura_agent_outbound_messages", kind="hello") == 1
+    assert value("neura_agent_connected") == 0
+    assert value("neura_agent_certificate_expiry_timestamp_seconds", certificate="site_ca") > 0

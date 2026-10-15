@@ -12,6 +12,7 @@ import json
 import logging
 import secrets
 import time
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from neura_agent.gateway import (
     write_revision_documents,
 )
 from neura_agent.identity import Identity, atomic_write
+from neura_agent.outbound import Outbound, site_outbound
 from neura_agent.settings import AgentSettings
 from neura_agent.site_pki import SitePki, default_gateway_names, unexpired
 from neura_agent.state import Activation, AgentState, Assignment, AuditLog, StateStore
@@ -83,8 +85,13 @@ class AgentCore:
         *,
         clock: Callable[[], float] = time.time,
         cuda_indexes: Callable[[], list[int]] = list,
+        outbound: Outbound | None = None,
     ) -> None:
         self.settings = settings
+        self.outbound = outbound or site_outbound(settings)
+        # For the agent's metrics: operations by final state, artifact checks by result.
+        self.operations: Counter[str] = Counter()
+        self.artifact_checks: Counter[str] = Counter()
         self.identity = identity
         self.gateway = gateway
         self._clock = clock
@@ -199,6 +206,8 @@ class AgentCore:
         self.state.reports = {k: v for k, v in self.state.reports.items() if v["at"] >= cutoff}
         self._save()
         self.audit.write("operation_report", **{k: v for k, v in report.items() if k != "at"})
+        if state in ("Succeeded", "Failed", "Cancelled"):
+            self.operations[state] += 1
         self._send(self.report_message(report))
 
     @staticmethod
@@ -450,6 +459,7 @@ class AgentCore:
         try:
             self._verify_publisher(revision["documents"]["model_artifact"])
         except signing.SignatureError as exc:
+            self.artifact_checks[exc.code.value] += 1
             self.audit.write(
                 "artifact.refused", revision=revision_id, reason=exc.code.value, detail=str(exc)
             )
@@ -522,6 +532,7 @@ class AgentCore:
                 ReasonCode.AGENT_ARTIFACT_UNTRUSTED,
             ) from exc
         signer = signing.trusted_signer(entry["digest"], entry.get("signatures", []), trusted)
+        self.artifact_checks["verified"] += 1
         self.audit.write("artifact.verified", artifact=entry["digest"], publisher=signer)
 
     def _placed_groups(self, excluding: str) -> list[placement.PlacedGroup]:

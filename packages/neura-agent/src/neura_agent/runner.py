@@ -14,6 +14,7 @@ from neura_agent.connection import ControlConnection, agent_version, open_channe
 from neura_agent.core import AgentCore
 from neura_agent.gateway import GatewayRunner, SubprocessGateway
 from neura_agent.identity import Identity, IdentityStore
+from neura_agent.outbound import site_outbound
 from neura_agent.preflight import Runner, collect_facts, run_command
 from neura_agent.registry import NeuraRegistry
 from neura_agent.settings import AgentSettings
@@ -42,6 +43,7 @@ class AgentRuntime:
             settings.gateway_command, settings.gateway_status_listen or "127.0.0.1:8091"
         )
         self._runner = command_runner
+        self.outbound = site_outbound(settings)
         self.core: AgentCore | None = None
         self.connection: ControlConnection | None = None
         self._stop = asyncio.Event()
@@ -77,18 +79,20 @@ class AgentRuntime:
         key = self.identities.load_or_create_key()
         tls = AgentTls(self.settings.state_dir)
         csr = tls.request(facts.hostname or "server")
+        request = self.outbound.prepare(
+            "enroll",
+            site_pb2.EnrollRequest(
+                protocol_version=common_pb2.PROTOCOL_VERSION_1,
+                enrollment_token=token,
+                public_key=IdentityStore.public_key_raw(key),
+                agent_version=agent_version(),
+                facts=facts,
+                tls_csr=csr,
+            ),
+        )
+        assert request is not None  # enrollment fields are all sent in every mode
         async with open_channel(endpoint, self.settings) as channel:
-            response = await site_pb2_grpc.SiteControlStub(channel).Enroll(
-                site_pb2.EnrollRequest(
-                    protocol_version=common_pb2.PROTOCOL_VERSION_1,
-                    enrollment_token=token,
-                    public_key=IdentityStore.public_key_raw(key),
-                    agent_version=agent_version(),
-                    facts=facts,
-                    tls_csr=csr,
-                ),
-                timeout=15,
-            )
+            response = await site_pb2_grpc.SiteControlStub(channel).Enroll(request, timeout=15)
         if response.WhichOneof("result") != "enrolled":
             raise EnrollmentError(
                 response.rejected.code, response.rejected.message or "enrollment refused"
@@ -129,8 +133,16 @@ class AgentRuntime:
         if identity is None:
             return
         key = self.identities.load_or_create_key()
-        self.core = AgentCore(self.settings, identity, self.gateway, cuda_indexes=self.cuda_indexes)
-        self.core.artifacts.registry = NeuraRegistry(self.settings, identity, key)
+        self.core = AgentCore(
+            self.settings,
+            identity,
+            self.gateway,
+            cuda_indexes=self.cuda_indexes,
+            outbound=self.outbound,
+        )
+        self.core.artifacts.registry = NeuraRegistry(
+            self.settings, identity, key, outbound=self.outbound
+        )
         self.core.recover()
         await self.core.reconcile()  # resume serving committed state immediately, cloud or not
         self.connection = ControlConnection(
@@ -166,5 +178,8 @@ class AgentRuntime:
             return
         status = await self.gateway.status()
         self.core.outbox.put_nowait(self.core.status_message(status))
-        self._telemetry_sequence += 1
-        self.core.outbox.put_nowait(self.core.telemetry_message(status, self._telemetry_sequence))
+        if self.settings.telemetry_mode == "standard":  # minimal: metrics stay at the site
+            self._telemetry_sequence += 1
+            self.core.outbox.put_nowait(
+                self.core.telemetry_message(status, self._telemetry_sequence)
+            )

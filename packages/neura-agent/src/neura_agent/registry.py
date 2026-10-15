@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from neura.v1 import site_pb2, site_pb2_grpc
 from neura_agent.agent_tls import AgentTls
 from neura_agent.identity import Identity, connection_token
+from neura_agent.outbound import Outbound, site_outbound
 from neura_agent.settings import AgentSettings
 
 log = logging.getLogger("neura.agent.registry")
@@ -33,12 +34,14 @@ class NeuraRegistry:
         identity: Identity,
         key: Ed25519PrivateKey,
         *,
+        outbound: Outbound | None = None,
         timeout_s: float = 3600.0,
     ) -> None:
         self._settings = settings
         self._identity = identity
         self._key = key
         self._tls = AgentTls(settings.state_dir)
+        self._outbound = outbound or site_outbound(settings)
         self._timeout_s = timeout_s
 
     def _channel(self) -> grpc.Channel:
@@ -58,11 +61,15 @@ class NeuraRegistry:
         """Write the sealed file for ``digest`` to ``out``. False if the registry does not hold
         it or cannot be reached (the store then tries its other sources)."""
         token = connection_token(self._key, self._identity.server_id)
+        request = self._outbound.prepare(
+            "fetch_sealed_weights", site_pb2.FetchSealedWeightsRequest(digest=digest)
+        )
+        assert request is not None  # the digest is sent in every mode
         with self._channel() as channel:
             stub = site_pb2_grpc.SiteControlStub(channel)
             try:
                 for chunk in stub.FetchSealedWeights(
-                    site_pb2.FetchSealedWeightsRequest(digest=digest),
+                    request,
                     metadata=(("authorization", f"Bearer {token}"),),
                     timeout=self._timeout_s,
                 ):

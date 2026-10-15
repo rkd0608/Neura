@@ -15,6 +15,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.40",
     "alembic>=1.16",
     "pyjwt[crypto]>=2.10",
+    "prometheus-client>=0.21",
 ]
 
 [project.scripts]

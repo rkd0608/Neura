@@ -18,6 +18,8 @@
                                             the artifacts this server runs
     neura-agent distrust-publisher KEY_ID   stop trusting a publisher key
     neura-agent publishers                  list the trusted publisher keys
+    neura-agent outbound [--kind KIND] [--limit N] [--summary] [--verify]
+                                            what this server sent to Neura (the outbound ledger)
 
 Local commands talk to the agent's local API and read the operator credential from
 NEURA_AGENT_OPERATOR_TOKEN.
@@ -39,6 +41,7 @@ import uvicorn
 from neura_agent import trust
 from neura_agent.app import create_app
 from neura_agent.artifacts import ArtifactError, ArtifactStore
+from neura_agent.outbound import site_outbound
 from neura_agent.runner import AgentRuntime, EnrollmentError
 from neura_agent.settings import AgentSettings
 from neura_contracts import ModelArtifact, load_document, signing
@@ -121,6 +124,24 @@ def _publishers(settings: AgentSettings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _outbound(settings: AgentSettings, args: argparse.Namespace) -> int:
+    """Read the ledger files directly: it works whether or not the agent is running."""
+    ledger = site_outbound(settings).ledger
+    if args.verify:
+        result = ledger.verify()
+        if not result.ok:
+            print(f"BROKEN at entry {result.broken_at} of {result.entries}", file=sys.stderr)
+            return 1
+        print(f"ok: {result.entries} entries, hash chain intact")
+        return 0
+    if args.summary:
+        print(json.dumps(ledger.summary(), indent=2))
+        return 0
+    for entry in reversed(ledger.entries(limit=args.limit, kind=args.kind)):
+        print(json.dumps(entry, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="neura-agent",
@@ -159,6 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     distrust = sub.add_parser("distrust-publisher")
     distrust.add_argument("key_id")
     sub.add_parser("publishers")
+    ledger = sub.add_parser("outbound")
+    ledger.add_argument("--kind", default=None, help="hello, status, operation, telemetry, ...")
+    ledger.add_argument("--limit", type=int, default=20)
+    ledger.add_argument("--summary", action="store_true", help="messages and bytes per kind")
+    ledger.add_argument("--verify", action="store_true", help="check the ledger's hash chain")
     args = parser.parse_args(argv)
     settings = AgentSettings()
 
@@ -201,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
         return _import_weights(settings, args.directory, args.artifact)
     if args.command in ("trust-publisher", "distrust-publisher", "publishers"):
         return _publishers(settings, args)
+    if args.command == "outbound":
+        return _outbound(settings, args)
 
     runtime = AgentRuntime(settings)
     uvicorn.run(

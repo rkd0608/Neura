@@ -106,7 +106,11 @@ class AuditRecordPage(TypedDict):
 
 
 class CapacityEstimateAssumptions(TypedDict):
-    """The inputs of the estimate, so it can be checked and reproduced."""
+    """
+    The inputs of the estimate, so it can be checked and reproduced. Absent when the site
+    runs minimal telemetry (design §18.2): its inputs, including measured latency, stay at
+    the site.
+    """
 
     control_period_ms: NotRequired[float]
     starvation_budget_ms: NotRequired[float]
@@ -145,7 +149,7 @@ class CapacityEstimate(TypedDict):
     sharing_case: NotRequired[
         Literal["same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"]
     ]
-    assumptions: CapacityEstimateAssumptions
+    assumptions: NotRequired[CapacityEstimateAssumptions]
     estimated_at: Timestamp
 
 

@@ -17,16 +17,20 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST
 from pydantic import BaseModel, ConfigDict, Field
 
 from neura.v1 import common_pb2
 from neura_agent.connectivity import ControlPlaneProbe
 from neura_agent.core import LocalActionError
+from neura_agent.metrics import AgentMetrics
+from neura_agent.outbound import site_outbound
 from neura_agent.runner import AgentRuntime
 from neura_agent.settings import AgentSettings
 from neura_contracts import REASON_CODES, ReasonCode
+from neura_contracts.outbound_schema import SCHEMA_VERSION
 
 SERVICE_NAME = "neura-agent"
 
@@ -133,6 +137,15 @@ def create_app(
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    metrics = AgentMetrics(runtime, app.version) if runtime is not None else None
+
+    @app.get("/metrics")
+    async def prometheus() -> Response:
+        """For the customer's own Prometheus (design §18.2). Read-only, like /healthz."""
+        if metrics is None:
+            raise LocalError(ReasonCode.API_UNAVAILABLE, 503, "no agent runtime")
+        return Response(metrics.exposition(), media_type=CONTENT_TYPE_LATEST)
 
     @app.get("/v1/local/status")
     async def status() -> dict[str, Any]:
@@ -248,5 +261,19 @@ def create_app(
     async def audit(request: Request) -> dict[str, Any]:
         operator(request)
         return {"items": core().audit.tail()}
+
+    @app.get("/v1/local/outbound")
+    async def outbound(request: Request, limit: int = 100, kind: str | None = None) -> Any:
+        """What this server sent to Neura, newest first (design §18.2)."""
+        operator(request)
+        if not 1 <= limit <= 1000:
+            raise LocalError(ReasonCode.API_VALIDATION_FAILED, 422, "limit is 1 to 1000")
+        gate = runtime.outbound if runtime is not None else site_outbound(settings)
+        return {
+            "telemetry_mode": gate.mode,
+            "schema_version": SCHEMA_VERSION,
+            "summary": gate.ledger.summary(),
+            "items": gate.ledger.entries(limit=limit, kind=kind),
+        }
 
     return app

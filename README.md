@@ -122,6 +122,21 @@ Watch the simulated robots being served:
 curl -s http://127.0.0.1:8091/v1/local/dataplane | python3 -m json.tool
 ```
 
+Every component serves Prometheus metrics. To run Prometheus and Grafana with Neura's dashboards
+(http://127.0.0.1:3001):
+
+```bash
+docker compose -f deploy/compose/compose.yaml --profile observability up -d
+```
+
+Everything the site sends to Neura is in its outbound ledger, hash-chained (design §17.7). Set
+`NEURA_AGENT_TELEMETRY_MODE=minimal` to send only health, versions, identifiers and states:
+
+```bash
+docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --summary
+docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --verify
+```
+
 ## Conventions
 
 - **Generated files are committed and checked.** Edit the source (`proto/`, `catalog/`, contract

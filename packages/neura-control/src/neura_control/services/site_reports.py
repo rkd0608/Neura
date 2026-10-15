@@ -121,7 +121,8 @@ class _Capacity(BaseModel):
     sharing_case: Literal[
         "same_weights", "multi_adapter", "co_located_fine_tunes", "different_architectures"
     ] = "same_weights"
-    assumptions: _CapacityAssumptions
+    # Absent when the site runs minimal telemetry: the estimate's inputs stay at the site.
+    assumptions: _CapacityAssumptions | None = None
 
 
 def _capacity(reported: Any) -> dict[str, Any] | None:
@@ -133,7 +134,10 @@ def _capacity(reported: Any) -> dict[str, Any] | None:
     except ValidationError:
         log.warning("ignored a malformed capacity estimate from a site")
         return None
-    return {**parsed.model_dump(mode="json"), "estimated_at": iso(utcnow())}
+    estimate = parsed.model_dump(mode="json")
+    if estimate["assumptions"] is None:
+        del estimate["assumptions"]
+    return {**estimate, "estimated_at": iso(utcnow())}
 
 
 async def _apply_outcome(session: AsyncSession, operation: Operation) -> None:

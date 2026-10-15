@@ -323,6 +323,11 @@ def main() -> int:
     )
     audit = list(neura.paginate(neura.list_audit_records, ids["project"], page_size=200))
     print(f"    reconnected; {len(audit)} audit records")
+
+    step("checking what the site sent to Neura: its outbound ledger")
+    sent = json.loads(on_server("neura-agent", "outbound", "--summary"))
+    print("    " + ", ".join(f"{kind} {n['messages']}" for kind, n in sent.items()))
+    print("    " + on_server("neura-agent", "outbound", "--verify").strip())
     print("pilot smoke test passed")
     return 0
 

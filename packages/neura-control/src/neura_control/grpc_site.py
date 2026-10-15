@@ -35,6 +35,7 @@ from neura_control.db.models import (
     SiteCommand,
 )
 from neura_control.ids import Kind, new_id
+from neura_control.metrics import ControlPlaneMetrics
 from neura_control.security import agent_tokens
 from neura_control.security.principal import Principal, PrincipalKind
 from neura_control.security.signing import ManifestSigner
@@ -91,11 +92,13 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         settings: ControlPlaneSettings,
         authority: pki.CertificateAuthority | None = None,
         weights: SealedWeightsStore | None = None,
+        metrics: ControlPlaneMetrics | None = None,
     ) -> None:
         self._sessions = sessions
         self._signer = signer
         self._settings = settings
         self._weights = weights
+        self.metrics = metrics or ControlPlaneMetrics()
         self.authority = authority or agent_authority(settings)
         # The stream requires the agent's client certificate when this process terminates TLS.
         self.require_client_certificate = settings.agent_tls_cert_file is not None
@@ -111,6 +114,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         self._streams = 0
         self._idle = asyncio.Event()
         self._idle.set()
+        self.metrics.count_streams(lambda: sum(self.connected.values()))
 
     async def _shielded(self, work: Coroutine[Any, Any, T]) -> T:
         task = asyncio.ensure_future(work)
@@ -129,6 +133,16 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
     # --- enrollment ---------------------------------------------------------------------------
 
     async def Enroll(  # noqa: N802 - gRPC method name
+        self, request: site_pb2.EnrollRequest, context: grpc.aio.ServicerContext[Any, Any]
+    ) -> site_pb2.EnrollResponse:
+        response = await self._enrollment(request, context)
+        result = response.WhichOneof("result")
+        self.metrics.enrollments.labels(
+            "enrolled" if result == "enrolled" else response.rejected.code or "rejected"
+        ).inc()
+        return response
+
+    async def _enrollment(
         self, request: site_pb2.EnrollRequest, context: grpc.aio.ServicerContext[Any, Any]
     ) -> site_pb2.EnrollResponse:
         def reject(code: ReasonCode, message: str = "") -> site_pb2.EnrollResponse:
@@ -231,6 +245,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             identity_uri=pki.server_uri(server.id),
             days=self._settings.agent_certificate_days,
         )
+        self.metrics.certificates.inc()
         now = utcnow()
         kept = [
             c
@@ -289,6 +304,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         assert path is not None
         with path.open("rb") as f:
             while block := await asyncio.to_thread(f.read, SEALED_CHUNK_BYTES):
+                self.metrics.sealed_bytes.inc(len(block))
                 yield site_pb2.SealedWeightsChunk(data=block)
 
     async def _server(self, server_id: str) -> Server | None:
@@ -443,6 +459,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
     ) -> None:
         async for message in request_iterator:
             kind = message.WhichOneof("body")
+            self.metrics.site_messages.labels(kind or "empty").inc()
             if kind == "status" and message.status.contact_nonce:
                 challenge(message.status.contact_nonce)
             if kind == "certificate_request":
@@ -765,6 +782,7 @@ async def start_agent_server(
     settings: ControlPlaneSettings,
     *,
     weights: SealedWeightsStore | None = None,
+    metrics: ControlPlaneMetrics | None = None,
 ) -> tuple[_Servers, SiteControlService, int]:
     assert settings.agent_grpc_listen is not None
     server = grpc.aio.server(
@@ -773,7 +791,7 @@ async def start_agent_server(
             ("grpc.max_receive_message_length", 8 * 1024 * 1024),
         ]
     )
-    service = SiteControlService(sessions, signer, settings, weights=weights)
+    service = SiteControlService(sessions, signer, settings, weights=weights, metrics=metrics)
     site_pb2_grpc.add_SiteControlServicer_to_server(service, server)
     servers = [server]
     if settings.agent_tls_cert_file is not None and settings.agent_tls_key_file is not None:

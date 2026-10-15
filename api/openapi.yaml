@@ -2987,7 +2987,6 @@ components:
       - max_robots
       - limiting_factor
       - source
-      - assumptions
       - estimated_at
       properties:
         max_robots:
@@ -3021,7 +3020,9 @@ components:
             them (see the benchmark reports).'
         assumptions:
           type: object
-          description: The inputs of the estimate, so it can be checked and reproduced.
+          description: 'The inputs of the estimate, so it can be checked and reproduced. Absent when the
+            site runs minimal telemetry (design §18.2): its inputs, including measured latency, stay at
+            the site.'
           properties:
             control_period_ms:
               type: number

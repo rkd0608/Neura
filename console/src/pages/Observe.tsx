@@ -121,9 +121,9 @@ export function Capacity() {
                       </td>
                       <td>{capacity.limiting_factor.replaceAll("_", " ")}</td>
                       <td className="small">
-                        {a.device ? <span className="mono">{a.device}</span> : "—"}
+                        {a?.device ? <span className="mono">{a.device}</span> : "—"}
                         <div title={sharing.detail}>{sharing.label}</div>
-                        {a.co_located_groups ? (
+                        {a?.co_located_groups ? (
                           <div className="muted">
                             {a.co_located_groups} other{" "}
                             {a.co_located_groups === 1 ? "group" : "groups"} on the device
@@ -131,38 +131,45 @@ export function Capacity() {
                         ) : null}
                       </td>
                       <td className="small">
-                        <details>
-                          <summary>
+                        {!a ? (
+                          <span title="This site runs minimal telemetry: the estimate's inputs stay at the site.">
                             {capacity.source === "measured_profile" ? "Measured" : "Configured"}{" "}
-                            latency profile
-                          </summary>
-                          <dl className="kv" style={{ marginTop: 8 }}>
-                            <dt>Control period</dt>
-                            <dd>{a.control_period_ms} ms</dd>
-                            <dt>Starvation budget</dt>
-                            <dd>{a.starvation_budget_ms} ms</dd>
-                            <dt>Request interval</dt>
-                            <dd>{a.request_interval_ms} ms</dd>
-                            <dt>Link allowance</dt>
-                            <dd>{a.link_allowance_ms} ms</dd>
-                            <dt>Freshness</dt>
-                            <dd>
-                              {a.dispatch_freshness_ms ?? "—"} ms at dispatch,{" "}
-                              {a.acceptance_freshness_ms ?? "—"} ms at acceptance
-                            </dd>
-                            <dt>Batching</dt>
-                            <dd>
-                              up to {a.max_batch}, {Math.round((a.reserve_fraction ?? 0) * 100)}%
-                              reserve
-                            </dd>
-                            <dt>p99 latency</dt>
-                            <dd>
-                              {Object.entries(a.latency_p99_ms_by_batch ?? {})
-                                .map(([batch, latency]) => `batch ${batch}: ${latency} ms`)
-                                .join(", ")}
-                            </dd>
-                          </dl>
-                        </details>
+                            latency profile; inputs kept at the site
+                          </span>
+                        ) : (
+                          <details>
+                            <summary>
+                              {capacity.source === "measured_profile" ? "Measured" : "Configured"}{" "}
+                              latency profile
+                            </summary>
+                            <dl className="kv" style={{ marginTop: 8 }}>
+                              <dt>Control period</dt>
+                              <dd>{a.control_period_ms} ms</dd>
+                              <dt>Starvation budget</dt>
+                              <dd>{a.starvation_budget_ms} ms</dd>
+                              <dt>Request interval</dt>
+                              <dd>{a.request_interval_ms} ms</dd>
+                              <dt>Link allowance</dt>
+                              <dd>{a.link_allowance_ms} ms</dd>
+                              <dt>Freshness</dt>
+                              <dd>
+                                {a.dispatch_freshness_ms ?? "—"} ms at dispatch,{" "}
+                                {a.acceptance_freshness_ms ?? "—"} ms at acceptance
+                              </dd>
+                              <dt>Batching</dt>
+                              <dd>
+                                up to {a.max_batch}, {Math.round((a.reserve_fraction ?? 0) * 100)}%
+                                reserve
+                              </dd>
+                              <dt>p99 latency</dt>
+                              <dd>
+                                {Object.entries(a.latency_p99_ms_by_batch ?? {})
+                                  .map(([batch, latency]) => `batch ${batch}: ${latency} ms`)
+                                  .join(", ")}
+                              </dd>
+                            </dl>
+                          </details>
+                        )}
                         <div className="muted">
                           Estimated <Time iso={capacity.estimated_at} />
                         </div>

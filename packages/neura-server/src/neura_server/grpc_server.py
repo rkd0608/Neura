@@ -25,8 +25,9 @@ import grpc
 import numpy as np
 import uvicorn
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from numpy.typing import NDArray
+from prometheus_client import CONTENT_TYPE_LATEST
 
 from neura.v1 import dataplane_pb2, dataplane_pb2_grpc
 from neura_adapters import MockPolicy, ModelInputs, PolicyBackend, PolicyError
@@ -49,6 +50,7 @@ from neura_server.leases import (
     MemoryGenerationStore,
     SqliteGenerationStore,
 )
+from neura_server.metrics import GatewayMetrics
 from neura_server.profiles import LatencyProfile
 from neura_server.scheduler import Batch, Scheduler
 
@@ -128,6 +130,9 @@ class GatewayServer:
         self._status_server: uvicorn.Server | None = None
         self.bound_port: int | None = None
         self.started_at = time.time()
+        self.metrics = GatewayMetrics(
+            self.status, config.tls.certificate if config.tls is not None else None
+        )
 
     def _build(
         self, config: GatewayConfig, existing: set[str]
@@ -356,7 +361,13 @@ class GatewayServer:
                     group.wake.clear()
                     continue
                 outputs = await self._run(group, batch, worker_timeout_us)
-                self.route(self.core.complete(group.key, batch, outputs, monotonic_us()))
+                done_us = monotonic_us()
+                self.metrics.batch_done(
+                    group.key,
+                    (done_us - batch.dispatched_at_us) / 1e6,
+                    failed=isinstance(outputs, PolicyError),
+                )
+                self.route(self.core.complete(group.key, batch, outputs, done_us))
 
     @staticmethod
     async def _run(
@@ -429,6 +440,10 @@ class GatewayServer:
         @app.get("/v1/local/dataplane")
         async def dataplane() -> dict[str, Any]:
             return self.status()
+
+        @app.get("/metrics")
+        async def metrics() -> Response:
+            return Response(self.metrics.exposition(), media_type=CONTENT_TYPE_LATEST)
 
         return app
 

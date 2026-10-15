@@ -71,6 +71,10 @@ class ControlPlaneSettings(BaseSettings):
     agent_client_ca_key_file: Path | None = None
     agent_certificate_days: int = Field(default=30, ge=1, le=397)
 
+    # Prometheus metrics on their own listener (host:port), apart from the public API. Unset:
+    # no metrics listener.
+    metrics_listen: str | None = None
+
     # Neura's registry of sealed weights (design §18.2): a directory (local disk, or a shared
     # filesystem when several control-plane replicas run). Unset: the registry is off and
     # customers keep weights in their own stores.

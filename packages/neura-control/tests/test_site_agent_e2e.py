@@ -8,13 +8,14 @@ operating through a control-plane outage and reconnects afterwards.
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 import threading
 import time
 from collections.abc import Callable, Coroutine, Iterator
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -183,8 +184,13 @@ def succeeded(client: ConformanceClient, operation_id: str) -> bool:
     return operation_state(client, operation_id) == "Succeeded"
 
 
+@pytest.mark.parametrize("telemetry_mode", ["standard", "minimal"])
 def test_enroll_deploy_approve_switch_and_survive_outage(
-    make_api: AppFactory, site_loop: BackgroundLoop, tmp_path: Path, settings: Any
+    make_api: AppFactory,
+    site_loop: BackgroundLoop,
+    tmp_path: Path,
+    settings: Any,
+    telemetry_mode: Literal["standard", "minimal"],
 ) -> None:
     agent_port = free_port()
     endpoint = f"127.0.0.1:{agent_port}"
@@ -212,6 +218,7 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         activation_timeout_s=60,
         gateway_backend="simulated",
         trusted_publisher_keys=[signing.raw_public_key(PUBLISHER).hex()],
+        telemetry_mode=telemetry_mode,
     )
     gateway = InProcessGateway()
     agent = AgentRuntime(agent_settings, gateway=gateway, command_runner=lambda args: None)
@@ -303,7 +310,9 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         request = client.get(f"/v1/deployments/{ids['deployment']}/activation-requests").json()[
             "items"
         ][0]
-        assert (request["state"], request["approved_by"]) == ("Activated", "ops@site")
+        # Minimal telemetry keeps the operator's name at the site.
+        approver = "ops@site" if telemetry_mode == "standard" else None
+        assert (request["state"], request["approved_by"]) == ("Activated", approver)
         wait_for(
             lambda: all(
                 r.process is not None and r.process.runtime.dispatched > 30 for r in robots
@@ -382,6 +391,22 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         stop.set()
         for future in running:
             future.result(timeout=10)
+
+        # --- everything the site sent is in its outbound ledger, chained (design §18.2) -------
+        sent = agent.outbound.ledger.summary()
+        assert {"enroll", "hello", "facts", "status", "operation"} <= set(sent)
+        assert agent.outbound.ledger.verify().ok
+        assert agent.outbound.unknown_fields == 0
+        if telemetry_mode == "minimal":
+            # Health, versions, identifiers, states and reason codes only: no metrics, no free
+            # text, no host name. Deploying, approving and switching still worked above.
+            assert "telemetry" not in sent
+            entries = json.dumps(agent.outbound.ledger.entries(limit=10_000))
+            assert '"metrics"' not in entries
+            assert '"hostname"' not in entries
+            assert '"approved_by"' not in entries
+        else:
+            assert "telemetry" in sent
     finally:
         local.__exit__(None, None, None)
         site_loop.run(agent.stop())

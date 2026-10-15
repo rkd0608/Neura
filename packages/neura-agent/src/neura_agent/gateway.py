@@ -173,6 +173,7 @@ class SubprocessGateway:
         self._supervisor: asyncio.Task[None] | None = None
         self._config: Path | None = None
         self._stopping = False
+        self.restarts = 0
 
     @property
     def running(self) -> bool:
@@ -203,6 +204,7 @@ class SubprocessGateway:
             if time.monotonic() - started > HEALTHY_RUN_S:
                 backoff = 0.5  # it ran fine for a while: this is a new failure, not a crash loop
             log.warning("gateway exited with %s; restarting in %.1fs", code, backoff)
+            self.restarts += 1
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 10.0)
 

@@ -16,6 +16,7 @@ dependencies = [
     "grpcio>=1.84,<2",
     "neura-runtime",
     "neura-server",
+    "prometheus-client>=0.21",
 ]
 
 [project.scripts]

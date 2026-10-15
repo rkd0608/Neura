@@ -1,0 +1,60 @@
+# Alerts on the metrics Neura's components export. Thresholds follow the service levels in design
+# §21; tune them per deployment.
+groups:
+  - name: neura-site
+    rules:
+      - alert: NeuraDeadlineMissRateHigh
+        expr: >
+          sum by (group) (rate(neura_scheduler_deadline_misses_total[5m]))
+          / clamp_min(sum by (group) (rate(neura_scheduler_requests_total[5m])), 1e-9) > 0.001
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: "Batch group {{ $labels.group }} misses more than 1 in 1000 deadlines"
+          description: "Robots are falling back to their buffers. Check device contention and the revision's capacity estimate."
+      - alert: NeuraRobotFaulted
+        expr: sum by (robot, reason) (neura_robot_faulted) > 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "Robot {{ $labels.robot }} reports {{ $labels.reason }}"
+      - alert: NeuraWorkerRestarting
+        expr: increase(neura_worker_restarts_total[15m]) > 2
+        labels: {severity: page}
+        annotations:
+          summary: "The worker of batch group {{ $labels.group }} restarted repeatedly"
+      - alert: NeuraAgentDisconnected
+        expr: max(neura_agent_connected) == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "The site agent has no connection to Neura"
+          description: "The site keeps serving on its committed state until offline authorization runs out."
+      - alert: NeuraOfflineAuthorizationLow
+        expr: min(neura_agent_offline_authorization_remaining_seconds) < 3600
+        labels: {severity: page}
+        annotations:
+          summary: "Offline authorization ends within the hour"
+          description: "Serving stops when it runs out. Restore the site's connection to Neura."
+      - alert: NeuraCertificateExpiring
+        expr: (neura_agent_certificate_expiry_timestamp_seconds - time()) < 14 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: "The {{ $labels.certificate }} certificate expires within 14 days"
+          description: "Renewal is automatic; an expiring certificate means renewal is failing."
+      - alert: NeuraOutboundUnknownFields
+        expr: increase(neura_agent_outbound_unknown_fields_total[1h]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "The agent tried to send fields outside the published outbound schema"
+          description: "They were not sent. See `neura-agent outbound` and report it to Neura."
+  - name: neura-control-plane
+    rules:
+      - alert: NeuraApiErrors
+        expr: >
+          sum(rate(neura_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(neura_http_requests_total[5m])), 1e-9) > 0.01
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: "More than 1% of API requests fail with a server error"

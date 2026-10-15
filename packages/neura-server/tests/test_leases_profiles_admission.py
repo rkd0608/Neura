@@ -188,3 +188,18 @@ def test_demand_from_binding(make_binding: Any) -> None:
     assert demand.budget_us == 20 * period - period
     assert demand.interval_us == 30 * period
     assert demand.link_us == 6_000
+
+
+def test_a_profile_never_predicts_a_larger_batch_faster() -> None:
+    # Measured p99 at batch 2 caught a tail sample that batch 4's window did not.
+    profile = LatencyProfile(
+        [
+            ProfilePoint(1, 70_000, 90_000, 800),
+            ProfilePoint(2, 100_000, 190_000, 830),
+            ProfilePoint(4, 115_000, 150_000, 820),
+        ]
+    )
+    assert profile.p99_us(4) == 190_000
+    assert profile.p50_us(4) == 115_000
+    assert profile.memory_mib(4) == 830
+    assert profile.p99_us(3) == 190_000

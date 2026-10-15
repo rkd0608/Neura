@@ -296,9 +296,11 @@ def markdown(data: dict[str, Any]) -> str:
         "## Real-time validation",
         "",
         "The production gateway with real worker processes on the device and simulated robots "
-        "over gRPC, next to the simulation of the same configuration. Late ticks: robot control "
-        "ticks the harness itself ran late (high values mean the harness, not Neura, was "
-        "overloaded).",
+        "over gRPC, next to the simulation of the same configuration (same robot count, warmup "
+        "and window). Each cell is real / simulated. With a few hundred requests a p99 is close "
+        "to the maximum: one collision moves it, so read it with the median and the miss rate. "
+        "Late ticks: robot control ticks the harness itself ran late (high values mean the "
+        "harness, not Neura, was overloaded).",
         "",
     ]
     rows = []
@@ -309,9 +311,12 @@ def markdown(data: dict[str, Any]) -> str:
                 f"{CASE_NAMES[v['case']]}: {WORKLOAD_NAMES[v['workload']]}",
                 CONFIG_NAMES[v["configuration"]],
                 str(v["robots"]),
+                f"{real['requests']} / {sim['requests']}",
                 f"{_fmt(real['misses_per_1000'])} / {_fmt(sim['misses_per_1000'])}",
                 f"{_fmt(real['starvations_per_robot_hour'], 1)} / "
                 f"{_fmt(sim['starvations_per_robot_hour'], 1)}",
+                f"{_fmt(real['age_at_dispatch_p50_ms'], 1)} / "
+                f"{_fmt(sim['age_at_dispatch_p50_ms'], 1)}",
                 f"{_fmt(real['age_at_dispatch_p99_ms'], 1)} / "
                 f"{_fmt(sim['age_at_dispatch_p99_ms'], 1)}",
                 f"{_fmt(real['mean_batch'])} / {_fmt(sim['mean_batch'])}",
@@ -326,8 +331,10 @@ def markdown(data: dict[str, Any]) -> str:
             "Case",
             "Configuration",
             "Robots",
-            "Misses / 1k (real / sim)",
+            "Requests",
+            "Misses / 1k",
             "Starvation / robot-h",
+            "Age p50 ms",
             "Age p99 ms",
             "Mean batch",
             "Device busy",

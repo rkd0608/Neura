@@ -103,15 +103,15 @@ PRESETS = {
         image=(96, 128),
         precision="fp32",
         max_batch=8,
-        measure_seconds=3.0,
+        measure_seconds=8.0,
         contention_workers=3,
         fine_tunes=2,
         sim_robots=(1, 2, 4, 8, 12, 16, 24, 32),
         sim_warmup_s=5.0,
-        sim_duration_s=60.0,
+        sim_duration_s=120.0,
         realtime_robots=(1, 4),
         realtime_warmup_s=5.0,
-        realtime_duration_s=20.0,
+        realtime_duration_s=45.0,
     ),
     # For tests of the harness itself.
     "smoke": SuiteConfig(
@@ -494,15 +494,24 @@ class Calibration:
         }
 
 
+def fit_link(p50_ms: float, p99_ms: float) -> LinkModel:
+    """The uniform delay on [base, base + jitter] with the measured median and 99th percentile
+    (median = base + jitter / 2, p99 = base + 0.99 jitter). A tail too heavy for that keeps the
+    median and a base of at least a fifth of it."""
+    jitter = max(0.0, (p99_ms - p50_ms) / 0.49)
+    base = p50_ms - jitter / 2
+    if base < 0.2 * p50_ms:
+        base = 0.2 * p50_ms
+        jitter = 2 * (p50_ms - base)
+    return LinkModel(base_us=max(1, round(base * 1000)), jitter_us=max(0, round(jitter * 1000)))
+
+
 async def calibrate(builder: Builder) -> Calibration:
     p = replace(plan(SAME_WEIGHTS, DEDICATED, 1, builder.config), devices="one")
     run = await realtime.run(builder.realtime(p, PHASED))
     p50 = run.result.age_at_dispatch_p50_ms or 0.5
     p99 = run.result.age_at_dispatch_p99_ms or p50
-    # Uniform jitter on [0, j] puts the 99th percentile at about base + j.
-    link = LinkModel(
-        base_us=max(1, int(p50 * 1000 * 0.9)), jitter_us=max(0, int((p99 - p50 * 0.9) * 1000))
-    )
+    link = fit_link(p50, p99)
     builder.link = link
     log.info(
         "calibrated the simulated link: %s ms + up to %s ms",

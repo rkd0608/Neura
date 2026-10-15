@@ -20,6 +20,24 @@ class ProfilePoint:
     memory_mib: int = 0
 
 
+def _monotone(points: list[ProfilePoint]) -> list[ProfilePoint]:
+    """A larger batch is never predicted faster or smaller than a smaller one. Measured points
+    can say otherwise only through sampling noise (a tail sample landing in one batch size's
+    window), and the conservative reading is the higher one."""
+    out: list[ProfilePoint] = []
+    for point in points:
+        if out:
+            last = out[-1]
+            point = ProfilePoint(
+                point.batch_size,
+                max(point.p50_us, last.p50_us),
+                max(point.p99_us, last.p99_us),
+                max(point.memory_mib, last.memory_mib),
+            )
+        out.append(point)
+    return out
+
+
 class LatencyProfile:
     def __init__(self, points: list[ProfilePoint], *, window: int = 256) -> None:
         if not points:
@@ -31,7 +49,7 @@ class LatencyProfile:
         for point in ordered:
             if point.p50_us <= 0 or point.p99_us < point.p50_us:
                 raise ValueError("latencies must be positive with p99 >= p50")
-        self._points = ordered
+        self._points = _monotone(ordered)
         self._observed: dict[int, deque[int]] = {}
         self._window = window
 

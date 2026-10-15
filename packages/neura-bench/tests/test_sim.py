@@ -150,3 +150,13 @@ def test_per_robot_baselines_get_a_batch_group_each_at_any_count(tmp_path: Path)
     p = suite.plan(suite.SAME_WEIGHTS, suite.DEDICATED_SHARED, 40, suite.PRESETS["smoke"])
     scenario = builder.simulation(p, suite.PHASED, 40, warmup_s=0.1, duration_s=0.1)
     assert len({g.binding.artifact_digest for g in scenario.groups}) == 40
+
+
+def test_the_link_fit_reproduces_the_measured_median_and_tail() -> None:
+    link = suite.fit_link(2.0, 3.0)
+    base, jitter = link.base_us / 1000, link.jitter_us / 1000
+    assert base + jitter / 2 == pytest.approx(2.0, abs=0.01)
+    assert base + 0.99 * jitter == pytest.approx(3.0, abs=0.01)
+    heavy = suite.fit_link(1.0, 9.0)  # a tail no uniform delay with a positive base can match
+    assert heavy.base_us == 200
+    assert heavy.base_us + heavy.jitter_us / 2 == pytest.approx(1000)

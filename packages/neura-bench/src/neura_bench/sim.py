@@ -200,6 +200,7 @@ class GroupSpec:
     robots: tuple[str, ...]
     policy: Policy = Policy.DEADLINE_FAIRNESS
     max_batch: int = 8
+    batch_window_us: int = 2_000  # the gateway's default (ServingConfig.batch_window_ms)
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,7 +320,12 @@ class Simulation:
             if key in groups:
                 raise ValueError(f"groups {spec.name} and another share the batch group {key}")
             profile = spec.latency.profile()
-            scheduler = Scheduler(profile, policy=spec.policy, max_batch=spec.max_batch)
+            scheduler = Scheduler(
+                profile,
+                policy=spec.policy,
+                max_batch=spec.max_batch,
+                batch_window_us=spec.batch_window_us,
+            )
             scheduler.on_dispatch = self._on_dispatch
             scheduler.on_complete = self._on_complete
             groups[key] = BatchGroup(key, scheduler, AdmitAll(profile, max_batch=spec.max_batch))
@@ -397,6 +403,9 @@ class Simulation:
         batch, dropped = self.core.next_batch(key, self.loop.now_us)
         self._deliver(dropped)
         if batch is None:
+            hold = self.core.hold_until(key)
+            if hold is not None:
+                self.loop.at(hold, functools.partial(self._dispatch, key))
             return
         self._busy[key] = True
         spec = self._group_of[key]

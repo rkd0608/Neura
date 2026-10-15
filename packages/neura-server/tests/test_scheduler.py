@@ -193,3 +193,40 @@ def test_inputs_are_passed_through() -> None:
     batch, _ = s.next_batch(0)
     assert batch is not None
     assert batch.requests[0].inputs is inputs
+
+
+def test_a_batching_window_lets_near_simultaneous_requests_share_a_pass() -> None:
+    s = Scheduler(profile(), max_batch=4, batch_window_us=2 * MS)
+    s.submit(request("a", received_ms=0))
+    batch, _ = s.next_batch(0)
+    assert batch is None
+    assert s.hold_until_us == 2 * MS
+    s.submit(request("b", received_ms=1))
+    batch, _ = s.next_batch(1 * MS)
+    assert batch is None  # still within the window of the oldest request
+    batch, _ = s.next_batch(2 * MS)
+    assert sorted(sessions(batch)) == ["a", "b"]
+    assert s.hold_until_us is None
+
+
+def test_the_window_never_costs_a_deadline_or_freshness() -> None:
+    # Dispatching at the end of the window would complete after a's deadline.
+    tight = Scheduler(profile(), max_batch=4, batch_window_us=5 * MS)
+    tight.submit(request("a", deadline_ms=14))
+    assert sessions(tight.next_batch(0)[0]) == ["a"]
+    # The observation would be too old to dispatch after the window.
+    stale = Scheduler(profile(), max_batch=4, batch_window_us=5 * MS)
+    stale.submit(request("a", dispatch_by_ms=3))
+    assert sessions(stale.next_batch(0)[0]) == ["a"]
+    # A full batch goes at once.
+    full = Scheduler(profile(), max_batch=2, batch_window_us=5 * MS)
+    full.submit(request("a"))
+    full.submit(request("b"))
+    assert len(sessions(full.next_batch(0)[0])) == 2
+    # No window, or no batching: no wait.
+    for scheduler in (
+        Scheduler(profile(), max_batch=4),
+        Scheduler(profile(), max_batch=1, batch_window_us=5 * MS),
+    ):
+        scheduler.submit(request("a"))
+        assert sessions(scheduler.next_batch(0)[0]) == ["a"]

@@ -837,6 +837,7 @@ class CapacityEstimateAssumptions(TypedDict):
     dispatch_freshness_ms: NotRequired[float | None]
     acceptance_freshness_ms: NotRequired[float | None]
     max_batch: NotRequired[int]
+    batch_window_ms: NotRequired[float]
     reserve_fraction: NotRequired[float]
     latency_p99_ms_by_batch: NotRequired[dict[str, float]]
     memory_available_mib: NotRequired[int | None]

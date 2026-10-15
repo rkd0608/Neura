@@ -82,6 +82,7 @@ class AdmissionController:
         max_batch: int,
         reserve_fraction: float = 0.2,
         memory_available_mib: int | None = None,
+        batch_window_us: int = 0,
     ) -> None:
         if max_batch < 1:
             raise ValueError("max_batch must be >= 1")
@@ -91,6 +92,7 @@ class AdmissionController:
         self._max_batch = max_batch
         self._reserve = reserve_fraction
         self._memory = memory_available_mib
+        self._window = batch_window_us
         self._admitted: dict[str, SessionDemand] = {}
 
     @property
@@ -114,7 +116,8 @@ class AdmissionController:
                     "memory",
                 )
 
-        blocking = self._profile.p99_us(typical_batch)
+        # One batch already running, and the scheduler's batching window before the next.
+        blocking = self._profile.p99_us(typical_batch) + self._window
         ordered = sorted(demands, key=lambda d: d.budget_us - d.link_us)
         elapsed = blocking
         worst = 0

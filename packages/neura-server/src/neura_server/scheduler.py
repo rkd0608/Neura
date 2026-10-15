@@ -83,13 +83,22 @@ class Scheduler:
         policy: Policy = Policy.DEADLINE_FAIRNESS,
         max_batch: int = 8,
         max_skips: int = 3,
+        batch_window_us: int = 0,
     ) -> None:
         if max_batch < 1:
             raise ValueError("max_batch must be >= 1")
+        if batch_window_us < 0:
+            raise ValueError("batch_window_us must be >= 0")
         self.profile = profile
         self.policy = policy
         self.max_batch = max_batch
         self.max_skips = max_skips
+        # How long the oldest queued request may wait for others to share its forward pass
+        # (design §9.2): robots that ask at nearly the same moment then share a batch instead
+        # of the later ones waiting a whole forward pass. Only within every queued request's
+        # deadline and dispatch freshness. ``hold_until_us`` says when to ask again.
+        self.batch_window_us = batch_window_us
+        self.hold_until_us: int | None = None
         self._queued: dict[str, InferenceRequest] = {}  # at most one queued request per session
         self._in_flight: dict[str, InferenceRequest] = {}
         self._session_epoch: dict[str, int] = {}
@@ -158,8 +167,15 @@ class Scheduler:
         return dropped
 
     def next_batch(self, now_us: int) -> tuple[Batch | None, list[Dropped]]:
+        """The batch to dispatch now, or None: nothing queued, or holding for the batching
+        window (then ``hold_until_us`` is set)."""
         dropped = self.expire(now_us)
+        self.hold_until_us = None
         if not self._queued:
+            return None, dropped
+        hold = self._hold_until(now_us)
+        if hold is not None:
+            self.hold_until_us = hold
             return None, dropped
         ordered = self._order(self._queued.values())
         head = ordered[0]
@@ -198,6 +214,27 @@ class Scheduler:
         if self.on_dispatch is not None:
             self.on_dispatch(batch)
         return batch, dropped
+
+    def _hold_until(self, now_us: int) -> int | None:
+        """When to dispatch if waiting for more requests is safe and could fill a batch."""
+        if self.batch_window_us == 0 or self.max_batch == 1:
+            return None
+        queued = list(self._queued.values())
+        if len(queued) >= self.max_batch:
+            return None
+        until = min(r.received_at_us for r in queued) + self.batch_window_us
+        if until <= now_us:
+            return None
+        # Every queued request must still be dispatchable and, if it can still make its
+        # deadline now, make it after the wait with one more request in the batch.
+        completion = until + self.profile.p99_us(len(queued) + 1)
+        for request in queued:
+            if request.dispatch_by_us < until:
+                return None
+            feasible_now = request.deadline_us >= now_us + self.profile.p99_us(len(queued))
+            if feasible_now and completion > request.deadline_us:
+                return None
+        return until
 
     def complete(self, batch: Batch, now_us: int) -> list[InferenceRequest]:
         """Record a finished batch. Returns the requests whose results are still deliverable."""

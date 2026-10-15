@@ -4394,6 +4394,10 @@ components:
             max_batch:
               type: integer
               minimum: 1
+            batch_window_ms:
+              type: number
+              minimum: 0
+              description: How long a queued request may wait for others to share its batch.
             reserve_fraction:
               type: number
               minimum: 0

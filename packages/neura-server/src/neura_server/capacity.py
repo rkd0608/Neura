@@ -39,6 +39,7 @@ def estimate(
         max_batch=serving.max_batch,
         reserve_fraction=serving.reserve_fraction,
         memory_available_mib=serving.memory_available_mib,
+        batch_window_us=int(serving.batch_window_ms * 1000),
     )
     demand = SessionDemand.from_binding("template", binding, rtt_p99_us=int(rtt_p99_ms * 1000))
     report = admission.capacity(demand)
@@ -60,6 +61,7 @@ def estimate(
             "dispatch_freshness_ms": ms(freshness.max_observation_age_at_dispatch_us),
             "acceptance_freshness_ms": ms(freshness.max_observation_age_at_acceptance_us),
             "max_batch": serving.max_batch,
+            "batch_window_ms": serving.batch_window_ms,
             "reserve_fraction": serving.reserve_fraction,
             "latency_p99_ms_by_batch": {
                 str(point.batch_size): round(point.p99_us / 1000, 3) for point in points

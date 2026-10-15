@@ -355,6 +355,10 @@ class GatewayCore:
         batch, dropped = self.groups[group_key].scheduler.next_batch(now_us)
         return batch, self._rejections(dropped)
 
+    def hold_until(self, group_key: str) -> int | None:
+        """When the group's scheduler wants to be asked again (it is holding a batch open)."""
+        return self.groups[group_key].scheduler.hold_until_us
+
     def complete(
         self,
         group_key: str,

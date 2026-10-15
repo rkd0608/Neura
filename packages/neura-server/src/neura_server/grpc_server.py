@@ -161,12 +161,18 @@ class GatewayServer:
             profile = LatencyProfile(points)
             groups[key] = BatchGroup(
                 key,
-                Scheduler(profile, policy=serving.policy, max_batch=serving.max_batch),
+                Scheduler(
+                    profile,
+                    policy=serving.policy,
+                    max_batch=serving.max_batch,
+                    batch_window_us=int(serving.batch_window_ms * 1000),
+                ),
                 AdmissionController(
                     profile,
                     max_batch=serving.max_batch,
                     reserve_fraction=serving.reserve_fraction,
                     memory_available_mib=serving.memory_available_mib,
+                    batch_window_us=int(serving.batch_window_ms * 1000),
                 ),
             )
             backends[key] = _Group(key, self._backend(serving, item, deployment, profile), source)
@@ -329,7 +335,15 @@ class GatewayServer:
                 batch, dropped = self.core.next_batch(group.key, monotonic_us())
                 self.route(dropped)
                 if batch is None:
-                    break
+                    hold = self.core.hold_until(group.key)
+                    if hold is None:
+                        break
+                    # Holding the batch open: ask again at the deadline or on a new arrival.
+                    with contextlib.suppress(TimeoutError):
+                        delay = max(hold - monotonic_us(), 0) / 1e6
+                        await asyncio.wait_for(group.wake.wait(), timeout=delay)
+                    group.wake.clear()
+                    continue
                 outputs = await self._run(group, batch, worker_timeout_us)
                 self.route(self.core.complete(group.key, batch, outputs, monotonic_us()))
 

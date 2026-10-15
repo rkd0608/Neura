@@ -85,6 +85,8 @@ class ServingConfig(_Model):
     worker_timeout_ms: float = Field(default=1000, gt=0)
     policy: Policy = Policy.DEADLINE_FAIRNESS
     max_batch: int = Field(default=8, ge=1, le=256)
+    # How long a queued request may wait for others to share its batch (within deadlines).
+    batch_window_ms: float = Field(default=2.0, ge=0, le=50)
     reserve_fraction: float = Field(default=0.2, ge=0, lt=1)
     memory_available_mib: int | None = Field(default=None, ge=1)
     profile: list[ProfilePointConfig] = Field(

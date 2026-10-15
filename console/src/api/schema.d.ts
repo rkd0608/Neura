@@ -1504,6 +1504,8 @@ export interface components {
         dispatch_freshness_ms?: number | null;
         acceptance_freshness_ms?: number | null;
         max_batch?: number;
+        /** @description How long a queued request may wait for others to share its batch. */
+        batch_window_ms?: number;
         reserve_fraction?: number;
         latency_p99_ms_by_batch?: {
           [key: string]: number;

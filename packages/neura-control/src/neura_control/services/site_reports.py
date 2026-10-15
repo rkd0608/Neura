@@ -96,6 +96,7 @@ class _CapacityAssumptions(BaseModel):
     dispatch_freshness_ms: float | None = Field(default=None, ge=0)
     acceptance_freshness_ms: float | None = Field(default=None, ge=0)
     max_batch: int = Field(ge=1)
+    batch_window_ms: float = Field(default=0, ge=0, le=1000)
     reserve_fraction: float = Field(ge=0, le=1)
     latency_p99_ms_by_batch: dict[str, float]
     memory_available_mib: int | None = Field(default=None, ge=0)

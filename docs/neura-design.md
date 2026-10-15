@@ -257,6 +257,8 @@ Per group, at each dispatch opportunity:
 
 FIFO and round robin ship as baseline schedulers selectable by config, so every benchmark compares against them. At most one outstanding request per robot.
 
+*Batching window (M6).* With an idle worker and fewer than `max_batch` requests queued, the scheduler holds the batch open for up to `batch_window_ms` (default 2 ms) after the oldest queued request. It holds only if every queued request stays dispatchable and every request that can still make its deadline still makes it with one more member in the batch. Admission counts the window in its worst case. Without the window, robots that ask within a few milliseconds of each other did not share a pass, and whether they did depended on event-loop timing. The later ones waited a whole forward pass, which the benchmark found in real time and the simulation did not reproduce. The window makes batching deliberate, the same in the gateway and the simulator.
+
 ### 9.3 Admission control
 
 A session is admitted to a group only if the profiled latency at the resulting concurrency still satisfies every admitted session's refill inequality (§8), with configured reserve capacity and memory headroom. Admission is where overload is refused. There are no growing queues.

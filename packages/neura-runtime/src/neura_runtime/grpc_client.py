@@ -14,6 +14,8 @@ import contextlib
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -29,12 +31,60 @@ def monotonic_us() -> int:
     return time.monotonic_ns() // 1000
 
 
+@dataclass(frozen=True, slots=True)
+class RobotCredentials:
+    """How a robot proves its identity to the gateway: a client certificate from the site CA
+    (mutual TLS, design §17.3), or a device token on a development gateway without TLS."""
+
+    token: str | None = None
+    ca_pem: bytes | None = None
+    certificate_pem: bytes | None = None
+    key_pem: bytes | None = None
+    # The name to verify in the gateway's certificate when the target address is not in it.
+    server_name: str | None = None
+
+    def __post_init__(self) -> None:
+        tls = (self.ca_pem, self.certificate_pem, self.key_pem)
+        if self.token is None and any(v is None for v in tls):
+            raise ValueError("credentials need a CA, certificate and key, or a token")
+        if self.token is not None and any(v is not None for v in tls):
+            raise ValueError("credentials are a certificate or a token, not both")
+
+    @classmethod
+    def from_directory(cls, directory: Path, robot: str) -> RobotCredentials:
+        """``<robot>.key``, ``<robot>.pem`` and ``ca.pem`` in ``directory``."""
+        return cls(
+            ca_pem=(directory / "ca.pem").read_bytes(),
+            certificate_pem=(directory / f"{robot}.pem").read_bytes(),
+            key_pem=(directory / f"{robot}.key").read_bytes(),
+        )
+
+    @property
+    def tls(self) -> bool:
+        return self.token is None
+
+    def channel(self, target: str, options: list[tuple[str, Any]]) -> grpc.aio.Channel:
+        if not self.tls:
+            return grpc.aio.insecure_channel(target, options=options)
+        credentials = grpc.ssl_channel_credentials(
+            root_certificates=self.ca_pem,
+            private_key=self.key_pem,
+            certificate_chain=self.certificate_pem,
+        )
+        if self.server_name:
+            options = [*options, ("grpc.ssl_target_name_override", self.server_name)]
+        return grpc.aio.secure_channel(target, credentials, options=options)
+
+    def metadata(self) -> tuple[tuple[str, str], ...]:
+        return (("authorization", f"Bearer {self.token}"),) if self.token else ()
+
+
 class GatewayConnection:
     def __init__(
         self,
         client: SessionClient,
         target: str,
-        token: str,
+        credentials: RobotCredentials | str,
         *,
         rpc_timeout_s: float = 0.5,
         max_message_bytes: int = 32 * 1024 * 1024,
@@ -43,7 +93,10 @@ class GatewayConnection:
     ) -> None:
         self.client = client
         self.target = target
-        self._metadata = (("authorization", f"Bearer {token}"),)
+        if isinstance(credentials, str):
+            credentials = RobotCredentials(token=credentials)
+        self.credentials = credentials
+        self._metadata = credentials.metadata()
         self._rpc_timeout = rpc_timeout_s
         self._max_message_bytes = max_message_bytes
         self._on_tick = on_tick
@@ -58,7 +111,7 @@ class GatewayConnection:
             ("grpc.max_receive_message_length", self._max_message_bytes),
             ("grpc.max_send_message_length", self._max_message_bytes),
         ]
-        async with grpc.aio.insecure_channel(self.target, options=options) as channel:
+        async with self.credentials.channel(self.target, options) as channel:
             stub = dataplane_pb2_grpc.RobotGatewayStub(channel)
             stream_task = asyncio.create_task(self._stream_forever(stub, stop))
             try:
@@ -152,3 +205,17 @@ class GatewayConnection:
     async def _outgoing(self) -> AsyncIterator[dataplane_pb2.RobotMessage]:
         while True:
             yield await self._send.get()
+
+
+async def fetch_assignment(
+    target: str, credentials: RobotCredentials | str, *, timeout_s: float = 2.0
+) -> dataplane_pb2.Assignment:
+    """Ask the gateway which revision this robot should run (``GetAssignment``)."""
+    if isinstance(credentials, str):
+        credentials = RobotCredentials(token=credentials)
+    async with credentials.channel(target, []) as channel:
+        stub = dataplane_pb2_grpc.RobotGatewayStub(channel)
+        assignment: dataplane_pb2.Assignment = await stub.GetAssignment(
+            dataplane_pb2.GetAssignmentRequest(), timeout=timeout_s, metadata=credentials.metadata()
+        )
+        return assignment

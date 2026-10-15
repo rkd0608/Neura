@@ -8,6 +8,25 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class GetAssignmentRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class Assignment(_message.Message):
+    __slots__ = ("revision_id", "documents")
+    class DocumentsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: bytes
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
+    REVISION_ID_FIELD_NUMBER: _ClassVar[int]
+    DOCUMENTS_FIELD_NUMBER: _ClassVar[int]
+    revision_id: str
+    documents: _containers.ScalarMap[str, bytes]
+    def __init__(self, revision_id: _Optional[str] = ..., documents: _Optional[_Mapping[str, bytes]] = ...) -> None: ...
+
 class OpenSessionRequest(_message.Message):
     __slots__ = ("protocol_version", "robot_id", "revision_id", "artifact_digest", "execution_profile_digest", "robot_profile_digest")
     PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]

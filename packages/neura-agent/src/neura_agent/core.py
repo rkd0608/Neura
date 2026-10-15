@@ -20,7 +20,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from neura.v1 import common_pb2, site_pb2
-from neura_agent import placement
+from neura_agent import placement, site_pki
 from neura_agent.artifacts import ArtifactError, ArtifactStore
 from neura_agent.gateway import (
     GatewayRunner,
@@ -29,8 +29,9 @@ from neura_agent.gateway import (
     write_gateway_config,
     write_revision_documents,
 )
-from neura_agent.identity import Identity
+from neura_agent.identity import Identity, atomic_write
 from neura_agent.settings import AgentSettings
+from neura_agent.site_pki import SitePki, default_gateway_names, unexpired
 from neura_agent.state import Activation, AgentState, Assignment, AuditLog, StateStore
 from neura_contracts import (
     ContractError,
@@ -41,6 +42,7 @@ from neura_contracts import (
     canonical_json,
     content_digest,
     parse_document,
+    pki,
 )
 from neura_contracts.site_protocol import (
     CONTACT_NONCE_BYTES,
@@ -96,6 +98,7 @@ class AgentCore:
         self.store = StateStore(settings.state_dir / "state.json")
         self.audit = AuditLog(settings.state_dir / "audit.jsonl")
         self.gateway_dir = settings.state_dir / "gateway"
+        self.pki = SitePki(settings.state_dir / "pki", identity.site_id)
         self.gateway_config_path: Path = self.gateway_dir / "site.yaml"
         self.state: AgentState = self.store.load()
         self.outbox: asyncio.Queue[site_pb2.AgentMessage] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
@@ -313,7 +316,7 @@ class AgentCore:
         """Bring the gateway in line with committed state (start, reload or keep it suspended)."""
         if self.state.manifest_payload is None:
             return
-        config = build_gateway_config(self.state, self.settings, self.gateway_dir)
+        config = self.gateway_config()
         changed = write_gateway_config(config, self.gateway_config_path)
         if self.gateway_suspended:
             return
@@ -820,6 +823,72 @@ class AgentCore:
         """The serving settings this site's gateway runs with (and capacity is estimated for)."""
         serving = build_gateway_config(self.state, self.settings, self.gateway_dir)["serving"]
         return ServingConfig.model_validate(serving)
+
+    # --- robot certificates (design §17.3) ----------------------------------------------------
+
+    def gateway_config(self) -> dict[str, Any]:
+        """The gateway's configuration, with mutual TLS from the site CA unless disabled."""
+        if not self.settings.gateway_tls:
+            return build_gateway_config(
+                self.state, self.settings, self.gateway_dir, site_id=self.identity.site_id
+            )
+        names = sorted({*default_gateway_names(), *self.settings.gateway_tls_names})
+        tls = self.pki.gateway_tls(self.gateway_dir / "tls", names)
+        if self.settings.dev_robot_certificate_dir is not None:
+            self._issue_dev_robot_certificates(self.settings.dev_robot_certificate_dir)
+        return build_gateway_config(
+            self.state, self.settings, self.gateway_dir, tls=tls, site_id=self.identity.site_id
+        )
+
+    def _robot_names(self) -> set[str]:
+        return {r["name"] for r in self.manifest().get("robots", [])}
+
+    def issue_robot_certificate(self, robot: str, request_pem: bytes) -> tuple[bytes, bytes]:
+        """Sign a robot's CSR (the site operator asked for it). Returns (certificate, site CA)."""
+        if robot not in self._robot_names():
+            raise LocalActionError(ReasonCode.API_NOT_FOUND, f"{robot} is not a robot of this site")
+        try:
+            certificate = self.pki.issue_robot(robot, request_pem)
+        except pki.CertificateError as exc:
+            raise LocalActionError(ReasonCode.PROTOCOL_MESSAGE_INVALID, str(exc)) from exc
+        self._record_robot_certificate(robot, certificate)
+        self.audit.write(
+            "robot_certificate_issued", robot=robot, sha256=pki.fingerprint(certificate)
+        )
+        return certificate, self.pki.ca_pem
+
+    def revoke_robot_certificates(self, robot: str) -> int:
+        """The gateway stops accepting the robot's certificates; its sessions end."""
+        revoked = len(self.state.robot_certificates.pop(robot, []))
+        self._save()
+        self.audit.write("robot_certificates_revoked", robot=robot, count=revoked)
+        return revoked
+
+    def _record_robot_certificate(self, robot: str, certificate: bytes) -> None:
+        records = [r for r in self.state.robot_certificates.get(robot, []) if unexpired([r])]
+        records.append(site_pki.record(certificate))
+        self.state.robot_certificates[robot] = records
+        self._save()
+
+    def _issue_dev_robot_certificates(self, directory: Path) -> None:
+        """DEVELOPMENT ONLY: keys and certificates for simulated robots, written to a directory
+        they read."""
+        allowed = {
+            name: set(unexpired(records)) for name, records in self.state.robot_certificates.items()
+        }
+        ca = directory / "ca.pem"
+        if not ca.exists() or ca.read_bytes() != self.pki.ca_pem:
+            atomic_write(ca, self.pki.ca_pem, 0o644)
+        for robot in sorted(self._robot_names()):
+            cert_path = directory / f"{robot}.pem"
+            if cert_path.exists() and pki.fingerprint(cert_path.read_bytes()) in allowed.get(
+                robot, set()
+            ):
+                continue
+            key_pem, certificate = self.pki.issue_robot_bundle(robot)
+            atomic_write(directory / f"{robot}.key", key_pem, 0o600)
+            atomic_write(cert_path, certificate, 0o644)
+            self._record_robot_certificate(robot, certificate)
 
     def assignment_for(self, robot_name: str) -> dict[str, Any] | None:
         """What a robot should run: its next revision during a switch, else its current one."""

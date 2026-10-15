@@ -18,12 +18,6 @@ export class Site {
   constructor(private readonly robots: number) {}
 
   private env(): NodeJS.ProcessEnv {
-    const tokens = Object.fromEntries(
-      Array.from({ length: this.robots }, (_, i) => [
-        `${ROBOT_PREFIX}${i}`,
-        `dev-token-${ROBOT_PREFIX}${i}`,
-      ]),
-    );
     return {
       ...process.env,
       NEURA_AGENT_STATE_DIR: this.stateDir,
@@ -35,7 +29,9 @@ export class Site {
       NEURA_AGENT_GATEWAY_BACKEND: "simulated",
       NEURA_AGENT_STATUS_INTERVAL_S: "0.5",
       NEURA_AGENT_OPERATOR_TOKEN_SHA256: createHash("sha256").update(OPERATOR_TOKEN).digest("hex"),
-      NEURA_AGENT_DEV_ROBOT_TOKENS: JSON.stringify(tokens),
+      // Robots and the gateway use mutual TLS; the agent issues the simulated robots' keys and
+      // certificates here (development only: real robots send a CSR).
+      NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR: path.join(this.stateDir, "robot-certs"),
     };
   }
 
@@ -67,8 +63,9 @@ export class Site {
           "neura-sim-robots",
           "--gateway",
           "127.0.0.1:18051",
-          "--agent-url",
-          "http://127.0.0.1:18090",
+          "--assigned",
+          "--cert-dir",
+          path.join(this.stateDir, "robot-certs"),
           "--robots",
           String(this.robots),
           "--robot-prefix",

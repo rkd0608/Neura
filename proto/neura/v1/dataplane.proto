@@ -17,6 +17,18 @@ service RobotGateway {
   rpc Control(ControlRequest) returns (ControlResponse);
   // Observations up, action chunks down. One stream per session.
   rpc Stream(stream RobotMessage) returns (stream GatewayMessage);
+  // Which revision this robot should run, with its contract documents, so the robot verifies
+  // what it will run itself (design §16). The robot switches at its own task boundary.
+  rpc GetAssignment(GetAssignmentRequest) returns (Assignment);
+}
+
+message GetAssignmentRequest {}
+
+message Assignment {
+  // Empty when no deployment includes this robot.
+  string revision_id = 1;
+  // Contract documents by role (model_artifact, robot_profile, execution_profile), as JSON.
+  map<string, bytes> documents = 2;
 }
 
 message OpenSessionRequest {

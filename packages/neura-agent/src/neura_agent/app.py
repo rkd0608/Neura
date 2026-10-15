@@ -2,7 +2,7 @@
 
 Available without the internet: operators check status, approve or refuse activations and issue
 robot credentials here; robots fetch the revision they should run. Mutations need the local operator
-credential; robots authenticate with their device tokens.
+credential. Robots do not use this API: they reach only the gateway, with their certificates.
 """
 
 from __future__ import annotations
@@ -42,6 +42,11 @@ class Decision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operator: str = Field(min_length=1, max_length=200)
     note: str = Field(default="", max_length=2000)
+
+
+class CertificateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    csr: str = Field(min_length=1, max_length=16_000)
 
 
 class LocalError(Exception):
@@ -125,16 +130,6 @@ def create_app(
         ):
             raise LocalError(ReasonCode.API_UNAUTHENTICATED, 401, "operator credential required")
 
-    def robot(request: Request, name: str) -> None:
-        token = _bearer(request)
-        digest = hashlib.sha256(token.encode()).hexdigest() if token else ""
-        known = dict(core().state.robot_credentials)
-        for robot_name, plain in (settings.dev_robot_tokens or {}).items():
-            known.setdefault(robot_name, hashlib.sha256(plain.encode()).hexdigest())
-        expected = known.get(name)
-        if not expected or not hmac.compare_digest(expected, digest):
-            raise LocalError(ReasonCode.AUTH_DEVICE_UNKNOWN, 401, "device credential required")
-
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
@@ -194,10 +189,40 @@ def create_app(
             raise LocalError(exc.code, 404, str(exc)) from exc
         return {"status": "refused"}
 
-    @app.post("/v1/local/robots/{name}/credentials")
-    async def issue_credentials(name: str, request: Request) -> dict[str, str]:
+    @app.post("/v1/local/robots/{name}/certificate")
+    async def issue_certificate(
+        name: str, body: CertificateRequest, request: Request
+    ) -> dict[str, str]:
+        """Sign a robot's CSR with the site CA (design §17.3); the robot's key stays on it."""
         operator(request)
         c = core()
+        try:
+            certificate, ca = c.issue_robot_certificate(name, body.csr.encode())
+        except LocalActionError as exc:
+            status = 404 if exc.code is ReasonCode.API_NOT_FOUND else 422
+            raise LocalError(exc.code, status, str(exc)) from exc
+        await c.reconcile()
+        return {"robot": name, "certificate": certificate.decode(), "ca": ca.decode()}
+
+    @app.delete("/v1/local/robots/{name}/certificate")
+    async def revoke_certificates(name: str, request: Request) -> dict[str, Any]:
+        operator(request)
+        c = core()
+        revoked = c.revoke_robot_certificates(name)
+        await c.reconcile()
+        return {"robot": name, "revoked": revoked}
+
+    @app.post("/v1/local/robots/{name}/credentials")
+    async def issue_credentials(name: str, request: Request) -> dict[str, str]:
+        """A device token, for a development gateway without TLS only."""
+        operator(request)
+        c = core()
+        if settings.gateway_tls:
+            raise LocalError(
+                ReasonCode.API_CONFLICT,
+                409,
+                "the gateway uses mutual TLS: issue a certificate (neura-agent robot-certificate)",
+            )
         if name not in {r["name"] for r in c.manifest().get("robots", [])}:
             raise LocalError(ReasonCode.API_NOT_FOUND, 404, "no such robot at this site")
         token = f"nrt_{secrets.token_urlsafe(32)}"
@@ -209,7 +234,8 @@ def create_app(
 
     @app.get("/v1/local/robots/{name}/assignment")
     async def assignment(name: str, request: Request) -> dict[str, Any]:
-        robot(request, name)
+        """What a robot is assigned (robots ask the gateway; this is for the operator)."""
+        operator(request)
         found = core().assignment_for(name)
         if found is None:
             raise LocalError(

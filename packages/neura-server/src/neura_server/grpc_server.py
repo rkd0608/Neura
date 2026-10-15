@@ -9,20 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import math
 import random
 import shutil
 import tempfile
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import grpc
 import numpy as np
 import uvicorn
+import yaml
 from fastapi import FastAPI
 from numpy.typing import NDArray
 
@@ -35,6 +37,7 @@ from neura_server.config import (
     DeviceRegistry,
     GatewayConfig,
     ServingConfig,
+    TlsConfig,
     load_binding,
     load_profile_points,
     profile_batch_sizes,
@@ -95,7 +98,7 @@ class GatewayServer:
         self, config: GatewayConfig, *, generation_store: GenerationStore | None = None
     ) -> None:
         self.config = config
-        self.devices = DeviceRegistry(config.devices)
+        self.devices = DeviceRegistry(config.devices, site_id=config.site_id)
         self._group_seq = 0
         self._owned_worker_dir: Path | None = None
         if config.serving.worker_dir is not None:
@@ -212,8 +215,9 @@ class GatewayServer:
         """Apply a new configuration in place (devices and deployments). Serving settings and
         listen addresses need a restart. Returns the ids of sessions that were closed."""
         deployments, groups, backends = self._build(config, set(self.core.groups))
-        self.devices = DeviceRegistry(config.devices)
+        self.devices = DeviceRegistry(config.devices, site_id=config.site_id)
         closed = self.core.replace_deployments(deployments, groups)
+        closed += self.core.close_robots_without_credentials(self.devices.robots())
         for group in backends.values():
             self._groups[group.key] = group
             if self._server is not None:
@@ -261,7 +265,14 @@ class GatewayServer:
         ]
         self._server = grpc.aio.server(options=options)
         dataplane_pb2_grpc.add_RobotGatewayServicer_to_server(_Servicer(self), self._server)
-        self.bound_port = self._server.add_insecure_port(self.config.listen)
+        if self.config.tls is not None:
+            self._tls = _RotatingTls(self.config.tls)
+            self.bound_port = self._server.add_secure_port(
+                self.config.listen, self._tls.credentials()
+            )
+        else:
+            log.warning("gateway without TLS: robots authenticate with tokens (development only)")
+            self.bound_port = self._server.add_insecure_port(self.config.listen)
         await self._server.start()
         for group in self._groups.values():
             self._launch(group)
@@ -372,6 +383,24 @@ class GatewayServer:
             for group in self._groups.values():
                 group.wake.set()  # lets the scheduler expire stale requests promptly
 
+    def assignment(self, robot_id: str) -> dataplane_pb2.Assignment:
+        """The revision this robot should run and its documents, read from the files the
+        configuration names (the agent verified them against the signed manifest)."""
+        revision_id = self.config.assignments.get(robot_id)
+        if revision_id is None or revision_id not in self.core.allowed_revisions(robot_id):
+            return dataplane_pb2.Assignment()
+        item = next(d for d in self.config.deployments if d.revision_id == revision_id)
+
+        def as_json(path: Path) -> bytes:  # documents may be stored as YAML (a JSON superset)
+            return json.dumps(yaml.safe_load(path.read_text(encoding="utf-8"))).encode()
+
+        documents = {
+            "model_artifact": as_json(item.artifact),
+            "robot_profile": as_json(item.robot_profile),
+            "execution_profile": as_json(item.execution_profile),
+        }
+        return dataplane_pb2.Assignment(revision_id=revision_id, documents=documents)
+
     def backends(self) -> dict[str, Backend]:
         """Each batch group's backend, by group key."""
         return {key: group.backend for key, group in self._groups.items()}
@@ -404,6 +433,44 @@ class GatewayServer:
         return app
 
 
+class _RotatingTls:
+    """Server credentials that pick up a renewed certificate (or CA) on the next handshake."""
+
+    def __init__(self, tls: TlsConfig) -> None:
+        self._tls = tls
+        self._stamp = self._mtimes()
+
+    def _mtimes(self) -> tuple[int, ...]:
+        return tuple(
+            p.stat().st_mtime_ns
+            for p in (self._tls.certificate, self._tls.key, self._tls.client_ca)
+        )
+
+    def _configuration(self) -> grpc.ServerCertificateConfiguration:
+        return grpc.ssl_server_certificate_configuration(
+            [(self._tls.key.read_bytes(), self._tls.certificate.read_bytes())],
+            root_certificates=self._tls.client_ca.read_bytes(),
+        )
+
+    def _fetch(self) -> grpc.ServerCertificateConfiguration | None:
+        try:
+            stamp = self._mtimes()
+        except OSError:
+            return None  # mid-rename: keep the current configuration
+        if stamp == self._stamp:
+            return None
+        self._stamp = stamp
+        log.info("gateway TLS certificate reloaded")
+        return self._configuration()
+
+    def credentials(self) -> grpc.ServerCredentials:
+        # The fetcher returns None for "unchanged", as gRPC documents; the stubs omit it.
+        fetch = cast(Callable[[], grpc.ServerCertificateConfiguration], self._fetch)
+        return grpc.dynamic_ssl_server_credentials(
+            self._configuration(), fetch, require_client_authentication=True
+        )
+
+
 def _closed_message(session_id: str) -> dataplane_pb2.GatewayMessage:
     from neura.v1 import common_pb2
 
@@ -420,10 +487,18 @@ class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]
         self._server = server
 
     async def _robot(self, context: grpc.aio.ServicerContext[Any, Any]) -> str:
-        metadata = dict(context.invocation_metadata() or ())
-        header = str(metadata.get("authorization", ""))
-        token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
-        robot_id = self._server.devices.authenticate(token) if token else None
+        robot_id: str | None
+        if self._server.config.tls is not None:
+            # TLS verified the chain to the site CA and the validity period; the registry checks
+            # the certificate is still allowed and names this robot.
+            certificates = (context.auth_context() or {}).get("x509_pem_cert") or ()
+            peer = next(iter(certificates), b"")
+            robot_id = self._server.devices.authenticate_certificate(peer)
+        else:
+            metadata = dict(context.invocation_metadata() or ())
+            header = str(metadata.get("authorization", ""))
+            token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
+            robot_id = self._server.devices.authenticate(token) if token else None
         if robot_id is None:
             await context.abort(grpc.StatusCode.UNAUTHENTICATED, "AUTH_DEVICE_UNKNOWN")
             raise AssertionError("unreachable")
@@ -434,6 +509,14 @@ class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]
     ) -> dataplane_pb2.OpenSessionResponse:
         robot_id = await self._robot(context)
         return self._server.core.open_session(robot_id, request, monotonic_us())
+
+    async def GetAssignment(  # noqa: N802
+        self,
+        request: dataplane_pb2.GetAssignmentRequest,
+        context: grpc.aio.ServicerContext[Any, Any],
+    ) -> dataplane_pb2.Assignment:
+        robot_id = await self._robot(context)
+        return self._server.assignment(robot_id)
 
     async def Heartbeat(  # noqa: N802
         self, request: dataplane_pb2.HeartbeatRequest, context: grpc.aio.ServicerContext[Any, Any]

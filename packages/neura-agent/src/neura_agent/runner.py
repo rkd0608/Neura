@@ -9,6 +9,7 @@ import logging
 from collections.abc import Callable
 
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
+from neura_agent.agent_tls import AgentTls
 from neura_agent.connection import ControlConnection, agent_version, open_channel
 from neura_agent.core import AgentCore
 from neura_agent.gateway import GatewayRunner, SubprocessGateway
@@ -73,6 +74,8 @@ class AgentRuntime:
             details = "; ".join(f"{c.name}: {c.detail} (fix: {c.fix})" for c in failed)
             raise EnrollmentError(ReasonCode.AGENT_PREFLIGHT_FAILED.value, details)
         key = self.identities.load_or_create_key()
+        tls = AgentTls(self.settings.state_dir)
+        csr = tls.request(facts.hostname or "server")
         async with open_channel(endpoint, self.settings) as channel:
             response = await site_pb2_grpc.SiteControlStub(channel).Enroll(
                 site_pb2.EnrollRequest(
@@ -81,6 +84,7 @@ class AgentRuntime:
                     public_key=IdentityStore.public_key_raw(key),
                     agent_version=agent_version(),
                     facts=facts,
+                    tls_csr=csr,
                 ),
                 timeout=15,
             )
@@ -89,11 +93,13 @@ class AgentRuntime:
                 response.rejected.code, response.rejected.message or "enrollment refused"
             )
         enrolled = response.enrolled
+        if enrolled.client_certificate:
+            tls.install(enrolled.client_certificate, enrolled.client_ca)
         identity = Identity(
             server_id=enrolled.server_id,
             site_id=enrolled.site_id,
             project_id=enrolled.project_id,
-            endpoint=endpoint,
+            endpoint=enrolled.agent_endpoint or endpoint,
             manifest_public_key_hex=enrolled.manifest_public_key.hex(),
             manifest_key_id=enrolled.manifest_key_id,
         )

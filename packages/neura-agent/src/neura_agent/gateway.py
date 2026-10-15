@@ -17,6 +17,7 @@ import yaml
 
 from neura_agent.identity import atomic_write
 from neura_agent.settings import AgentSettings
+from neura_agent.site_pki import GatewayTls, unexpired
 from neura_agent.state import AgentState
 from neura_server.config import GatewayConfig
 from neura_server.grpc_server import GatewayServer
@@ -35,20 +36,33 @@ def revision_documents(manifest: dict[str, Any], revision_id: str) -> dict[str, 
 
 
 def build_gateway_config(
-    state: AgentState, settings: AgentSettings, gateway_dir: Path
+    state: AgentState,
+    settings: AgentSettings,
+    gateway_dir: Path,
+    *,
+    tls: GatewayTls | None = None,
+    site_id: str | None = None,
 ) -> dict[str, Any]:
     """The gateway's site.yaml: devices with credentials, and for every revision a robot may run
-    (current or next), the robots allowed to run it."""
+    (current or next), the robots allowed to run it. With ``tls``, robots authenticate with
+    certificates from the site CA; without it, with device tokens (development only)."""
     manifest = state.manifest() or {"robots": [], "deployments": []}
     names = {r["name"] for r in manifest.get("robots", [])}
-    credentials = dict(state.robot_credentials)
-    for name, token in (settings.dev_robot_tokens or {}).items():
-        credentials.setdefault(name, hashlib.sha256(token.encode()).hexdigest())
-    devices = [
-        {"robot_id": name, "token_sha256": digest}
-        for name, digest in sorted(credentials.items())
-        if name in names
-    ]
+    devices: list[dict[str, Any]] = []
+    if tls is not None:
+        for name, records in sorted(state.robot_certificates.items()):
+            fingerprints = unexpired(records)
+            if name in names and fingerprints:
+                devices.append({"robot_id": name, "certificate_sha256": fingerprints})
+    else:
+        credentials = dict(state.robot_credentials)
+        for name, token in (settings.dev_robot_tokens or {}).items():
+            credentials.setdefault(name, hashlib.sha256(token.encode()).hexdigest())
+        devices = [
+            {"robot_id": name, "token_sha256": digest}
+            for name, digest in sorted(credentials.items())
+            if name in names
+        ]
     by_revision: dict[str, list[str]] = {}
     for name, assignment in sorted(state.assignments.items()):
         if name not in names:
@@ -78,12 +92,20 @@ def build_gateway_config(
                 if placement.get(key) is not None:
                     deployment[key] = placement[key]
         deployments.append(deployment)
-    return {
+    served = {d["revision_id"] for d in deployments}
+    assignments = {
+        name: preferred
+        for name, assignment in sorted(state.assignments.items())
+        if name in names and (preferred := assignment.preferred()) in served
+    }
+    config: dict[str, Any] = {
+        "site_id": site_id,
         "listen": settings.gateway_listen,
         "status_listen": settings.gateway_status_listen,
         "lease_store": str(gateway_dir / "leases.db"),
         "devices": devices,
         "deployments": deployments,
+        "assignments": assignments,
         "serving": {
             "backend": settings.gateway_backend,
             "simulate_latency": settings.gateway_simulate_latency,
@@ -91,6 +113,13 @@ def build_gateway_config(
             "worker_command": settings.worker_command,
         },
     }
+    if tls is not None:
+        config["tls"] = {
+            "certificate": str(tls.certificate),
+            "key": str(tls.key),
+            "client_ca": str(tls.client_ca),
+        }
+    return config
 
 
 def write_revision_documents(

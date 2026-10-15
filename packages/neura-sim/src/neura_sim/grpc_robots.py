@@ -10,14 +10,16 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import os
 import signal
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
+import grpc
 
 from neura_contracts import (
     ContractError,
@@ -28,7 +30,7 @@ from neura_contracts import (
     parse_document,
 )
 from neura_runtime.binding import ExecutionBinding
-from neura_runtime.grpc_client import GatewayConnection
+from neura_runtime.grpc_client import GatewayConnection, RobotCredentials, fetch_assignment
 from neura_runtime.runtime import RobotRuntime, RuntimeState, TransitionError
 from neura_runtime.session import SessionClient, SessionConfig
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
@@ -51,7 +53,7 @@ class SimulatedRobotProcess:
         robot_id: str,
         revision_id: str,
         target: str,
-        token: str,
+        credentials: RobotCredentials | str,
         *,
         arm: SimulatedArm | None = None,
         task_seconds: float | None = None,
@@ -68,7 +70,7 @@ class SimulatedRobotProcess:
         self.client = SessionClient(
             self.runtime, SessionConfig(robot_id=robot_id, revision_id=revision_id)
         )
-        self.connection = GatewayConnection(self.client, target, token, on_tick=self._on_tick)
+        self.connection = GatewayConnection(self.client, target, credentials, on_tick=self._on_tick)
         self.task_seconds = task_seconds
         self.hold = False  # when True, finish the current task and do not start another
         self.tasks_completed = 0
@@ -113,24 +115,28 @@ class SimulatedRobotProcess:
 
 
 class AssignedRobot:
-    """A simulated robot that runs whatever revision the site agent assigns it, switching only at
-    a task boundary (design §16): finish the task, close the session, load and verify the new
-    contracts, open a session for the new revision."""
+    """A simulated robot that runs whatever revision the site assigns it, switching only at a
+    task boundary (design §16): finish the task, close the session, load and verify the new
+    contracts, open a session for the new revision. It asks the gateway for its assignment,
+    over the same authenticated channel it is served on."""
 
     def __init__(
         self,
         name: str,
         *,
         gateway: str,
-        agent_url: str,
-        token: str,
+        credentials: RobotCredentials | str | Callable[[], RobotCredentials],
         task_seconds: float = 8.0,
         poll_seconds: float = 1.0,
     ) -> None:
         self.name = name
         self._gateway = gateway
-        self._agent_url = agent_url.rstrip("/")
-        self._token = token
+        # A callable loads credentials when first needed (a robot can start before the site
+        # has issued its certificate) and is retried until it succeeds.
+        self._credentials_source = credentials
+        self._credentials: RobotCredentials | str | None = (
+            None if callable(credentials) else credentials
+        )
         self._task_seconds = task_seconds
         self._poll = poll_seconds
         self.process: SimulatedRobotProcess | None = None
@@ -138,65 +144,67 @@ class AssignedRobot:
         self.switches = 0
         self.last_error: str | None = None
 
-    async def _assignment(self, client: httpx.AsyncClient) -> dict[str, Any] | None:
-        response = await client.get(
-            f"{self._agent_url}/v1/local/robots/{self.name}/assignment",
-            headers={"Authorization": f"Bearer {self._token}"},
-        )
-        if response.status_code == 404:
+    def _resolved(self) -> RobotCredentials | str:
+        if self._credentials is None:
+            source = self._credentials_source
+            assert callable(source)
+            self._credentials = source()
+        return self._credentials
+
+    async def _assignment(self) -> dict[str, Any] | None:
+        assignment = await fetch_assignment(self._gateway, self._resolved())
+        if not assignment.revision_id:
             return None
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        return data
+        return {
+            "revision_id": assignment.revision_id,
+            "documents": {role: json.loads(raw) for role, raw in assignment.documents.items()},
+        }
 
     async def run(self, stop: asyncio.Event) -> None:
         connection_task: asyncio.Task[None] | None = None
         process_stop = asyncio.Event()
-        async with httpx.AsyncClient(timeout=5) as client:
-            while not stop.is_set():
-                try:
-                    assignment = await self._assignment(client)
-                    self.last_error = None
-                except (httpx.HTTPError, ValueError) as exc:
-                    assignment = None
-                    self.last_error = str(exc)
-                wanted = assignment["revision_id"] if assignment else None
-                current = self.process.revision_id if self.process else None
-                if wanted is not None and wanted != current:
-                    if self.process is not None:
-                        self.process.hold = True
-                    if self.process is None or self.process.at_task_boundary:
-                        assert assignment is not None
-                        try:
-                            binding = binding_from_documents(assignment["documents"])
-                        except (ValueError, KeyError, ContractError) as exc:
-                            # Refuse the revision and keep running the current one.
-                            self.last_error = f"refused revision {wanted}: {exc}"
-                            if self.process is not None:
-                                self.process.hold = False
-                            await asyncio.sleep(self._poll)
-                            continue
-                        if connection_task is not None:
-                            process_stop.set()
-                            await connection_task
-                        if self.arm is None:
-                            self.arm = SimulatedArm(binding.robot)
-                        self.process = SimulatedRobotProcess(
-                            binding,
-                            self.name,
-                            wanted,
-                            self._gateway,
-                            self._token,
-                            arm=self.arm,
-                            task_seconds=self._task_seconds,
-                        )
-                        process_stop = asyncio.Event()
-                        connection_task = asyncio.create_task(
-                            self.process.connection.run(process_stop)
-                        )
-                        self.switches += 1
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), timeout=self._poll)
+        while not stop.is_set():
+            try:
+                assignment = await self._assignment()
+                self.last_error = None
+            except (grpc.aio.AioRpcError, ValueError, OSError) as exc:
+                assignment = None  # not enrolled yet, gateway not up, or not assigned
+                self.last_error = str(exc)
+            wanted = assignment["revision_id"] if assignment else None
+            current = self.process.revision_id if self.process else None
+            if wanted is not None and wanted != current:
+                if self.process is not None:
+                    self.process.hold = True
+                if self.process is None or self.process.at_task_boundary:
+                    assert assignment is not None
+                    try:
+                        binding = binding_from_documents(assignment["documents"])
+                    except (ValueError, KeyError, ContractError) as exc:
+                        # Refuse the revision and keep running the current one.
+                        self.last_error = f"refused revision {wanted}: {exc}"
+                        if self.process is not None:
+                            self.process.hold = False
+                        await asyncio.sleep(self._poll)
+                        continue
+                    if connection_task is not None:
+                        process_stop.set()
+                        await connection_task
+                    if self.arm is None:
+                        self.arm = SimulatedArm(binding.robot)
+                    self.process = SimulatedRobotProcess(
+                        binding,
+                        self.name,
+                        wanted,
+                        self._gateway,
+                        self._resolved(),
+                        arm=self.arm,
+                        task_seconds=self._task_seconds,
+                    )
+                    process_stop = asyncio.Event()
+                    connection_task = asyncio.create_task(self.process.connection.run(process_stop))
+                    self.switches += 1
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=self._poll)
         if connection_task is not None:
             process_stop.set()
             await connection_task
@@ -281,19 +289,31 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--cert-dir",
+        type=Path,
+        default=env("NEURA_SIM_CERT_DIR") or None,
+        help="mutual TLS: <robot>.key, <robot>.pem and ca.pem from the site CA",
+    )
+    parser.add_argument(
+        "--tls-server-name",
+        default=env("NEURA_SIM_TLS_SERVER_NAME"),
+        help="the gateway name to verify, when --gateway is an address its certificate omits",
+    )
+    parser.add_argument(
         "--token-template",
         default=env("NEURA_SIM_TOKEN_TEMPLATE", "dev-token-{robot_id}"),
-        help="device token per robot; {robot_id} is substituted (development only)",
+        help="device token per robot without TLS; {robot_id} is substituted (development only)",
     )
     parser.add_argument(
         "--duration", type=float, default=None, help="seconds to run (default: forever)"
     )
     parser.add_argument("--report-every", type=float, default=5.0)
     parser.add_argument(
-        "--agent-url",
-        default=env("NEURA_SIM_AGENT_URL"),
-        help="site agent's local API; robots then run the revision the agent assigns them and "
-        "switch at task boundaries (otherwise --revision with the contracts given here)",
+        "--assigned",
+        action="store_true",
+        default=env("NEURA_SIM_ASSIGNED", "") in ("1", "true"),
+        help="run the revision the site assigns each robot and switch at task boundaries "
+        "(otherwise --revision with the contracts given here)",
     )
     parser.add_argument(
         "--task-seconds",
@@ -303,13 +323,22 @@ def main() -> None:
     )
     args = parser.parse_args()
     logging.basicConfig(level=env("NEURA_LOG_LEVEL", "warning").upper())
-    if args.agent_url:
+
+    def credentials(robot_id: str) -> RobotCredentials:
+        if args.cert_dir is not None:
+            loaded = RobotCredentials.from_directory(args.cert_dir, robot_id)
+            return dataclasses.replace(loaded, server_name=args.tls_server_name)
+        return RobotCredentials(token=args.token_template.format(robot_id=robot_id))
+
+    def later(robot_id: str) -> Callable[[], RobotCredentials]:
+        return lambda: credentials(robot_id)
+
+    if args.assigned:
         assigned = [
             AssignedRobot(
                 f"{args.robot_prefix}{i}",
                 gateway=args.gateway,
-                agent_url=args.agent_url,
-                token=args.token_template.format(robot_id=f"{args.robot_prefix}{i}"),
+                credentials=later(f"{args.robot_prefix}{i}"),
                 task_seconds=args.task_seconds,
             )
             for i in range(args.robots)
@@ -322,8 +351,11 @@ def main() -> None:
     robots = []
     for i in range(args.robots):
         robot_id = f"{args.robot_prefix}{i}"
-        token = args.token_template.format(robot_id=robot_id)
-        robots.append(SimulatedRobotProcess(binding, robot_id, args.revision, args.gateway, token))
+        robots.append(
+            SimulatedRobotProcess(
+                binding, robot_id, args.revision, args.gateway, credentials(robot_id)
+            )
+        )
     asyncio.run(run_robots(robots, duration_s=args.duration, report_every_s=args.report_every))
 
 

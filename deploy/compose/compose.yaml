@@ -75,13 +75,18 @@ services:
       # DEVELOPMENT ONLY: the mock policy with simulated GPU latency. The example contracts
       # carry placeholder weight digests; real sites run policy workers (the default).
       NEURA_AGENT_GATEWAY_BACKEND: simulated
-      # DEVELOPMENT ONLY: public credentials. The operator token is
-      # "ntop_dev_operator_public_token"; robots use "dev-token-<name>". Real sites issue robot
-      # credentials with `neura-agent robot-token` and keep the operator credential private.
+      # DEVELOPMENT ONLY: a public operator credential ("ntop_dev_operator_public_token"). Real
+      # sites keep the operator credential private.
       NEURA_AGENT_OPERATOR_TOKEN_SHA256: dfa754c6a45087ebcbff56b78b5367a540aa5a1235fda92aea2d96768fde6a04
-      NEURA_AGENT_DEV_ROBOT_TOKENS: '{"robot-0": "dev-token-robot-0", "robot-1": "dev-token-robot-1", "robot-2": "dev-token-robot-2", "robot-3": "dev-token-robot-3"}'
+      # Robots and the gateway use mutual TLS with the site CA. The robots reach the gateway as
+      # "site-agent". DEVELOPMENT ONLY: the agent writes the simulated robots' keys and
+      # certificates to a shared volume; real robots make their own keys and send a CSR
+      # (`neura-robot keygen`, `neura-agent robot-certificate`).
+      NEURA_AGENT_GATEWAY_TLS_NAMES: '["site-agent"]'
+      NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR: /var/lib/neura/robot-certs
     volumes:
       - agent-state:/var/lib/neura
+      - robot-certs:/var/lib/neura/robot-certs
     ports:
       - "127.0.0.1:8090:8090"
       - "127.0.0.1:50051:50051"
@@ -99,9 +104,12 @@ services:
     image: neura-sim-robots:dev
     environment:
       NEURA_SIM_GATEWAY: site-agent:50051
-      NEURA_SIM_AGENT_URL: http://site-agent:8090
+      NEURA_SIM_ASSIGNED: "true"
+      NEURA_SIM_CERT_DIR: /var/lib/neura/robot-certs
       NEURA_SIM_ROBOTS: "4"
       NEURA_SIM_TASK_SECONDS: "4"
+    volumes:
+      - robot-certs:/var/lib/neura/robot-certs:ro
     depends_on:
       site-agent:
         condition: service_healthy
@@ -124,6 +132,7 @@ services:
 volumes:
   postgres-data:
   agent-state:
+  robot-certs:
 
 secrets:
   # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.

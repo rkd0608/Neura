@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
-from neura_contracts import ReasonCode
+from neura_contracts import ReasonCode, pki
 from neura_contracts.site_protocol import CONTACT_NONCE_BYTES, contact_proof_payload
 from neura_control.clock import iso, utcnow
 from neura_control.db.models import (
@@ -87,11 +87,17 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         sessions: async_sessionmaker[AsyncSession],
         signer: ManifestSigner,
         settings: ControlPlaneSettings,
+        authority: pki.CertificateAuthority | None = None,
     ) -> None:
         self._sessions = sessions
         self._signer = signer
         self._settings = settings
+        self.authority = authority or agent_authority(settings)
+        # The stream requires the agent's client certificate when this process terminates TLS.
+        self.require_client_certificate = settings.agent_tls_cert_file is not None
         self.connected: dict[str, int] = {}  # server id -> open streams
+        # One stream per server: a newer stream supersedes the older (in this process).
+        self._current: dict[str, asyncio.Event] = {}
         # Database work in progress. An RPC cancelled midway (a stream ending, shutdown) must not
         # abandon a transaction: SQLAlchemy cannot return a connection cancelled mid-operation to
         # its pool, so it would leak. Work runs shielded and close() waits for it.
@@ -152,6 +158,12 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 )
             site = await session.get(Site, token.site_id)
             assert site is not None
+            if self.require_client_certificate and not request.tls_csr:
+                return site_pb2.EnrollResponse(
+                    rejected=_reason(
+                        ReasonCode.PROTOCOL_MESSAGE_INVALID, "a TLS certificate request is required"
+                    )
+                )
             token.used_at = now
             facts = request.facts
             server = Server(
@@ -163,8 +175,17 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 allocated_gpu_indexes=[],
                 observed=_facts_observed(facts),
                 agent_public_key=request.public_key.hex(),
+                agent_certificates=[],
                 created_by=f"enrollment:{token.id}",
             )
+            certificate = b""
+            if request.tls_csr:
+                try:
+                    certificate = self._issue(server, request.tls_csr)
+                except pki.CertificateError as exc:
+                    return site_pb2.EnrollResponse(
+                        rejected=_reason(ReasonCode.PROTOCOL_MESSAGE_INVALID, str(exc))
+                    )
             session.add(server)
             await session.flush()
             principal = Principal(subject=f"site_agent:{server.id}", kind=PrincipalKind.SITE_AGENT)
@@ -192,8 +213,34 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                     project_id=site.project_id,
                     manifest_public_key=self._signer.public_key,
                     manifest_key_id=self._signer.key_id,
+                    client_certificate=certificate,
+                    client_ca=self.authority.certificate_pem if certificate else b"",
+                    agent_endpoint=self._settings.agent_endpoint,
                 )
             )
+
+    def _issue(self, server: Server, request_pem: bytes) -> bytes:
+        """Sign an agent's CSR for this server and record the certificate's fingerprint (expired
+        ones are dropped)."""
+        certificate = self.authority.sign_request(
+            request_pem,
+            identity_uri=pki.server_uri(server.id),
+            days=self._settings.agent_certificate_days,
+        )
+        now = utcnow()
+        kept = [
+            c
+            for c in server.agent_certificates or []
+            if datetime.fromisoformat(c["not_after"]) > now
+        ]
+        server.agent_certificates = [
+            *kept,
+            {
+                "sha256": pki.fingerprint(certificate),
+                "not_after": pki.not_after(certificate).isoformat(),
+            },
+        ]
+        return certificate
 
     # --- connection ---------------------------------------------------------------------------
 
@@ -209,6 +256,8 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             agent_tokens.verify(
                 token, server.agent_public_key, max_age_s=self._settings.agent_token_max_age_s
             )
+            if self.require_client_certificate and not _presents_certificate(context, server):
+                raise agent_tokens.AgentTokenError("no valid client certificate for this server")
         except agent_tokens.AgentTokenError:
             await context.abort(
                 grpc.StatusCode.UNAUTHENTICATED, ReasonCode.AGENT_UNAUTHENTICATED.value
@@ -230,6 +279,12 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         try:
             server = await self._authenticate(context)
             server_id, site_id = server.id, server.site_id
+            superseded = asyncio.Event()
+            previous = self._current.get(server_id)
+            if previous is not None:
+                log.warning("server %s opened a new stream; closing its previous one", server_id)
+                previous.set()
+            self._current[server_id] = superseded
             self.connected[server_id] = self.connected.get(server_id, 0) + 1
             agent_version: dict[str, str | None] = {"value": None}
             # Contact challenges from the agent's status reports, answered by the send loop below
@@ -242,14 +297,22 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                     nonces[:] = [*nonces, nonce][-8:]
                     wake.set()
 
+            replies: list[site_pb2.ControlPlaneMessage] = []
+
+            def reply(message: site_pb2.ControlPlaneMessage) -> None:
+                replies.append(message)
+                wake.set()
+
             reader = asyncio.create_task(
-                self._read(server_id, site_id, request_iterator, agent_version, challenge)
+                self._read(server_id, site_id, request_iterator, agent_version, challenge, reply)
             )
             reader.add_done_callback(lambda _: wake.set())
+            watcher = asyncio.create_task(superseded.wait())
+            watcher.add_done_callback(lambda _: wake.set())
             sent_generation = -1
             sent_commands: set[str] = set()
             try:
-                while not reader.done():
+                while not reader.done() and not superseded.is_set():
                     wake.clear()
                     pending, nonces[:] = list(nonces), []
                     polled = await self._shielded(
@@ -258,7 +321,8 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                     if polled is None:
                         break  # unenrolled while connected
                     outgoing, sent_generation = polled
-                    for message in outgoing:
+                    queued, replies[:] = list(replies), []
+                    for message in [*queued, *outgoing]:
                         yield message
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
@@ -266,6 +330,9 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                         )
             finally:
                 reader.cancel()
+                watcher.cancel()
+                if self._current.get(server_id) is superseded:
+                    del self._current[server_id]
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await reader
                 self.connected[server_id] -= 1
@@ -346,16 +413,42 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         request_iterator: AsyncIterator[site_pb2.AgentMessage],
         agent_version: dict[str, str | None],
         challenge: Callable[[bytes], None],
+        reply: Callable[[site_pb2.ControlPlaneMessage], None],
     ) -> None:
         async for message in request_iterator:
             kind = message.WhichOneof("body")
             if kind == "status" and message.status.contact_nonce:
                 challenge(message.status.contact_nonce)
+            if kind == "certificate_request":
+                issued = await self._shielded(self._renew(server_id, message.certificate_request))
+                if issued is not None:
+                    reply(issued)
+                continue
             try:
                 await self._shielded(self._apply(server_id, site_id, message, agent_version))
             except Exception:
                 # One bad report must not end the stream; it is logged and the next one applied.
                 log.exception("failed to apply %s from server %s", kind, server_id)
+
+    async def _renew(
+        self, server_id: str, request: site_pb2.CertificateRequest
+    ) -> site_pb2.ControlPlaneMessage | None:
+        """A new client certificate for an authenticated agent, for a key it made."""
+        async with self._sessions.begin() as session:
+            server = await session.get(Server, server_id, with_for_update=True)
+            if server is None:
+                return None
+            try:
+                certificate = self._issue(server, request.csr)
+            except pki.CertificateError:
+                log.warning("server %s sent an invalid certificate request", server_id)
+                return None
+        log.info("issued server %s a renewed client certificate", server_id)
+        return site_pb2.ControlPlaneMessage(
+            certificate=site_pb2.CertificateIssued(
+                certificate=certificate, ca=self.authority.certificate_pem
+            )
+        )
 
     async def _apply(
         self,
@@ -609,11 +702,42 @@ async def _organization_of(session: AsyncSession, project_id: str) -> str:
     return project.organization_id
 
 
+def agent_authority(settings: ControlPlaneSettings) -> pki.CertificateAuthority:
+    """The agent CA from its files, or one made for this process (development only)."""
+    if settings.agent_client_ca_cert_file is not None and settings.agent_client_ca_key_file:
+        return pki.CertificateAuthority.load(
+            settings.agent_client_ca_cert_file.read_bytes(),
+            settings.agent_client_ca_key_file.read_bytes(),
+        )
+    return pki.CertificateAuthority.create("Neura agent CA (development, ephemeral)")
+
+
+def _presents_certificate(context: grpc.aio.ServicerContext[Any, Any], server: Server) -> bool:
+    """TLS verified the peer's chain to the agent CA; it must also be one this server was
+    issued, still valid, and name the server."""
+    certificates = (context.auth_context() or {}).get("x509_pem_cert") or ()
+    peer = next(iter(certificates), b"")
+    if not peer:
+        return False
+    try:
+        fingerprint = pki.fingerprint(peer)
+        identity = pki.identity(peer)
+    except pki.CertificateError:
+        return False
+    now = utcnow()
+    allowed = {
+        c["sha256"]
+        for c in server.agent_certificates or []
+        if datetime.fromisoformat(c["not_after"]) > now
+    }
+    return fingerprint in allowed and identity == pki.server_uri(server.id)
+
+
 async def start_agent_server(
     sessions: async_sessionmaker[AsyncSession],
     signer: ManifestSigner,
     settings: ControlPlaneSettings,
-) -> tuple[grpc.aio.Server, SiteControlService, int]:
+) -> tuple[_Servers, SiteControlService, int]:
     assert settings.agent_grpc_listen is not None
     server = grpc.aio.server(
         options=[
@@ -623,13 +747,53 @@ async def start_agent_server(
     )
     service = SiteControlService(sessions, signer, settings)
     site_pb2_grpc.add_SiteControlServicer_to_server(service, server)
+    servers = [server]
     if settings.agent_tls_cert_file is not None and settings.agent_tls_key_file is not None:
+        pair = (settings.agent_tls_key_file.read_bytes(), settings.agent_tls_cert_file.read_bytes())
+        # The stream requires the agent's client certificate from the agent CA.
         credentials = grpc.ssl_server_credentials(
-            [(settings.agent_tls_key_file.read_bytes(), settings.agent_tls_cert_file.read_bytes())]
+            [pair],
+            root_certificates=service.authority.certificate_pem,
+            require_client_auth=True,
         )
         port = server.add_secure_port(settings.agent_grpc_listen, credentials)
+        # Enrollment, before a server has a certificate: server-authenticated TLS, Enroll only.
+        assert settings.agent_enroll_listen is not None  # checked by the settings
+        enrollment = grpc.aio.server()
+        site_pb2_grpc.add_SiteControlServicer_to_server(_EnrollOnly(service), enrollment)
+        enrollment.add_secure_port(
+            settings.agent_enroll_listen, grpc.ssl_server_credentials([pair])
+        )
+        servers.append(enrollment)
     else:
         port = server.add_insecure_port(settings.agent_grpc_listen)
-    await server.start()
+    for each in servers:
+        await each.start()
     log.info("site-agent endpoint listening on %s", settings.agent_grpc_listen)
-    return server, service, port
+    return _Servers(servers), service, port
+
+
+class _EnrollOnly(site_pb2_grpc.SiteControlServicer):  # type: ignore[misc]
+    """The enrollment listener: Enroll, and nothing else."""
+
+    def __init__(self, service: SiteControlService) -> None:
+        self._service = service
+
+    async def Enroll(  # noqa: N802 - gRPC method name
+        self, request: site_pb2.EnrollRequest, context: grpc.aio.ServicerContext[Any, Any]
+    ) -> site_pb2.EnrollResponse:
+        response: site_pb2.EnrollResponse = await self._service.Enroll(request, context)
+        return response
+
+
+class _Servers:
+    """The stream and enrollment listeners, stopped together."""
+
+    def __init__(self, servers: list[grpc.aio.Server]) -> None:
+        self._servers = servers
+
+    async def stop(self, grace: float | None) -> None:
+        await asyncio.gather(*(s.stop(grace) for s in self._servers))
+
+    async def wait_for_termination(self, timeout: float | None = None) -> bool:
+        return await self._servers[0].wait_for_termination(timeout)

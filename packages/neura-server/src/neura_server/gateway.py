@@ -139,6 +139,16 @@ class GatewayCore:
         self._deployments_by_robot = index
         return closed
 
+    def close_robots_without_credentials(self, allowed: set[str]) -> list[str]:
+        """End the sessions of robots that no longer hold a valid credential (revoked)."""
+        closed = []
+        for session_id, session in list(self.sessions.items()):
+            if session.lease.robot_id not in allowed:
+                self._drop_session(session_id, ReasonCode.AUTH_DEVICE_REVOKED)
+                self.leases.release(session_id)
+                closed.append(session_id)
+        return closed
+
     def unused_groups(self) -> list[str]:
         """Batch groups no deployment and no session uses any more."""
         used = {

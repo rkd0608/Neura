@@ -58,6 +58,8 @@ class AgentState:
     executed: list[str] = field(default_factory=list)  # command ids, oldest first
     reports: dict[str, dict[str, Any]] = field(default_factory=dict)  # command id -> last report
     robot_credentials: dict[str, str] = field(default_factory=dict)  # robot name -> token sha256
+    # robot name -> client certificates the site CA issued it: {"sha256", "not_after"}.
+    robot_certificates: dict[str, list[dict[str, str]]] = field(default_factory=dict)
     last_contact_unix: float | None = None
 
     def manifest(self) -> dict[str, Any] | None:

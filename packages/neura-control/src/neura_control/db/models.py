@@ -141,6 +141,8 @@ class Server(Resource, Base):
     # Raw Ed25519 public key (hex) generated on the server at enrollment; the agent proves
     # possession of the private key on every connection.
     agent_public_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    # TLS client certificates the agent CA issued this server: [{"sha256", "not_after"}].
+    agent_certificates: Mapped[list[Any]] = mapped_column(nullable=False, default=list)
 
 
 class ContractDocument(Base):

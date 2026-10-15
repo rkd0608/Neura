@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from neura_contracts import (
     DeviceKind,
@@ -18,6 +18,7 @@ from neura_contracts import (
     ModelArtifact,
     RobotProfile,
     load_document,
+    pki,
 )
 from neura_runtime.binding import ExecutionBinding
 from neura_server.profiles import ProfilePoint
@@ -32,8 +33,27 @@ class _Model(BaseModel):
 
 class DeviceConfig(_Model):
     robot_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
-    # Only the SHA-256 of the device token is stored; tokens never appear in config.
-    token_sha256: Sha256Hex
+    # With TLS: the SHA-256 fingerprints of the robot's client certificates the site CA issued
+    # (several while one is being replaced). Without TLS (development only): the SHA-256 of a
+    # device token; tokens never appear in config.
+    certificate_sha256: list[Sha256Hex] = Field(default_factory=list)
+    token_sha256: Sha256Hex | None = None
+
+    @model_validator(mode="after")
+    def _credential(self) -> DeviceConfig:
+        if not self.certificate_sha256 and self.token_sha256 is None:
+            raise ValueError(f"device {self.robot_id} has no certificate or token")
+        return self
+
+
+class TlsConfig(_Model):
+    """The gateway's TLS: its server certificate and key, and the CA whose client certificates
+    robots must present (the site CA). Files are re-read when they change, so certificates
+    rotate without a restart."""
+
+    certificate: Path
+    key: Path
+    client_ca: Path
 
 
 Device = Annotated[str, StringConstraints(pattern=r"^(cpu|cuda:[0-9]{1,3})$")]
@@ -104,7 +124,11 @@ class ServingConfig(_Model):
 
 
 class GatewayConfig(_Model):
+    # The site this gateway serves; robots' certificates must name it.
+    site_id: str | None = None
     listen: str = "127.0.0.1:50051"
+    # Mutual TLS with robots. None: plaintext with device tokens, for development only.
+    tls: TlsConfig | None = None
     status_listen: str | None = "127.0.0.1:8091"
     lease_ttl_ms: int = Field(default=2000, ge=100)
     lease_store: Path | None = None  # None: in memory (development only)
@@ -112,7 +136,16 @@ class GatewayConfig(_Model):
     default_rtt_ms: float = Field(default=20, gt=0)
     devices: list[DeviceConfig] = Field(default_factory=list)
     deployments: list[DeploymentConfig] = Field(default_factory=list)
+    # Robot -> the revision it should run (its next one during an activation).
+    assignments: dict[str, str] = Field(default_factory=dict)
     serving: ServingConfig = Field(default_factory=ServingConfig)
+
+    @model_validator(mode="after")
+    def _credentials_match_transport(self) -> GatewayConfig:
+        for device in self.devices:
+            if self.tls is not None and not device.certificate_sha256:
+                raise ValueError(f"device {device.robot_id} needs a certificate: TLS is on")
+        return self
 
     @classmethod
     def load(cls, path: Path) -> GatewayConfig:
@@ -133,13 +166,25 @@ class GatewayConfig(_Model):
             for d in config.deployments
         ]
         lease_store = (base / config.lease_store).resolve() if config.lease_store else None
+        tls = config.tls
+        if tls is not None:
+            tls = TlsConfig(
+                certificate=(base / tls.certificate).resolve(),
+                key=(base / tls.key).resolve(),
+                client_ca=(base / tls.client_ca).resolve(),
+            )
         serving = config.serving
         if serving.worker_dir is not None:
             serving = serving.model_copy(
                 update={"worker_dir": (base / serving.worker_dir).resolve()}
             )
         return config.model_copy(
-            update={"deployments": deployments, "lease_store": lease_store, "serving": serving}
+            update={
+                "deployments": deployments,
+                "lease_store": lease_store,
+                "serving": serving,
+                "tls": tls,
+            }
         )
 
 
@@ -199,10 +244,22 @@ def token_digest(token: str) -> str:
 
 
 class DeviceRegistry:
-    def __init__(self, devices: list[DeviceConfig]) -> None:
-        self._by_digest = {d.token_sha256: d.robot_id for d in devices}
-        if len(self._by_digest) != len(devices):
+    """Which robot a credential belongs to."""
+
+    def __init__(self, devices: list[DeviceConfig], *, site_id: str | None = None) -> None:
+        self._site_id = site_id
+        self._by_digest = {d.token_sha256: d.robot_id for d in devices if d.token_sha256}
+        if len(self._by_digest) != sum(1 for d in devices if d.token_sha256):
             raise ValueError("device tokens must be unique")
+        self._by_fingerprint: dict[str, str] = {}
+        for device in devices:
+            for fingerprint in device.certificate_sha256:
+                if fingerprint in self._by_fingerprint:
+                    raise ValueError("a certificate can belong to one robot only")
+                self._by_fingerprint[fingerprint] = device.robot_id
+
+    def robots(self) -> set[str]:
+        return {*self._by_digest.values(), *self._by_fingerprint.values()}
 
     def authenticate(self, token: str) -> str | None:
         digest = token_digest(token)
@@ -210,3 +267,21 @@ class DeviceRegistry:
             if hmac.compare_digest(known, digest):
                 return robot_id
         return None
+
+    def authenticate_certificate(self, certificate_pem: bytes) -> str | None:
+        """The robot a verified client certificate belongs to: TLS checked that the site CA
+        issued it and that it is valid now; it must also still be allowed (not revoked) and name
+        this robot and site."""
+        try:
+            fingerprint = pki.fingerprint(certificate_pem)
+            identity = pki.identity(certificate_pem)
+        except pki.CertificateError:
+            return None
+        robot_id = self._by_fingerprint.get(fingerprint)
+        if robot_id is None or identity is None:
+            return None
+        if self._site_id is not None and identity != pki.robot_uri(self._site_id, robot_id):
+            return None
+        if self._site_id is None and not identity.endswith(f"/{robot_id}"):
+            return None
+        return robot_id

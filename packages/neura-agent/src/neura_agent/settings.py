@@ -50,6 +50,12 @@ class AgentSettings(BaseSettings):
     # --- the data plane this agent supervises ---
     gateway_listen: str = "0.0.0.0:50051"
     gateway_status_listen: str | None = "127.0.0.1:8091"
+    # Mutual TLS between robots and the gateway, with certificates from the site CA. Disabling it
+    # (robots then use device tokens over plaintext) is for development only.
+    gateway_tls: bool = True
+    # Names and addresses robots use to reach the gateway, for its certificate. The host name,
+    # localhost and 127.0.0.1 are always included.
+    gateway_tls_names: list[str] = Field(default_factory=list)
     gateway_command: list[str] = Field(
         default_factory=lambda: [sys.executable, "-m", "neura_server"]
     )
@@ -81,6 +87,10 @@ class AgentSettings(BaseSettings):
     # DEVELOPMENT ONLY: run every revision's worker with this adapter (e.g. "mock") instead of
     # the artifact's, so real worker processes run without the artifact's weights.
     dev_adapter_override: str | None = None
+    # DEVELOPMENT ONLY: issue every robot of the site a key and certificate into this directory
+    # (`<robot>.key`, `<robot>.pem`, `ca.pem`), for simulated robots. Real robots make their own
+    # keys and send a CSR.
+    dev_robot_certificate_dir: Path | None = None
     # DEVELOPMENT ONLY: robot name -> plain device token, so a local stack works without issuing
     # credentials through the local API.
     dev_robot_tokens: dict[str, str] | None = None

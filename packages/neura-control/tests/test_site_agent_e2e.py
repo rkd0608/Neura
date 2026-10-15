@@ -24,6 +24,7 @@ from neura_agent.gateway import InProcessGateway
 from neura_agent.runner import AgentRuntime, EnrollmentError
 from neura_agent.settings import AgentSettings
 from neura_control.app import create_app
+from neura_runtime.grpc_client import RobotCredentials
 from neura_sim.grpc_robots import AssignedRobot
 
 ROBOTS = ["robot-0", "robot-1"]
@@ -196,7 +197,9 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         gateway_status_listen=None,
         status_interval_s=0.3,
         reconnect_max_backoff_s=0.5,
-        dev_robot_tokens={name: f"dev-token-{name}" for name in ROBOTS},
+        # Robots connect with mutual TLS: certificates from the site CA, issued into a directory
+        # the simulated robots read (development only; real robots send CSRs).
+        dev_robot_certificate_dir=tmp_path / "robot-certs",
         activation_timeout_s=60,
         gateway_backend="simulated",
     )
@@ -245,25 +248,22 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
         assert status["capacity"]["max_robots"] >= len(ROBOTS)  # "this server can run N robots"
 
     # --- robots start, but nothing is assigned until a local approval ---------------------------
+    # Robots ask the gateway what to run, over the same mutual-TLS channel they are served on.
     robots = [
         AssignedRobot(
             name,
             gateway=f"127.0.0.1:{gateway.server.bound_port}",  # type: ignore[union-attr]
-            agent_url="",
-            token=f"dev-token-{name}",
+            credentials=RobotCredentials.from_directory(tmp_path / "robot-certs", name),
             task_seconds=1.5,
             poll_seconds=0.2,
         )
         for name in ROBOTS
     ]
-    # Robots fetch assignments from the agent's local API; serve it in-process for the test.
     from neura_agent.app import create_app as create_agent_app
 
     local = TestClient(create_agent_app(agent_settings, runtime=agent, start_probe=False))
     local.__enter__()
     try:
-        for robot in robots:
-            robot._assignment = _via(local, robot)  # type: ignore[method-assign]
         stop = asyncio.Event()
         running = [site_loop.spawn(r.run(stop)) for r in robots]
         time.sleep(1.0)
@@ -375,19 +375,3 @@ def test_enroll_deploy_approve_switch_and_survive_outage(
     finally:
         local.__exit__(None, None, None)
         site_loop.run(agent.stop())
-
-
-def _via(local: TestClient, robot: AssignedRobot) -> Callable[..., Any]:
-    async def fetch(_: Any) -> dict[str, Any] | None:
-        response = await asyncio.to_thread(
-            local.get,
-            f"/v1/local/robots/{robot.name}/assignment",
-            headers={"Authorization": f"Bearer dev-token-{robot.name}"},
-        )
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        return data
-
-    return fetch

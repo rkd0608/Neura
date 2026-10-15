@@ -510,7 +510,7 @@ What M4 built, and where it deliberately differs from the plan above.
 
 **Identity and transport**
 
-- The agent generates an Ed25519 key on the server and sends only the raw public key with the one-time token; the token is single use and expires. Certificates, a site CA and mTLS for robots are M7: until then each stream is authenticated with a short-lived EdDSA JWT (at most 5 minutes) that the agent signs with its key and the control plane verifies against the enrolled public key. Deleting a server ends its stream and invalidates its credential.
+- The agent generates an Ed25519 key on the server and sends only the raw public key with the one-time token; the token is single use and expires. Each stream is authenticated with a short-lived EdDSA JWT (at most 5 minutes) that the agent signs with its key and the control plane verifies against the enrolled public key; M7 adds client certificates on top (§17.7). Deleting a server ends its stream and invalidates its credential.
 - The agent uses TLS to the control plane by default (system roots or a configured CA bundle); plaintext must be enabled explicitly and is for development only. The control plane terminates TLS itself or declares that a load balancer does; staging and production refuse to start otherwise.
 
 **Desired state**
@@ -539,7 +539,7 @@ What M4 built, and where it deliberately differs from the plan above.
 
 1. An activation request reaches the site and waits for local approval. The cloud cannot approve.
 2. On approval, each robot's assignment becomes `{current, next}`, and the gateway serves both revisions for that robot.
-3. Each robot asks the local site API which revision to run and switches at its own task boundary: it finishes the task, closes its session, verifies the new contracts and opens a session for the new revision.
+3. Each robot asks which revision to run (the local site API in M4; the gateway, over mTLS, since M7) and switches at its own task boundary: it finishes the task, closes its session, verifies the new contracts and opens a session for the new revision.
 4. The activation succeeds when every robot runs the new revision. The old revision is then removed and its remaining sessions closed.
 
 A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robots not switching within the activation window (`AGENT_ACTIVATION_TIMED_OUT`, 10 minutes by default) reverts the assignment.
@@ -562,7 +562,7 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - robot credentials;
   - robot assignments;
   - the audit log.
-- Mutations require the local operator credential; only its SHA-256 is configured on the server, and without it local approvals are disabled. Robots authenticate with device tokens.
+- Mutations require the local operator credential; only its SHA-256 is configured on the server, and without it local approvals are disabled. Robots authenticated with device tokens until M7 replaced them with certificates (§17.7).
 
 **Observed state in the control plane**
 
@@ -572,8 +572,35 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
 
 **Known limits, scheduled**
 
-- Robot device tokens rather than per-device certificates, and one stream per server (M7).
+- Robot device tokens and several streams per server were replaced in M7 (§17.7).
 - The `connected` stream count is per process; with several control-plane replicas, liveness relies on report age.
+
+### 17.7 Implementation notes (M7)
+
+**Mutual TLS between robots and the gateway**
+
+- The agent creates the **site CA** (ECDSA P-256) on first use and keeps its key on the server (`<state>/pki/ca.key`, mode 0600). Robot traffic never leaves the site, so neither does its trust root.
+- The site CA issues the gateway's server certificate for the names robots dial (`NEURA_AGENT_GATEWAY_TLS_NAMES`; by default the hostname, `localhost` and `127.0.0.1`). It is renewed once a third of its 90-day lifetime remains, and the gateway picks up new certificate files without a restart.
+- A robot makes its own key (`neura-robot keygen NAME`), and the site operator signs its CSR (`neura-agent robot-certificate NAME --csr FILE`, or `POST /v1/local/robots/{name}/certificate`). The CA sets the identity `neura:robot:<site_id>/<name>` itself; it takes nothing from the CSR except the public key. Robot certificates last 365 days.
+- The gateway serves a robot only if its client certificate:
+  - was issued by the site CA and is valid;
+  - has a fingerprint still allowed for that robot;
+  - names that robot and this site.
+- Revoking (`neura-agent robot-revoke NAME`) removes the robot's fingerprints; the gateway's next reload closes its sessions with `AUTH_DEVICE_REVOKED`.
+- Robots ask the gateway which revision to run (`GetAssignment`) over the same mTLS channel. The local site API is now for operators only.
+- Device tokens remain only for a gateway run without TLS (`NEURA_AGENT_GATEWAY_TLS=false`, development).
+
+**Mutual TLS between the agent and the control plane**
+
+- The control plane's **agent CA** signs the agent's CSR at enrollment with the identity `neura:server:<server_id>` and records its fingerprint. When the control plane terminates TLS, the stream listener requires that certificate as well as the short-lived JWT. A certificate of another server, or of a deleted one, is refused.
+- Enrollment has its own listener (`NEURA_CONTROL_AGENT_ENROLL_LISTEN`, server-only TLS), because an agent has no certificate before it enrolls. That listener serves only `Enroll`. The install command points at it.
+- The agent renews its certificate over the authenticated stream once a third of its lifetime remains (30 days by default, `NEURA_CONTROL_AGENT_CERTIFICATE_DAYS`). The control plane keeps every unexpired fingerprint, so the old certificate works until the new one is installed.
+- **One stream per server.** A newer authenticated stream for a server closes its previous one.
+- Staging and production refuse to start without:
+  - the agent CA files (`NEURA_CONTROL_AGENT_CLIENT_CA_CERT_FILE`, `..._KEY_FILE`);
+  - a database URL with `sslmode=verify-full`, unless `NEURA_CONTROL_DATABASE_TLS_LOCAL` declares that the database is reached over a local socket or sidecar.
+- In development, without CA files, the control plane creates an ephemeral agent CA.
+- The dev stack writes robot bundles (key and certificate) into a shared volume (`NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR`). Real robots never receive a key.
 
 ### 17.5 Other connection modes (later, on demand)
 

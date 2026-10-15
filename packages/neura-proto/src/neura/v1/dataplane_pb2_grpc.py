@@ -55,6 +55,11 @@ class RobotGatewayStub:
                 request_serializer=neura_dot_v1_dot_dataplane__pb2.RobotMessage.SerializeToString,
                 response_deserializer=neura_dot_v1_dot_dataplane__pb2.GatewayMessage.FromString,
                 _registered_method=True)
+        self.GetAssignment = channel.unary_unary(
+                '/neura.v1.RobotGateway/GetAssignment',
+                request_serializer=neura_dot_v1_dot_dataplane__pb2.GetAssignmentRequest.SerializeToString,
+                response_deserializer=neura_dot_v1_dot_dataplane__pb2.Assignment.FromString,
+                _registered_method=True)
 
 
 class RobotGatewayServicer:
@@ -88,6 +93,14 @@ class RobotGatewayServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAssignment(self, request, context):
+        """Which revision this robot should run, with its contract documents, so the robot verifies
+        what it will run itself (design §16). The robot switches at its own task boundary.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RobotGatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -110,6 +123,11 @@ def add_RobotGatewayServicer_to_server(servicer, server):
                     servicer.Stream,
                     request_deserializer=neura_dot_v1_dot_dataplane__pb2.RobotMessage.FromString,
                     response_serializer=neura_dot_v1_dot_dataplane__pb2.GatewayMessage.SerializeToString,
+            ),
+            'GetAssignment': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAssignment,
+                    request_deserializer=neura_dot_v1_dot_dataplane__pb2.GetAssignmentRequest.FromString,
+                    response_serializer=neura_dot_v1_dot_dataplane__pb2.Assignment.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -220,6 +238,33 @@ class RobotGateway:
             '/neura.v1.RobotGateway/Stream',
             neura_dot_v1_dot_dataplane__pb2.RobotMessage.SerializeToString,
             neura_dot_v1_dot_dataplane__pb2.GatewayMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAssignment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/neura.v1.RobotGateway/GetAssignment',
+            neura_dot_v1_dot_dataplane__pb2.GetAssignmentRequest.SerializeToString,
+            neura_dot_v1_dot_dataplane__pb2.Assignment.FromString,
             options,
             channel_credentials,
             insecure,

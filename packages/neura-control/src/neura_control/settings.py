@@ -20,6 +20,10 @@ class ControlPlaneSettings(BaseSettings):
     # Externally reachable URL, used in install commands shown to customers.
     public_url: str = "http://127.0.0.1:8080"
     database_url: PostgresDsn = PostgresDsn("postgresql://neura:neura@127.0.0.1:5432/neura")
+    # Staging and production connect to Postgres over TLS that verifies the server
+    # (sslmode=verify-full in database_url), unless the connection never leaves the host (a
+    # Unix socket or a local proxy that does the TLS): then set this.
+    database_tls_local: bool = False
     database_connect_timeout_s: float = Field(default=2.0, gt=0, le=30)
     database_pool_size: int = Field(default=10, ge=1, le=200)
     openapi_path: Path = _REPO_SPEC
@@ -48,6 +52,11 @@ class ControlPlaneSettings(BaseSettings):
     # Without a seed, development and test generate an ephemeral key; other environments refuse.
     agent_grpc_listen: str | None = "127.0.0.1:8081"
     agent_endpoint: str = "127.0.0.1:8081"
+    # With TLS, agents' streams require their client certificates, which a server gets at
+    # enrollment, so enrollment has a listener of its own (server-authenticated TLS, Enroll
+    # only). Without TLS (development) one listener serves both.
+    agent_enroll_listen: str | None = None
+    agent_enroll_endpoint: str | None = None  # default: agent_endpoint
     manifest_signing_key: str | None = None
     agent_token_max_age_s: int = Field(default=300, ge=30, le=3600)
     agent_poll_interval_s: float = Field(default=1.0, gt=0, le=30)
@@ -56,6 +65,11 @@ class ControlPlaneSettings(BaseSettings):
     agent_tls_cert_file: Path | None = None
     agent_tls_key_file: Path | None = None
     agent_tls_offloaded: bool = False
+    # The CA that issues site agents their TLS client certificates (mutual TLS on the stream).
+    # Required in staging and production; development uses a CA generated at startup.
+    agent_client_ca_cert_file: Path | None = None
+    agent_client_ca_key_file: Path | None = None
+    agent_certificate_days: int = Field(default=30, ge=1, le=397)
 
     # Development only: on startup, ensure an organization "dev" and an admin API token with this
     # exact value exist. Refused outside development.
@@ -81,6 +95,37 @@ class ControlPlaneSettings(BaseSettings):
             raise ValueError(
                 "the agent listener needs TLS in staging and production: set agent_tls_cert_file"
                 " and agent_tls_key_file, or agent_tls_offloaded if a load balancer terminates it"
+            )
+        if (
+            self.agent_tls_cert_file is not None
+            and self.agent_grpc_listen
+            and not (self.agent_enroll_listen)
+        ):
+            raise ValueError(
+                "with TLS the agent stream requires client certificates: set agent_enroll_listen"
+                " (and agent_enroll_endpoint) for enrollment"
+            )
+        if (self.agent_client_ca_cert_file is None) != (self.agent_client_ca_key_file is None):
+            raise ValueError(
+                "set both agent_client_ca_cert_file and agent_client_ca_key_file, or neither"
+            )
+        if (
+            self.environment in ("staging", "production")
+            and self.agent_grpc_listen
+            and self.agent_client_ca_cert_file is None
+        ):
+            raise ValueError(
+                "site agents need client certificates in staging and production: set"
+                " agent_client_ca_cert_file and agent_client_ca_key_file"
+            )
+        if (
+            self.environment in ("staging", "production")
+            and not self.database_tls_local
+            and "sslmode=verify-full" not in str(self.database_url)
+        ):
+            raise ValueError(
+                "staging and production connect to Postgres with sslmode=verify-full (or set"
+                " database_tls_local for a Unix socket or a local TLS proxy)"
             )
         if self.dev_bootstrap_token and self.environment != "development":
             raise ValueError("dev_bootstrap_token is only allowed in the development environment")

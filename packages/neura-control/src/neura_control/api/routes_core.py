@@ -329,7 +329,8 @@ async def create_enrollment_token(
                 "secret": token,
                 "expires_at": iso(expires_at),
                 "install_command": (
-                    f"neura-agent enroll --control-plane {settings.agent_endpoint} --token {token}"
+                    "neura-agent enroll --control-plane "
+                    f"{settings.agent_enroll_endpoint or settings.agent_endpoint} --token {token}"
                 ),
             },
             {"Location": f"/v1/sites/{site.id}"},

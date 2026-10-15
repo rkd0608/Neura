@@ -7,7 +7,10 @@
     neura-agent approvals                   list activations awaiting local approval
     neura-agent approve COMMAND_ID --operator NAME
     neura-agent refuse COMMAND_ID --operator NAME [--note TEXT]
-    neura-agent robot-token ROBOT_NAME      issue a device credential for a robot (shown once)
+    neura-agent robot-certificate ROBOT_NAME --csr FILE [--out FILE]
+                                            sign a robot's certificate request with the site CA
+    neura-agent robot-revoke ROBOT_NAME     revoke a robot's certificates (its sessions end)
+    neura-agent robot-token ROBOT_NAME      a device token, for a development gateway without TLS
     neura-agent import-weights DIR [--artifact FILE]
                                             add a checkpoint's files to the site's artifact store
 
@@ -44,6 +47,27 @@ def _local(settings: AgentSettings, method: str, path: str, body: Any = None) ->
     )
     print(json.dumps(response.json(), indent=2))
     return 0 if response.status_code < 400 else 1
+
+
+def _robot_certificate(settings: AgentSettings, robot: str, csr: Path, out: Path | None) -> int:
+    """Send the robot's CSR to the local API and write its certificate and the site CA."""
+    host = "127.0.0.1" if settings.local_host in ("0.0.0.0", "") else settings.local_host  # noqa: S104
+    token = os.environ.get("NEURA_AGENT_OPERATOR_TOKEN", "")
+    response = httpx.post(
+        f"http://{host}:{settings.local_port}/v1/local/robots/{robot}/certificate",
+        json={"csr": csr.read_text(encoding="utf-8")},
+        headers={"Authorization": f"Bearer {token}"} if token else {},
+        timeout=10,
+    )
+    if response.status_code >= 400:
+        print(json.dumps(response.json(), indent=2), file=sys.stderr)
+        return 1
+    body = response.json()
+    target = out or csr.with_suffix(".pem")
+    target.write_text(body["certificate"], encoding="utf-8")
+    (target.parent / "ca.pem").write_text(body["ca"], encoding="utf-8")
+    print(f"wrote {target} and {target.parent / 'ca.pem'}")
+    return 0
 
 
 def _import_weights(settings: AgentSettings, directory: Path, manifest: Path | None) -> int:
@@ -92,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
         cmd.add_argument("--note", default="")
     robot = sub.add_parser("robot-token")
     robot.add_argument("robot_name")
+    certificate = sub.add_parser("robot-certificate")
+    certificate.add_argument("robot_name")
+    certificate.add_argument("--csr", type=Path, required=True)
+    certificate.add_argument("--out", type=Path, default=None, help="default: next to the CSR")
+    revoke = sub.add_parser("robot-revoke")
+    revoke.add_argument("robot_name")
     weights = sub.add_parser("import-weights")
     weights.add_argument("directory", type=Path)
     weights.add_argument(
@@ -131,6 +161,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "robot-token":
         return _local(settings, "POST", f"/v1/local/robots/{args.robot_name}/credentials")
+    if args.command == "robot-certificate":
+        return _robot_certificate(settings, args.robot_name, args.csr, args.out)
+    if args.command == "robot-revoke":
+        return _local(settings, "DELETE", f"/v1/local/robots/{args.robot_name}/certificate")
     if args.command == "import-weights":
         return _import_weights(settings, args.directory, args.artifact)
 

@@ -5,6 +5,7 @@ description = "Neura contracts: model artifacts, robot profiles, execution profi
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cryptography>=44",
     "pydantic>=2.13,<3",
     "pyyaml>=6.0.2",
 ]

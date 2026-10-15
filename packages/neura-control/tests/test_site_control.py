@@ -30,10 +30,12 @@ from sqlalchemy import update
 
 from conftest import AppFactory, contract
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
-from neura_agent.identity import connection_token
+from neura_agent.agent_tls import AgentTls
+from neura_agent.gateway import InProcessGateway
+from neura_agent.identity import IdentityStore, connection_token
 from neura_agent.runner import AgentRuntime
 from neura_agent.settings import AgentSettings
-from neura_contracts import ReasonCode
+from neura_contracts import ReasonCode, pki
 from neura_contracts.site_protocol import contact_proof_payload
 from neura_control.clock import iso, utcnow
 from neura_control.db.engine import create_engine, session_factory
@@ -274,6 +276,32 @@ def test_deleting_a_server_ends_its_stream_and_its_credential(harness: Harness) 
     assert again.value.code() == grpc.StatusCode.UNAUTHENTICATED
 
 
+def test_a_new_stream_from_a_server_replaces_its_previous_one(harness: Harness) -> None:
+    enrolled, key = harness.enrolled()
+
+    async def scenario() -> list[site_pb2.ControlPlaneMessage]:
+        first = asyncio.create_task(
+            connect(
+                harness.endpoint,
+                connection_token(key, enrolled.server_id),
+                [hello(harness.site)],
+                until=lambda r: False,  # ends only if the control plane closes it
+            )
+        )
+        await asyncio.sleep(0.5)
+        assert not first.done()
+        second = await connect(
+            harness.endpoint,
+            connection_token(key, enrolled.server_id),
+            [hello(harness.site)],
+            until=lambda r: "desired_state" in kinds(r),
+        )
+        await asyncio.wait_for(first, 5)
+        return second
+
+    assert "desired_state" in kinds(asyncio.run(scenario()))
+
+
 # --- desired state and contact ------------------------------------------------------------------
 
 
@@ -425,10 +453,14 @@ def test_agents_enroll_over_tls_and_refuse_an_unknown_server(
     make_api: AppFactory, tmp_path: Path
 ) -> None:
     ca, cert, key_file = _certificates(tmp_path)
-    endpoint = f"127.0.0.1:{free_port()}"
+    stream = f"127.0.0.1:{free_port()}"
+    endpoint = f"127.0.0.1:{free_port()}"  # enrollment
     client, org = make_api(
         settings_overrides={
-            "agent_grpc_listen": endpoint,
+            "agent_grpc_listen": stream,
+            "agent_endpoint": stream,
+            "agent_enroll_listen": endpoint,
+            "agent_enroll_endpoint": endpoint,
             "agent_tls_cert_file": cert,
             "agent_tls_key_file": key_file,
         }
@@ -457,6 +489,10 @@ def test_agents_enroll_over_tls_and_refuse_an_unknown_server(
     assert untrusted.value.code() == grpc.StatusCode.UNAVAILABLE
     identity = enroll(runtime("trusted", control_plane_ca_file=ca))
     assert identity.site_id == site
+    assert identity.endpoint == stream  # the agent streams to the stream listener
+    # The install command names the enrollment endpoint.
+    issued = client.post(f"/v1/sites/{site}/enrollment-tokens", {}).json()
+    assert f"--control-plane {endpoint} " in issued["install_command"]
 
 
 def test_staging_requires_tls_for_the_agent_listener(settings: Any) -> None:
@@ -476,6 +512,118 @@ def test_staging_requires_tls_for_the_agent_listener(settings: Any) -> None:
             "manifest_signing_key": "x" * 43,
             "agent_grpc_listen": "0.0.0.0:8081",
             "agent_tls_offloaded": True,
+            "agent_client_ca_cert_file": "/etc/neura/agent-ca.pem",
+            "agent_client_ca_key_file": "/etc/neura/agent-ca.key",
+            "database_url": "postgresql://neura:x@db.internal:5432/neura?sslmode=verify-full",
         }
     )
     assert offloaded.agent_tls_offloaded
+    # Postgres over TLS that verifies the server, unless the connection stays on the host.
+    plaintext = {**offloaded.model_dump(), "database_url": "postgresql://neura:x@db:5432/neura"}
+    with pytest.raises(ValueError, match="verify-full"):
+        settings.model_validate(plaintext)
+    assert settings.model_validate({**plaintext, "database_tls_local": True}).database_tls_local
+    # Agents' client certificates come from a CA that survives restarts.
+    with pytest.raises(ValueError, match="client certificates"):
+        settings.model_validate(
+            {
+                **settings.model_dump(),
+                "environment": "staging",
+                "manifest_signing_key": "x" * 43,
+                "agent_grpc_listen": "0.0.0.0:8081",
+                "agent_tls_offloaded": True,
+            }
+        )
+
+
+def test_agent_streams_need_their_client_certificate_and_renew_it(
+    make_api: AppFactory, tmp_path: Path
+) -> None:
+    ca, cert, key_file = _certificates(tmp_path)
+    endpoint = f"127.0.0.1:{free_port()}"
+    enroll_endpoint = f"127.0.0.1:{free_port()}"
+    client, org = make_api(
+        settings_overrides={
+            "agent_grpc_listen": endpoint,
+            "agent_endpoint": endpoint,
+            "agent_enroll_listen": enroll_endpoint,
+            "agent_tls_cert_file": cert,
+            "agent_tls_key_file": key_file,
+            "agent_poll_interval_s": 0.2,
+            "manifest_signing_key": "x" * 43,
+        }
+    )
+    project = client.post(
+        f"/v1/organizations/{org}/projects", {"spec": {"name": "p", "display_name": "P"}}
+    ).json()["metadata"]["id"]
+    site = client.post(
+        f"/v1/projects/{project}/sites",
+        {"spec": {"name": "s", "display_name": "S", "offline_authorization_hours": 1}},
+    ).json()["metadata"]["id"]
+    agent = AgentRuntime(
+        AgentSettings(
+            state_dir=tmp_path / "agent",
+            gateway_backend="simulated",
+            control_plane_ca_file=ca,
+            reconnect_max_backoff_s=0.5,
+        ),
+        gateway=InProcessGateway(),
+        command_runner=lambda args: None,
+    )
+    token = client.post(f"/v1/sites/{site}/enrollment-tokens", {}).json()["secret"]
+    loop = asyncio.new_event_loop()
+    identity = loop.run_until_complete(agent.enroll(enroll_endpoint, token))
+    tls = AgentTls(tmp_path / "agent")
+    issued = tls.credentials()
+    assert issued is not None
+    assert pki.identity(issued[1]) == pki.server_uri(identity.server_id)
+
+    async def connect_without_certificate() -> grpc.StatusCode:
+        roots = ca.read_bytes()
+        key = IdentityStore(tmp_path / "agent").load_or_create_key()
+        async with grpc.aio.secure_channel(
+            endpoint, grpc.ssl_channel_credentials(root_certificates=roots)
+        ) as channel:
+            call = site_pb2_grpc.SiteControlStub(channel).Connect(
+                iter([hello(site)]),
+                metadata=(
+                    ("authorization", f"Bearer {connection_token(key, identity.server_id)}"),
+                ),
+            )
+            try:
+                async for _ in call:
+                    pass
+            except grpc.aio.AioRpcError as exc:
+                return exc.code()
+        return grpc.StatusCode.OK
+
+    # The token alone is not enough: the stream needs the server's client certificate too (the
+    # TLS handshake fails without one).
+    assert loop.run_until_complete(connect_without_certificate()) is grpc.StatusCode.UNAVAILABLE
+
+    async def run_agent() -> str:
+        await agent.start()
+        try:
+            for _ in range(200):
+                if agent.connection is not None and agent.connection.connected:
+                    break
+                await asyncio.sleep(0.05)
+            assert agent.connection is not None
+            assert agent.connection.connected
+            # Renewal: the agent asks for a new certificate over the stream and installs it.
+            agent.connection.tls.needs_renewal = lambda: True  # type: ignore[method-assign]
+            agent.connection._renew_if_due()
+            for _ in range(200):
+                renewed = tls.credentials()
+                if renewed is not None and renewed[1] != issued[1]:
+                    return renewed[1].decode()
+                await asyncio.sleep(0.05)
+            raise AssertionError("no renewed certificate")
+        finally:
+            await agent.stop()
+
+    renewed = loop.run_until_complete(run_agent()).encode()
+    loop.close()
+    assert pki.identity(renewed) == pki.server_uri(identity.server_id)
+    server = client.get(f"/v1/sites/{site}/servers").json()["items"][0]
+    assert server["metadata"]["id"] == identity.server_id

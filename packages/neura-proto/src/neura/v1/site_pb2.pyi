@@ -9,18 +9,20 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class EnrollRequest(_message.Message):
-    __slots__ = ("protocol_version", "enrollment_token", "public_key", "agent_version", "facts")
+    __slots__ = ("protocol_version", "enrollment_token", "public_key", "agent_version", "facts", "tls_csr")
     PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     ENROLLMENT_TOKEN_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_KEY_FIELD_NUMBER: _ClassVar[int]
     AGENT_VERSION_FIELD_NUMBER: _ClassVar[int]
     FACTS_FIELD_NUMBER: _ClassVar[int]
+    TLS_CSR_FIELD_NUMBER: _ClassVar[int]
     protocol_version: _common_pb2.ProtocolVersion
     enrollment_token: str
     public_key: bytes
     agent_version: str
     facts: ServerFacts
-    def __init__(self, protocol_version: _Optional[_Union[_common_pb2.ProtocolVersion, str]] = ..., enrollment_token: _Optional[str] = ..., public_key: _Optional[bytes] = ..., agent_version: _Optional[str] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ...) -> None: ...
+    tls_csr: bytes
+    def __init__(self, protocol_version: _Optional[_Union[_common_pb2.ProtocolVersion, str]] = ..., enrollment_token: _Optional[str] = ..., public_key: _Optional[bytes] = ..., agent_version: _Optional[str] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ..., tls_csr: _Optional[bytes] = ...) -> None: ...
 
 class EnrollResponse(_message.Message):
     __slots__ = ("enrolled", "rejected")
@@ -31,18 +33,24 @@ class EnrollResponse(_message.Message):
     def __init__(self, enrolled: _Optional[_Union[Enrolled, _Mapping]] = ..., rejected: _Optional[_Union[_common_pb2.Reason, _Mapping]] = ...) -> None: ...
 
 class Enrolled(_message.Message):
-    __slots__ = ("server_id", "site_id", "project_id", "manifest_public_key", "manifest_key_id")
+    __slots__ = ("server_id", "site_id", "project_id", "manifest_public_key", "manifest_key_id", "client_certificate", "client_ca", "agent_endpoint")
     SERVER_ID_FIELD_NUMBER: _ClassVar[int]
     SITE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     MANIFEST_PUBLIC_KEY_FIELD_NUMBER: _ClassVar[int]
     MANIFEST_KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_CERTIFICATE_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_CA_FIELD_NUMBER: _ClassVar[int]
+    AGENT_ENDPOINT_FIELD_NUMBER: _ClassVar[int]
     server_id: str
     site_id: str
     project_id: str
     manifest_public_key: bytes
     manifest_key_id: str
-    def __init__(self, server_id: _Optional[str] = ..., site_id: _Optional[str] = ..., project_id: _Optional[str] = ..., manifest_public_key: _Optional[bytes] = ..., manifest_key_id: _Optional[str] = ...) -> None: ...
+    client_certificate: bytes
+    client_ca: bytes
+    agent_endpoint: str
+    def __init__(self, server_id: _Optional[str] = ..., site_id: _Optional[str] = ..., project_id: _Optional[str] = ..., manifest_public_key: _Optional[bytes] = ..., manifest_key_id: _Optional[str] = ..., client_certificate: _Optional[bytes] = ..., client_ca: _Optional[bytes] = ..., agent_endpoint: _Optional[str] = ...) -> None: ...
 
 class ServerFacts(_message.Message):
     __slots__ = ("hostname", "driver_version", "cuda_version", "gpus", "preflight")
@@ -87,20 +95,36 @@ class PreflightResult(_message.Message):
     def __init__(self, name: _Optional[str] = ..., passed: _Optional[bool] = ..., reason: _Optional[str] = ..., detail: _Optional[str] = ..., fix: _Optional[str] = ...) -> None: ...
 
 class AgentMessage(_message.Message):
-    __slots__ = ("hello", "ack", "status", "telemetry", "operation", "facts")
+    __slots__ = ("hello", "ack", "status", "telemetry", "operation", "facts", "certificate_request")
     HELLO_FIELD_NUMBER: _ClassVar[int]
     ACK_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     TELEMETRY_FIELD_NUMBER: _ClassVar[int]
     OPERATION_FIELD_NUMBER: _ClassVar[int]
     FACTS_FIELD_NUMBER: _ClassVar[int]
+    CERTIFICATE_REQUEST_FIELD_NUMBER: _ClassVar[int]
     hello: AgentHello
     ack: Acknowledgement
     status: SiteStatus
     telemetry: TelemetryBatch
     operation: OperationReport
     facts: ServerFacts
-    def __init__(self, hello: _Optional[_Union[AgentHello, _Mapping]] = ..., ack: _Optional[_Union[Acknowledgement, _Mapping]] = ..., status: _Optional[_Union[SiteStatus, _Mapping]] = ..., telemetry: _Optional[_Union[TelemetryBatch, _Mapping]] = ..., operation: _Optional[_Union[OperationReport, _Mapping]] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ...) -> None: ...
+    certificate_request: CertificateRequest
+    def __init__(self, hello: _Optional[_Union[AgentHello, _Mapping]] = ..., ack: _Optional[_Union[Acknowledgement, _Mapping]] = ..., status: _Optional[_Union[SiteStatus, _Mapping]] = ..., telemetry: _Optional[_Union[TelemetryBatch, _Mapping]] = ..., operation: _Optional[_Union[OperationReport, _Mapping]] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ..., certificate_request: _Optional[_Union[CertificateRequest, _Mapping]] = ...) -> None: ...
+
+class CertificateRequest(_message.Message):
+    __slots__ = ("csr",)
+    CSR_FIELD_NUMBER: _ClassVar[int]
+    csr: bytes
+    def __init__(self, csr: _Optional[bytes] = ...) -> None: ...
+
+class CertificateIssued(_message.Message):
+    __slots__ = ("certificate", "ca")
+    CERTIFICATE_FIELD_NUMBER: _ClassVar[int]
+    CA_FIELD_NUMBER: _ClassVar[int]
+    certificate: bytes
+    ca: bytes
+    def __init__(self, certificate: _Optional[bytes] = ..., ca: _Optional[bytes] = ...) -> None: ...
 
 class OperationReport(_message.Message):
     __slots__ = ("command_id", "operation_id", "state", "reason", "message", "result_json")
@@ -119,14 +143,16 @@ class OperationReport(_message.Message):
     def __init__(self, command_id: _Optional[str] = ..., operation_id: _Optional[str] = ..., state: _Optional[str] = ..., reason: _Optional[_Union[_common_pb2.Reason, _Mapping]] = ..., message: _Optional[str] = ..., result_json: _Optional[bytes] = ...) -> None: ...
 
 class ControlPlaneMessage(_message.Message):
-    __slots__ = ("desired_state", "command", "contact")
+    __slots__ = ("desired_state", "command", "contact", "certificate")
     DESIRED_STATE_FIELD_NUMBER: _ClassVar[int]
     COMMAND_FIELD_NUMBER: _ClassVar[int]
     CONTACT_FIELD_NUMBER: _ClassVar[int]
+    CERTIFICATE_FIELD_NUMBER: _ClassVar[int]
     desired_state: DesiredState
     command: Command
     contact: ContactProof
-    def __init__(self, desired_state: _Optional[_Union[DesiredState, _Mapping]] = ..., command: _Optional[_Union[Command, _Mapping]] = ..., contact: _Optional[_Union[ContactProof, _Mapping]] = ...) -> None: ...
+    certificate: CertificateIssued
+    def __init__(self, desired_state: _Optional[_Union[DesiredState, _Mapping]] = ..., command: _Optional[_Union[Command, _Mapping]] = ..., contact: _Optional[_Union[ContactProof, _Mapping]] = ..., certificate: _Optional[_Union[CertificateIssued, _Mapping]] = ...) -> None: ...
 
 class ContactProof(_message.Message):
     __slots__ = ("nonce", "signature")

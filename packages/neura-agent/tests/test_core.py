@@ -4,6 +4,7 @@ task-boundary switches, offline authorization and restart recovery (design §13,
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import stat
@@ -22,7 +23,7 @@ from neura_agent.gateway import build_gateway_config
 from neura_agent.identity import AUDIENCE, Identity, IdentityStore, atomic_write, connection_token
 from neura_agent.settings import AgentSettings
 from neura_agent.state import AgentState, StateStore
-from neura_contracts import ReasonCode, canonical_json, content_digest, parse_document
+from neura_contracts import ReasonCode, canonical_json, content_digest, parse_document, pki
 from neura_contracts.site_protocol import MANIFEST_API_VERSION, contact_proof_payload
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
@@ -693,3 +694,90 @@ async def test_fine_tunes_sharing_one_gpu_are_co_located(tmp_path: Path) -> None
         ("different_architectures", 2),
     ]
     assert {p["device"] for p in site.core.state.placements.values()} == {"cuda:0"}
+
+
+# --- the site CA and robot certificates (design §17.3) -----------------------------------------
+
+
+def robot_request(name: str) -> bytes:
+    return pki.signing_request(pki.new_key(), name)
+
+
+async def test_the_gateway_runs_mutual_tls_with_certificates_from_the_site_ca(
+    site: Site,
+) -> None:
+    await site.commit([REV1])
+    config = site.core.gateway_config()
+    assert config["site_id"] == SITE
+    tls = config["tls"]
+    gateway_cert = Path(tls["certificate"]).read_bytes()
+    assert site.core.pki.authority.issued(gateway_cert)
+    assert pki.identity(gateway_cert) == pki.gateway_uri(SITE)
+    assert Path(tls["client_ca"]).read_bytes() == site.core.pki.ca_pem
+    assert stat.S_IMODE(os.stat(tls["key"]).st_mode) == 0o600
+    assert config["devices"] == []  # no robot has a certificate yet
+
+    certificate, ca = site.core.issue_robot_certificate("robot-0", robot_request("robot-0"))
+    assert ca == site.core.pki.ca_pem
+    assert pki.identity(certificate) == pki.robot_uri(SITE, "robot-0")
+    devices = site.core.gateway_config()["devices"]
+    assert devices == [
+        {"robot_id": "robot-0", "certificate_sha256": [pki.fingerprint(certificate)]}
+    ]
+    # The same gateway certificate is kept while it is valid for the same names.
+    assert Path(site.core.gateway_config()["tls"]["certificate"]).read_bytes() == gateway_cert
+
+    with pytest.raises(LocalActionError):
+        site.core.issue_robot_certificate("not-a-robot", robot_request("x"))
+    with pytest.raises(LocalActionError):
+        site.core.issue_robot_certificate("robot-1", b"garbage")
+
+    assert site.core.revoke_robot_certificates("robot-0") == 1
+    assert site.core.gateway_config()["devices"] == []
+    events = [e["event"] for e in site.core.audit.tail()]
+    assert "robot_certificate_issued" in events
+    assert "robot_certificates_revoked" in events
+
+
+async def test_assignments_tell_each_robot_its_preferred_revision(site: Site) -> None:
+    await prepared(site, REV1)
+    await activated(site, REV1["id"])
+    config = site.core.gateway_config()
+    assert config["assignments"] == dict.fromkeys(ROBOTS.values(), REV1["id"])
+
+
+async def test_development_robots_get_bundles_written_for_them(tmp_path: Path) -> None:
+    site = Site(tmp_path, dev_robot_certificate_dir=tmp_path / "certs")
+    await site.commit([REV1])
+    site.core.gateway_config()
+    for name in ROBOTS.values():
+        cert = (tmp_path / "certs" / f"{name}.pem").read_bytes()
+        assert site.core.pki.authority.issued(cert)
+        assert stat.S_IMODE(os.stat(tmp_path / "certs" / f"{name}.key").st_mode) == 0o600
+    first = (tmp_path / "certs" / "robot-0.pem").read_bytes()
+    site.core.gateway_config()
+    assert (tmp_path / "certs" / "robot-0.pem").read_bytes() == first  # not reissued
+
+
+async def test_without_tls_robots_use_development_tokens(tmp_path: Path) -> None:
+    site = Site(tmp_path, gateway_tls=False, dev_robot_tokens={"robot-0": "t0"})
+    await site.commit([REV1])
+    config = site.core.gateway_config()
+    assert "tls" not in config
+    assert config["devices"] == [
+        {"robot_id": "robot-0", "token_sha256": hashlib.sha256(b"t0").hexdigest()}
+    ]
+
+
+def test_robot_keygen_keeps_the_key_private(tmp_path: Path) -> None:
+    from neura_runtime.cli import main as robot_main
+
+    assert robot_main(["keygen", "robot-0", "--dir", str(tmp_path)]) == 0
+    assert stat.S_IMODE(os.stat(tmp_path / "robot-0.key").st_mode) == 0o600
+    request = (tmp_path / "robot-0.csr").read_bytes()
+    ca = pki.CertificateAuthority.create("site CA")
+    cert = ca.sign_request(request, identity_uri=pki.robot_uri(SITE, "robot-0"), days=1)
+    key = pki.load_key((tmp_path / "robot-0.key").read_bytes())
+    assert pki.load_certificate(cert).public_key() == key.public_key()
+    with pytest.raises(SystemExit):  # never overwrites a key
+        robot_main(["keygen", "robot-0", "--dir", str(tmp_path)])

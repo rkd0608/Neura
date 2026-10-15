@@ -17,6 +17,7 @@ import grpc
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
+from neura_agent.agent_tls import AgentTls
 from neura_agent.core import AgentCore
 from neura_agent.identity import connection_token
 from neura_agent.settings import AgentSettings
@@ -34,15 +35,20 @@ def agent_version() -> str:
 MAX_RECEIVE_BYTES = 64 * 1024 * 1024
 
 
-def open_channel(endpoint: str, settings: AgentSettings) -> grpc.aio.Channel:
-    """The channel to the control plane: TLS unless explicitly disabled for development."""
+def open_channel(
+    endpoint: str, settings: AgentSettings, client: tuple[bytes, bytes] | None = None
+) -> grpc.aio.Channel:
+    """The channel to the control plane: TLS unless explicitly disabled for development, with
+    the agent's client certificate (``client`` = key and certificate PEM) once it has one."""
     options = [("grpc.max_receive_message_length", MAX_RECEIVE_BYTES)]
     if settings.control_plane_insecure:
         return grpc.aio.insecure_channel(endpoint, options=options)
     roots = settings.control_plane_ca_file.read_bytes() if settings.control_plane_ca_file else None
-    return grpc.aio.secure_channel(
-        endpoint, grpc.ssl_channel_credentials(root_certificates=roots), options=options
+    key, certificate = client if client is not None else (None, None)
+    credentials = grpc.ssl_channel_credentials(
+        root_certificates=roots, private_key=key, certificate_chain=certificate
     )
+    return grpc.aio.secure_channel(endpoint, credentials, options=options)
 
 
 class ControlConnection:
@@ -58,6 +64,7 @@ class ControlConnection:
         self._key = key
         self._facts = facts
         self._max_backoff = max_backoff_s
+        self.tls = AgentTls(core.settings.state_dir)
         self.connected = False
         self.last_error: str | None = None
         self.connections = 0
@@ -83,7 +90,9 @@ class ControlConnection:
     async def _session(self, stop: asyncio.Event) -> None:
         identity = self.core.identity
         token = connection_token(self._key, identity.server_id)
-        async with open_channel(identity.endpoint, self.core.settings) as channel:
+        async with open_channel(
+            identity.endpoint, self.core.settings, self.tls.credentials()
+        ) as channel:
             stub = site_pb2_grpc.SiteControlStub(channel)
             call = stub.Connect(
                 self._outgoing(stop), metadata=(("authorization", f"Bearer {token}"),)
@@ -93,8 +102,15 @@ class ControlConnection:
                     self.connected = True
                     self.connections += 1
                     self.last_error = None
+                    self._renew_if_due()
                 kind = message.WhichOneof("body")
-                if kind == "contact":
+                if kind == "certificate":
+                    try:
+                        self.tls.install(message.certificate.certificate, message.certificate.ca)
+                        log.info("installed a renewed TLS client certificate")
+                    except ValueError as exc:
+                        log.error("refused a client certificate: %s", exc)
+                elif kind == "contact":
                     self.core.on_contact_proof(message.contact)
                 elif kind == "desired_state":
                     ack = await self.core.on_desired_state(message.desired_state)
@@ -104,6 +120,14 @@ class ControlConnection:
                 if stop.is_set():
                     call.cancel()
                     return
+
+    def _renew_if_due(self) -> None:
+        """Ask for a new client certificate once a third of its lifetime remains."""
+        if self.tls.needs_renewal() and not self.tls.pending:
+            csr = self.tls.request(self.core.identity.server_id)
+            self.core.outbox.put_nowait(
+                site_pb2.AgentMessage(certificate_request=site_pb2.CertificateRequest(csr=csr))
+            )
 
     async def _outgoing(self, stop: asyncio.Event) -> AsyncIterator[site_pb2.AgentMessage]:
         yield site_pb2.AgentMessage(

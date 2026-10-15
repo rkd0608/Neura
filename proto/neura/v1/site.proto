@@ -25,6 +25,9 @@ message EnrollRequest {
   bytes public_key = 3;
   string agent_version = 4;
   ServerFacts facts = 5;
+  // PEM certificate signing request for the agent's TLS client key (ECDSA P-256), generated on
+  // the server. The control plane answers with the agent's client certificate.
+  bytes tls_csr = 6;
 }
 
 message EnrollResponse {
@@ -41,6 +44,12 @@ message Enrolled {
   // Ed25519 key the control plane signs desired state with. The agent pins it at enrollment.
   bytes manifest_public_key = 4;
   string manifest_key_id = 5;
+  // The agent's TLS client certificate (PEM), for mutual TLS on the stream, and the CA that
+  // signed it.
+  bytes client_certificate = 6;
+  bytes client_ca = 7;
+  // Where the agent's stream connects (host:port); it can differ from the enrollment endpoint.
+  string agent_endpoint = 8;
 }
 
 // What the agent observed about its server (design §17.2 preflight).
@@ -76,7 +85,18 @@ message AgentMessage {
     TelemetryBatch telemetry = 4;
     OperationReport operation = 5;
     ServerFacts facts = 6;
+    // Renew the TLS client certificate before it expires: a CSR for a new key.
+    CertificateRequest certificate_request = 7;
   }
+}
+
+message CertificateRequest {
+  bytes csr = 1;
+}
+
+message CertificateIssued {
+  bytes certificate = 1;
+  bytes ca = 2;
 }
 
 // Progress of the operation a command belongs to. Only the agent moves operations forward.
@@ -96,6 +116,7 @@ message ControlPlaneMessage {
     DesiredState desired_state = 1;
     Command command = 2;
     ContactProof contact = 3;
+    CertificateIssued certificate = 4;
   }
 }
 

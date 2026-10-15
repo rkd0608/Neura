@@ -1,0 +1,49 @@
+# neura-arm configuration for one SO-101 follower arm (design §7, §27 M8).
+#
+#   neura-arm check so101-arm.yaml --robot-profile ../contracts/so101.robot.yaml
+#   neura-arm run so101-arm.yaml
+#
+# Relative paths are relative to this file.
+
+robot_id: so101-a                 # the robot's name at the site: its certificate's name
+gateway: gateway.site.internal:50051
+
+credentials:
+  # Mutual TLS: so101-a.key and so101-a.pem (from `neura-robot keygen` and
+  # `neura-agent robot-certificate`) and the site's ca.pem.
+  cert_dir: /etc/neura/robot
+  # tls_server_name: gateway.site.internal   # when `gateway` is an address the certificate omits
+  # token: dev-token-so101-a                 # instead of cert_dir, development gateways only
+
+# Without `revision`, the arm runs whatever revision the site assigns it, switching at task
+# boundaries. To pin contracts locally instead:
+# revision:
+#   id: rev_local
+#   artifact: ../contracts/act-so101.artifact.yaml
+#   robot_profile: ../contracts/so101.robot.yaml
+#   execution_profile: ../contracts/act-so101-30hz.profile.yaml
+
+arm:
+  type: so101
+  # The servo bus adapter. Prefer the stable by-id path over /dev/ttyACM0.
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_0000000000-if00
+  # LeRobot's calibration, from:
+  #   lerobot-calibrate --robot.type=so101_follower --robot.port=<port> --robot.id=so101-a
+  calibration_id: so101-a
+  # calibration_dir: ~/.cache/huggingface/lerobot/calibration/robots/so_follower  # LeRobot's default
+  # Largest move of any joint in one command, degrees (0-100 for the gripper). A last guard
+  # behind the runtime's range checks; keep it small for a first run.
+  max_relative_target: 10
+  # On exit: hold the last position with torque on (an SO-101 falls without torque), or
+  # release. Torque is never dropped as a fault response.
+  on_exit: hold
+  # The integrator's independent stop path, for the customer_stop_path fault response: a
+  # command that exits 0 once it has stopped the arm (a relay that cuts servo power, say).
+  # stop_command: [/usr/local/bin/servo-power, "off"]
+
+cameras:  # by camera role in the robot profile
+  front: {type: opencv, index_or_path: /dev/v4l/by-id/usb-front-camera-video-index0, fps: 30}
+  wrist: {type: opencv, index_or_path: /dev/v4l/by-id/usb-wrist-camera-video-index0, fps: 30}
+
+# For language-conditioned models (SmolVLA, pi0); also settable with `instruction ...`.
+# instruction: pick up the red cube and place it in the bin

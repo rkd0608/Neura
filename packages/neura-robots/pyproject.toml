@@ -1,0 +1,31 @@
+[project]
+name = "neura-robots"
+version = "0.1.0.dev0"
+description = "Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, the robot-side process for real arms and the hardware qualification harness."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-proto",
+    "neura-runtime",
+    "neura-server",
+    "neura-sim",
+    "numpy>=2.2",
+    "pyyaml>=6.0.2",
+    "grpcio>=1.84,<2",
+]
+
+[project.scripts]
+neura-arm = "neura_robots.cli:main"
+neura-arm-emulator = "neura_robots.emulator:main"
+
+[project.optional-dependencies]
+# Real SO-101 arms through LeRobot (its Feetech bus, calibration and cameras). LeRobot brings
+# PyTorch; robot computers that run LeRobot already have it.
+so101 = [
+    "lerobot[feetech]>=0.6.1,<0.7",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

@@ -51,6 +51,65 @@ def load_binding(artifact: Path, robot: Path, profile: Path) -> ExecutionBinding
     return ExecutionBinding(a, r, p)
 
 
+def watch_robot(
+    monitor: InvariantMonitor,
+    owner: object,
+    robot_id: str,
+    client: SessionClient,
+    last_command: Callable[[], Any],
+) -> Any:
+    """Wire a robot's session client and runtime to ``monitor``: every observation it sends,
+    session it is granted, chunk it receives and action it dispatches. ``last_command`` returns
+    the command vector the controller was last given. Returns the monitor's record."""
+    runtime = client.runtime
+    record = monitor.client(owner, robot_id, runtime.binding)
+    drain = client.drain
+    on_open = client.on_open_response
+    on_message = client.on_gateway_message
+
+    def watched_drain() -> list[Outbound]:
+        items = drain()  # SessionClient.tick drains through this too
+        for item in items:
+            message = item.message
+            if (
+                isinstance(message, dataplane_pb2.RobotMessage)
+                and message.WhichOneof("body") == "observation"
+            ):
+                monitor.observation_sent(record, message.observation)
+        return items
+
+    def watched_open(response: dataplane_pb2.OpenSessionResponse, now_us: int) -> None:
+        if response.WhichOneof("result") == "accepted":
+            accepted = response.accepted
+            monitor.session_granted(record, accepted.session_id, accepted.lease_generation)
+        on_open(response, now_us)
+
+    def watched_message(message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
+        if message.WhichOneof("body") != "action_chunk":
+            on_message(message, now_us)
+            return
+        arrival = monitor.chunk_arriving(
+            record,
+            message.action_chunk,
+            session_id=runtime.session_id,
+            lease_generation=runtime.lease_generation,
+            task_epoch=runtime.task_epoch,
+            state=runtime.state,
+            accepted_before=runtime.counters["chunks_accepted"],
+            now_us=now_us,
+        )
+        on_message(message, now_us)
+        monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
+
+    client.drain = watched_drain  # type: ignore[method-assign]
+    client.on_open_response = watched_open  # type: ignore[method-assign]
+    client.on_gateway_message = watched_message  # type: ignore[method-assign]
+    runtime.dispatch_listener = lambda epoch, index: monitor.dispatched(
+        record, epoch, index, last_command(), runtime.state
+    )
+    return record
+
+
 class SimulatedRobotProcess:
     def __init__(
         self,
@@ -88,52 +147,10 @@ class SimulatedRobotProcess:
 
     def watch(self, monitor: InvariantMonitor) -> None:
         """Report everything this robot sends, receives and does to ``monitor``."""
-        record = monitor.client(self, self.robot_id, self.runtime.binding)
-        self._monitor, self._watched = monitor, record
-        client, runtime, controller = self.client, self.runtime, self.controller
-        drain = client.drain
-        on_open = client.on_open_response
-        on_message = client.on_gateway_message
-
-        def watched_drain() -> list[Outbound]:
-            items = drain()  # SessionClient.tick drains through this too
-            for item in items:
-                message = item.message
-                if (
-                    isinstance(message, dataplane_pb2.RobotMessage)
-                    and message.WhichOneof("body") == "observation"
-                ):
-                    monitor.observation_sent(record, message.observation)
-            return items
-
-        def watched_open(response: dataplane_pb2.OpenSessionResponse, now_us: int) -> None:
-            if response.WhichOneof("result") == "accepted":
-                accepted = response.accepted
-                monitor.session_granted(record, accepted.session_id, accepted.lease_generation)
-            on_open(response, now_us)
-
-        def watched_message(message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
-            if message.WhichOneof("body") != "action_chunk":
-                on_message(message, now_us)
-                return
-            arrival = monitor.chunk_arriving(
-                record,
-                message.action_chunk,
-                session_id=runtime.session_id,
-                lease_generation=runtime.lease_generation,
-                task_epoch=runtime.task_epoch,
-                state=runtime.state,
-                accepted_before=runtime.counters["chunks_accepted"],
-                now_us=now_us,
-            )
-            on_message(message, now_us)
-            monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
-
-        client.drain = watched_drain  # type: ignore[method-assign]
-        client.on_open_response = watched_open  # type: ignore[method-assign]
-        client.on_gateway_message = watched_message  # type: ignore[method-assign]
-        runtime.dispatch_listener = lambda epoch, index: monitor.dispatched(
-            record, epoch, index, controller.last_command, runtime.state
+        controller = self.controller
+        self._monitor = monitor
+        self._watched = watch_robot(
+            monitor, self, self.robot_id, self.client, lambda: controller.last_command
         )
 
     @property

@@ -22,6 +22,7 @@ neura-sim = { workspace = true }
 neura-sdk = { workspace = true }
 neura-adapters = { workspace = true }
 neura-bench = { workspace = true }
+neura-robots = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -35,6 +36,7 @@ dev = [
     "neura-sdk",
     "neura-adapters",
     "neura-bench",
+    "neura-robots",
     "grpcio-tools==1.84.0",
     "httpx2>=0.1",
     "hypothesis>=6.169",
@@ -49,7 +51,7 @@ dev = [
     "types-pyyaml>=6.0.12",
 ]
 # Real models (PyTorch, LeRobot): `uv sync --group models`. Not part of the default setup.
-models = ["neura-adapters[lerobot]"]
+models = ["neura-adapters[lerobot]", "neura-robots[so101]"]
 
 [tool.ruff]
 line-length = 100
@@ -69,6 +71,7 @@ ignore = ["S101"]
 "tools/**" = ["S603", "S607"]
 # Simulation randomness is for modeling, never for security.
 "packages/neura-sim/src/**" = ["S311"]
+"packages/neura-robots/src/neura_robots/emulator.py" = ["S311"]
 # Token prefixes and identifier kinds, not secrets.
 "packages/neura-control/src/neura_control/security/tokens.py" = ["S105"]
 "packages/neura-control/src/neura_control/ids.py" = ["S105"]
@@ -84,6 +87,7 @@ known-first-party = [
     "neura_bench",
     "neura_contracts",
     "neura_control",
+    "neura_robots",
     "neura_runtime",
     "neura_sdk",
     "neura_server",

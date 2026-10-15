@@ -14,6 +14,7 @@ members = [
     "neura-contracts",
     "neura-control",
     "neura-proto",
+    "neura-robots",
     "neura-runtime",
     "neura-sdk",
     "neura-server",
@@ -524,6 +525,18 @@ nvtx = [
 ]
 
 [[package]]
+name = "deepdiff"
+version = "8.6.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "orderly-set" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/89/50/767448e792d41bfb6094ee317a355c1cb221dca24b2e178e2203bbea2a77/deepdiff-8.6.2.tar.gz", hash = "sha256:186dcbd181e4d76cef11ab05f802d0056c5d6083c5a6748c1473e9d7481e183e", size = 634860, upload-time = "2026-03-18T17:16:33.785Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/5f/c52bd1255db763d0cdcb7084d2e90c42119cb229302c56bdf1d0aa78abd2/deepdiff-8.6.2-py3-none-any.whl", hash = "sha256:4d22034a866c3928303a9332c279362f714192d9305bac17c498720d095fd1b4", size = 91979, upload-time = "2026-03-18T17:16:32.171Z" },
+]
+
+[[package]]
 name = "diffusers"
 version = "0.39.0"
 source = { registry = "https://pypi.org/simple" }
@@ -592,6 +605,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/96/16/52ca959230f982066
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/73/30ee3dd8f26fd385e451bbded9e1b54766a277db588e70154dd894f4b698/fastapi-0.143.1-py3-none-any.whl", hash = "sha256:687beb445804e4c4dbe2a76fd83c25e9b973ac48c267defb86f791e099baecc4", size = 144682, upload-time = "2026-10-14T12:53:07.69Z" },
 ]
+
+[[package]]
+name = "feetech-servo-sdk"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/8e/c53d6f9a8bf3a86a635b58eeb675723f1b040f1665a0681467756c8989aa/feetech-servo-sdk-1.0.0.tar.gz", hash = "sha256:d4d3832e4b1b22a8222133a414db9f868224c2fb639426a1b11d96ddfe84e69c", size = 8392, upload-time = "2022-11-08T03:44:45.269Z" }
 
 [[package]]
 name = "filelock"
@@ -1169,6 +1191,11 @@ wheels = [
 diffusion = [
     { name = "diffusers" },
 ]
+feetech = [
+    { name = "deepdiff" },
+    { name = "feetech-servo-sdk" },
+    { name = "pyserial" },
+]
 
 [[package]]
 name = "librt"
@@ -1606,6 +1633,40 @@ requires-dist = [
 ]
 
 [[package]]
+name = "neura-robots"
+version = "0.1.0.dev0"
+source = { editable = "packages/neura-robots" }
+dependencies = [
+    { name = "grpcio" },
+    { name = "neura-contracts" },
+    { name = "neura-proto" },
+    { name = "neura-runtime" },
+    { name = "neura-server" },
+    { name = "neura-sim" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+so101 = [
+    { name = "lerobot", extra = ["feetech"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "grpcio", specifier = ">=1.84,<2" },
+    { name = "lerobot", extras = ["feetech"], marker = "extra == 'so101'", specifier = ">=0.6.1,<0.7" },
+    { name = "neura-contracts", editable = "packages/neura-contracts" },
+    { name = "neura-proto", editable = "packages/neura-proto" },
+    { name = "neura-runtime", editable = "packages/neura-runtime" },
+    { name = "neura-server", editable = "packages/neura-server" },
+    { name = "neura-sim", editable = "packages/neura-sim" },
+    { name = "numpy", specifier = ">=2.2" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+]
+provides-extras = ["so101"]
+
+[[package]]
 name = "neura-runtime"
 version = "0.1.0.dev0"
 source = { editable = "packages/neura-runtime" }
@@ -1708,6 +1769,7 @@ dev = [
     { name = "neura-contracts" },
     { name = "neura-control" },
     { name = "neura-proto" },
+    { name = "neura-robots" },
     { name = "neura-runtime" },
     { name = "neura-sdk" },
     { name = "neura-server" },
@@ -1723,6 +1785,7 @@ dev = [
 ]
 models = [
     { name = "neura-adapters", extra = ["lerobot"] },
+    { name = "neura-robots", extra = ["so101"] },
 ]
 
 [package.metadata]
@@ -1739,6 +1802,7 @@ dev = [
     { name = "neura-contracts", editable = "packages/neura-contracts" },
     { name = "neura-control", editable = "packages/neura-control" },
     { name = "neura-proto", editable = "packages/neura-proto" },
+    { name = "neura-robots", editable = "packages/neura-robots" },
     { name = "neura-runtime", editable = "packages/neura-runtime" },
     { name = "neura-sdk", editable = "packages/neura-sdk" },
     { name = "neura-server", editable = "packages/neura-server" },
@@ -1752,7 +1816,10 @@ dev = [
     { name = "types-protobuf", specifier = ">=6.30" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
-models = [{ name = "neura-adapters", extras = ["lerobot"], editable = "packages/neura-adapters" }]
+models = [
+    { name = "neura-adapters", extras = ["lerobot"], editable = "packages/neura-adapters" },
+    { name = "neura-robots", extras = ["so101"], editable = "packages/neura-robots" },
+]
 
 [[package]]
 name = "numpy"
@@ -1993,6 +2060,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2e/02/6e0ae9cc61bd3169d401077b507b3ebc344745171e1051ab430be012dcd9/opentelemetry_api-1.45.1.tar.gz", hash = "sha256:aa38ed19bcc084ba42782a73255b3582283eced7ad6dddbd6695189e69adfb75", size = 72804, upload-time = "2026-10-06T17:32:58.133Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/41/f7dcf80b81ee8e71c1a2b59f14208bc723edbd89ed027a73b175abf6348e/opentelemetry_api-1.45.1-py3-none-any.whl", hash = "sha256:b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb", size = 60256, upload-time = "2026-10-06T17:32:33.506Z" },
+]
+
+[[package]]
+name = "orderly-set"
+version = "5.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/88/39c83c35d5e97cc203e9e77a4f93bf87ec89cf6a22ac4818fdcc65d66584/orderly_set-5.5.0.tar.gz", hash = "sha256:e87185c8e4d8afa64e7f8160ee2c542a475b738bc891dc3f58102e654125e6ce", size = 27414, upload-time = "2025-07-10T20:10:55.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/27/fb8d7338b4d551900fa3e580acbe7a0cf655d940e164cb5c00ec31961094/orderly_set-5.5.0-py3-none-any.whl", hash = "sha256:46f0b801948e98f427b412fcabb831677194c05c3b699b80de260374baa0b1e7", size = 13068, upload-time = "2025-07-10T20:10:54.377Z" },
 ]
 
 [[package]]
@@ -2321,6 +2397,15 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pyserial"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
 ]
 
 [[package]]

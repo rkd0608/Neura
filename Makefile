@@ -64,8 +64,8 @@ test: ## Run the test suite
 check: lint typecheck check-generated test ## Everything CI runs, except the dev-stack smoke test
 
 .PHONY: test-models
-test-models: ## Model tests: LeRobot adapters, real workers, the benchmark harness (needs models-setup)
-	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench tests/integration/test_act_worker.py
+test-models: ## Model tests: LeRobot adapters, real workers, benchmarks, the SO-101 integration (needs models-setup)
+	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench packages/neura-robots tests/integration/test_act_worker.py
 	$(UV) run --group models neura-bench run --preset smoke --out $${TMPDIR:-/tmp}/neura-bench-smoke
 
 SOAK_HOURS ?= 72

@@ -223,7 +223,7 @@ def test_short_soak_with_dense_faults_passes(make_binding: Any) -> None:
     assert report["faults_total"] > 100
     assert len(report["faults_injected"]) >= 15  # most of the catalog was exercised
     assert report["recoveries"] > 0
-    assert report["invariants"]["checked"]["chunks_accepted"] > 500
+    assert report["invariants"]["checked"]["chunks_accepted"] > 300
 
 
 def test_soak_is_reproducible_from_its_seed(make_binding: Any) -> None:

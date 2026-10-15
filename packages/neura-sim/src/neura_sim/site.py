@@ -303,6 +303,7 @@ class SimSite:
         self.worker_busy_us = 0
         self.gateway_restarts = 0
         self._sweeps = 0
+        self._frozen_until = 0  # true time; the gateway host is stalled until then
         self._session_robot: dict[str, SimRobot] = {}
         for crash in config.worker_faults.crash_at_us:
             self.loop.at(crash, self._crash_worker)
@@ -343,6 +344,12 @@ class SimSite:
     def gateway_receive(
         self, robot: SimRobot, item: Outbound, call_id: int, *, oversize: bool = False
     ) -> None:
+        if self._frozen():
+            self.loop.at(
+                self._frozen_until,
+                lambda: self.gateway_receive(robot, item, call_id, oversize=oversize),
+            )
+            return
         now = self.gateway_now()
         message = item.message
         if item.channel == "open":
@@ -385,7 +392,21 @@ class SimSite:
             for at in robot.downlink.deliveries(self.loop.now_us):
                 self.loop.at(at, _deliver_later(robot, delivery.message))
 
+    @property
+    def worker_busy(self) -> bool:
+        return self._worker_busy is not None
+
+    def _frozen(self) -> bool:
+        return self.loop.now_us < self._frozen_until
+
+    def freeze_gateway(self, duration_us: int) -> None:
+        """Stall the gateway host (its process and workers) for ``duration_us``: nothing it should
+        do happens until then, and a batch in flight finishes that much later."""
+        self._frozen_until = max(self._frozen_until, self.loop.now_us + duration_us)
+
     def _try_dispatch(self) -> None:
+        if self._frozen():
+            return
         if self._worker_busy is not None or self.loop.now_us < self._worker_down_until:
             return
         batch, dropped = self.core.next_batch(self.group_key, self.gateway_now())
@@ -399,6 +420,9 @@ class SimSite:
         self.loop.at(self.loop.now_us + latency, lambda: self._complete(batch, generation))
 
     def _complete(self, batch: Batch, generation: int) -> None:
+        if self._frozen():
+            self.loop.at(self._frozen_until, lambda: self._complete(batch, generation))
+            return
         if generation != self._worker_generation or self._worker_busy is not batch:
             return  # the worker crashed or the gateway restarted: never deliver old results
         self._worker_busy = None
@@ -449,6 +473,9 @@ class SimSite:
         self.core = self._new_core()
 
     def _sweep(self) -> None:
+        if self._frozen():
+            self.loop.at(self._frozen_until, self._sweep)
+            return
         self.core.sweep(self.gateway_now())
         self._try_dispatch()
         self._sweeps += 1

@@ -47,6 +47,7 @@ import yaml
 
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import token_digest
+from neura_server.profiles import DEFAULT_HORIZON_US
 from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
 from neura_sim.invariants import InvariantMonitor
 
@@ -275,6 +276,7 @@ class Chaos:
         self.robots: list[_Robot] = []
         self.extra: list[_Robot] = []
         self.outcome = _Outcome()
+        self.final_status: dict[str, Any] | None = None
 
     def _log(self, line: str) -> None:
         if self.config.progress is not None:
@@ -341,7 +343,10 @@ class Chaos:
                 self._log("faults stopped; cooling down")
                 proxy.delay_s = 0.0
                 await asyncio.sleep(config.cooldown_s)
-                recovered = await self._wait_running(timeout_s=60)
+                # Longer than the latency profile's horizon: after repeated stalls admission
+                # may refuse a robot until those observations expire (neura_server.profiles).
+                recovered = await self._wait_running(timeout_s=DEFAULT_HORIZON_US / 1e6 + 30)
+                self.final_status = await asyncio.to_thread(self._status)
                 operator.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await operator
@@ -450,6 +455,14 @@ class Chaos:
                 "resets": r.process.resets,
                 "tasks": r.process.tasks_completed,
                 "late_ticks": r.process.connection.late_ticks,
+                "last_rejection": (
+                    r.process.client.last_rejection.value
+                    if r.process.client.last_rejection
+                    else None
+                ),
+                "last_reason": (
+                    r.process.runtime.last_reason.value if r.process.runtime.last_reason else None
+                ),
             }
             for r in self.robots
         }
@@ -473,6 +486,7 @@ class Chaos:
             "findings": findings,
             "robots": robots,
             "runtime_counters": dict(sorted(counters.items())),
+            "gateway": self.final_status,
         }
 
 

@@ -110,10 +110,32 @@ def test_profile_interpolates_and_extrapolates_conservatively() -> None:
 def test_profile_adapts_upward_only() -> None:
     profile = _profile()
     profile.observe(1, 5 * MS)
+    profile.observe(1, 5 * MS)
     assert profile.p99_us(1) == 12 * MS  # faster observations never make predictions optimistic
     for _ in range(20):
         profile.observe(1, 30 * MS)
     assert profile.p99_us(1) == 30 * MS
+
+
+def test_one_stall_does_not_raise_the_profile_but_a_repeated_slowdown_does() -> None:
+    profile = _profile()
+    for _ in range(50):
+        profile.observe(1, 10 * MS, now_us=0)
+    profile.observe(1, 3_000 * MS, now_us=0)  # a host paused while this batch ran
+    assert profile.p99_us(1) == 12 * MS
+    profile.observe(1, 2_000 * MS, now_us=0)
+    assert profile.p99_us(1) == 2_000 * MS
+
+
+def test_observations_expire_so_an_inflated_profile_recovers() -> None:
+    profile = LatencyProfile([ProfilePoint(1, 10 * MS, 12 * MS)], horizon_us=60 * 1_000_000)
+    for at in (0, 1, 2):
+        profile.observe(1, 900 * MS, now_us=at)
+    assert profile.p99_us(1) == 900 * MS
+    profile.expire(now_us=59 * 1_000_000)
+    assert profile.p99_us(1) == 900 * MS
+    profile.expire(now_us=61 * 1_000_000)
+    assert profile.p99_us(1) == 12 * MS  # without traffic, the prior is back after the horizon
 
 
 @pytest.mark.parametrize(

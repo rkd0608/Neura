@@ -66,6 +66,18 @@ test-models: ## Model tests: LeRobot adapters, real workers, the benchmark harne
 	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench tests/integration/test_act_worker.py
 	$(UV) run --group models neura-bench run --preset smoke --out $${TMPDIR:-/tmp}/neura-bench-smoke
 
+SOAK_HOURS ?= 72
+
+.PHONY: soak
+soak: ## Soak the simulated site for SOAK_HOURS (default 72) simulated hours with injected faults
+	$(UV) run neura-sim-soak --hours $(SOAK_HOURS) --report $${TMPDIR:-/tmp}/neura-soak.json
+
+CHAOS_SECONDS ?= 300
+
+.PHONY: chaos
+chaos: ## Inject faults into a real gateway, its workers and the network for CHAOS_SECONDS
+	$(UV) run neura-chaos --duration $(CHAOS_SECONDS) --report $${TMPDIR:-/tmp}/neura-chaos.json
+
 BENCH_DEVICE ?= cuda:0
 
 .PHONY: bench

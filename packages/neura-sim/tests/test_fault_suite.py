@@ -239,6 +239,27 @@ def test_gateway_restart_fences_old_sessions(config: SiteConfig) -> None:
     assert all(r.fault is None for r in report.robots.values())
 
 
+def test_gateway_host_freeze_longer_than_the_lease_is_survived(config: SiteConfig) -> None:
+    # A frozen host (a stalled VM, a paused process) delays one batch by seconds. The robots fault
+    # and an operator resets them; the site must admit them again rather than treat the stall as
+    # the worker's real latency and refuse every session from then on.
+    config.robots = 3
+    site = SimSite(config)
+    run(site, 4)
+    while not site.worker_busy:  # freeze while a batch is in flight
+        run(site, 0.001)
+    site.freeze_gateway(3 * SECOND)
+    run(site, 6)
+    for robot in site.robots:
+        assert robot.runtime.state is RuntimeState.FAULTED
+        robot.reset()
+    report = run(site, 6)
+    assert states(site) == {RuntimeState.RUNNING}, {
+        r.name: r.client.last_rejection for r in site.robots
+    }
+    assert report.group()["admitted_sessions"] == 3
+
+
 def test_second_client_for_same_robot_is_refused(config: SiteConfig) -> None:
     config.robots = 1
     site = SimSite(config)

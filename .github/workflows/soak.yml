@@ -1,0 +1,77 @@
+name: Soak and chaos
+
+# The long runs behind the M7 exit criterion (design §16.1, §17.7): a 72-hour soak of the
+# simulated site with injected faults, for each reference model and merge mode, and half an hour
+# of chaos against real gateway and worker processes. Every run is watched by the independent
+# invariant monitor; any violation fails the job. Weekly, and on demand from the Actions tab.
+on:
+  schedule:
+    - cron: "17 2 * * 6"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: Simulated hours per soak
+        default: "72"
+      chaos_seconds:
+        description: Seconds of real-process chaos
+        default: "1800"
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Soak (${{ matrix.model }}, ${{ matrix.merge }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {model: act, merge: replace, seed: 1}
+          - {model: smolvla, merge: replace, seed: 2}
+          - {model: act, merge: blend, seed: 3}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.13"
+      - name: Install
+        run: uv sync --frozen
+      - name: Soak
+        env:
+          HOURS: ${{ inputs.hours || '72' }}
+        run: >-
+          uv run neura-sim-soak --hours "$HOURS" --model ${{ matrix.model }}
+          --merge ${{ matrix.merge }} --seed ${{ matrix.seed }}
+          --report soak/${{ matrix.model }}-${{ matrix.merge }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-${{ matrix.model }}-${{ matrix.merge }}
+          path: soak
+
+  chaos:
+    name: Real-process chaos
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.13"
+      - name: Install
+        run: uv sync --frozen
+      - name: Chaos
+        env:
+          SECONDS_OF_CHAOS: ${{ inputs.chaos_seconds || '1800' }}
+        run: >-
+          uv run neura-chaos --duration "$SECONDS_OF_CHAOS" --workdir chaos
+          --report chaos/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos
+          path: chaos

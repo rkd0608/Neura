@@ -52,6 +52,9 @@ make console-e2e     # the whole journey in Chromium against the real backend
 make models-setup    # also install PyTorch and LeRobot (about 5 GB), for real models
 make test-models     # LeRobot adapters, real worker processes, a smoke run of the benchmark
 make bench           # the GPU-sharing benchmark on a GPU; report in bench/reports/<gpu>/
+
+make soak            # 72 simulated hours of the site with injected faults (about 2 hours)
+make chaos           # faults in a real gateway, its workers and the network (5 minutes)
 ```
 
 `make setup` installs the default environment only; run `make models-setup` again after it to
@@ -136,6 +139,11 @@ Everything the site sends to Neura is in its outbound ledger, hash-chained (desi
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --summary
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --verify
 ```
+
+Both `make soak` and `make chaos` are watched by an independent invariant monitor: any stale,
+duplicated or unauthorized action accepted, any action out of order or range, and any latched
+fault cleared without a reset fails the run (design §17.7). `neura-sim-soak --help` and
+`neura-chaos --help` list the faults; `--seed` reproduces a run.
 
 ## Installing a site agent
 

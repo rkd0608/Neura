@@ -422,9 +422,11 @@ class GatewayCore:
         return deliveries
 
     def sweep(self, now_us: int) -> None:
-        """Expire leases and forget their sessions."""
+        """Expire leases and forget their sessions; let old latency observations expire."""
         for lease in self.leases.expire(now_us):
             self._drop_session(lease.session_id, ReasonCode.LEASE_EXPIRED)
+        for group in self.groups.values():
+            group.scheduler.profile.expire(now_us)
 
     def _rejections(self, dropped: list[Dropped]) -> list[Delivery]:
         deliveries = []

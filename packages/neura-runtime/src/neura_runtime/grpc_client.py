@@ -110,6 +110,8 @@ class GatewayConnection:
         options = [
             ("grpc.max_receive_message_length", self._max_message_bytes),
             ("grpc.max_send_message_length", self._max_message_bytes),
+            # One connection per robot, even when several share a process (simulators, tests).
+            ("grpc.use_local_subchannel_pool", 1),
         ]
         async with self.credentials.channel(self.target, options) as channel:
             stub = dataplane_pb2_grpc.RobotGatewayStub(channel)

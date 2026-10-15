@@ -245,7 +245,7 @@ class Scheduler:
 
     def complete(self, batch: Batch, now_us: int) -> list[InferenceRequest]:
         """Record a finished batch. Returns the requests whose results are still deliverable."""
-        self.profile.observe(len(batch.requests), now_us - batch.dispatched_at_us)
+        self.profile.observe(len(batch.requests), now_us - batch.dispatched_at_us, now_us)
         if self.on_complete is not None:
             self.on_complete(batch, now_us)
         deliverable = []

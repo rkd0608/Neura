@@ -710,6 +710,46 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
   - Tests build real bundles, install them with the installer (openssl, venv, pip), and exercise commit, both rollbacks and every refusal: wrong digest, version or key, tampered file, not installed.
 - **Offline authorization and the clock.** Time since the last verified contact is the larger of the wall clock's measure and the time the agent itself has counted with the monotonic clock, persisted across restarts. Setting the server's clock back no longer extends offline authorization.
 
+**Chaos and soak testing**
+
+- **An independent invariant monitor** (`neura_sim.invariants`) watches a site from outside. It sees:
+  - what each robot sent and received;
+  - what the gateway emitted and which leases it granted;
+  - every command each controller was given.
+
+  It keeps its own model of what each robot was allowed to accept and execute, and never asks the runtime whether a decision was right. It records a violation, the class of failure §21 calls Sev-1, when:
+  - a chunk is accepted that is not for the robot's own session, lease generation and task epoch;
+  - a chunk is accepted that answers an older request than the latest, or is accepted twice;
+  - a chunk is accepted whose observation was too old, or taken before the robot started waiting;
+  - a chunk is accepted with the wrong anchor, digest or revision, or while the robot was inactive;
+  - a chunk was granted to another client, or not emitted by the gateway under a live lease;
+  - an action is dispatched out of order or out of range, while not running, or while a fault is latched;
+  - an action is dispatched that no accepted chunk produced (for replace merges, its exact value; for blend, within the merged rows);
+  - a latched fault clears without an explicit local reset, or its record changes;
+  - lease generations do not strictly increase per robot across gateway restarts;
+  - the gateway emits a chunk without a live lease or for an old generation.
+
+  The fault suite asserts the monitor on every scenario. Mutation tests break one rule each (a runtime that accepts duplicates, a reconnect that clears a fault, a skipped or altered action, no freshness limit, an expired or never-granted lease) and require the monitor to report it.
+- **The soak** (`neura-sim-soak`, `make soak`) runs the simulated site for 72 simulated hours: the production sans-IO cores in virtual time, about 40 times faster than real time.
+  - A seeded campaign injects a fault about once a minute, at random times and on random robots. It draws from the §7 fault suite: delay spikes, short partitions and long outages, stream loss, duplication and reordering, site-wide degradation, worker crashes (short and longer than the starvation grace), out-of-memory, invalid and out-of-range output, gateway restarts and host freezes, missing and skewed cameras, unavailable sensors, operator takeovers, a second client with the same credential, controller failures, lost actuator authority, oversized messages and revoked credentials.
+  - An operator stand-in finishes tasks, hands robots back after a takeover and resets a latched fault after 2 to 30 s.
+  - The soak tracks availability and resources every simulated hour: gateway sessions, leases, admitted sessions, queued requests, the event queue and memory. It requires every robot to be running after a fault-free cooldown.
+  - The same seed reproduces the same run, and violations carry their simulated time.
+- **Chaos against real processes** (`neura-chaos`, `make chaos`).
+  - It starts a gateway process with its policy worker processes behind a TCP fault proxy, with a supervisor that restarts the gateway as systemd would.
+  - It serves simulated robots over gRPC, each with its own connection and each watched by the monitor. Against a real gateway only the robot side is visible; grants are taken from what robots receive.
+  - Faults: kill or hang a worker; kill, terminate, freeze (SIGSTOP the process group) or reload the gateway; stall every connection (TCP then delivers the backlog late); drop every connection; add latency; operator takeover; a second process with the same credential.
+- **Where they run.**
+  - Every CI run includes the fault suite with the monitor, the mutation tests, a five-minute soak with a fault every two seconds, and 45 s of real-process chaos.
+  - The `Soak and chaos` workflow runs weekly and on demand: the 72-hour soak for ACT with replace merge, SmolVLA with replace merge and ACT with blend merge, plus 30 minutes of chaos.
+- **What they found, now fixed.**
+  - *A frozen gateway host locked the site out.* The latency profile adapts upward from observed batch times and, with few samples, used the worst one. A batch in flight while the host was frozen recorded a 3 s latency, and admission then refused every session. No session meant no new batch of that size, so the estimate never came back down.
+
+    Now a single outlier never raises a prediction (the observed tail is the latency at most 1% of recent samples exceed, and never fewer than one), and observations expire after two minutes. A repeated slowdown still raises predictions. The simulator now models host freezes, with a regression test.
+  - *A chunk could be emitted under an expired lease* between two gateway sweeps. The robot rejected it, since its own lease view had already run out, but the gateway now checks the lease is live when it emits.
+  - *A late rejection addressed to an earlier session could tear down the current one.* A robot now ignores rejections for any session but its own.
+  - The simulator's own controller log and route table grew without bound; both are bounded, so a soak runs for days in under 100 MiB.
+
 **Known limits, scheduled**
 
 - Signatures are checked at prepare. A revision prepared before its publisher was distrusted keeps running until it is replaced or prepared again.

@@ -381,6 +381,12 @@ def _gateway_restart(soak: Soak) -> None:
     soak.site.restart_gateway()
 
 
+def _gateway_freeze(soak: Soak) -> None:
+    """The gateway host stalls (a paused VM, a long garbage collection); a batch in flight then
+    reports a latency of seconds."""
+    soak.site.freeze_gateway(soak._uniform_us((0.1, 3.0)))
+
+
 def _camera_missing(soak: Soak) -> None:
     robot = soak._robot()
     role = soak.rng.choice(sorted(robot.sensors.cameras))
@@ -460,6 +466,7 @@ FAULTS: dict[str, tuple[float, Callable[[Soak], None]]] = {
     "worker_invalid_output": (1.0, _worker_invalid_output),
     "worker_out_of_range_output": (0.3, _worker_out_of_range_output),
     "gateway_restart": (0.5, _gateway_restart),
+    "gateway_freeze": (0.5, _gateway_freeze),
     "camera_missing": (1.0, _camera_missing),
     "camera_skew": (1.0, _camera_skew),
     "sensors_unavailable": (0.5, _sensors_unavailable),

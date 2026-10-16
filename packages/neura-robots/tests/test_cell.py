@@ -17,13 +17,13 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 pytest.importorskip("mujoco")
 pytest.importorskip("PIL")
 
-from neura_contracts import RobotProfile, parse_document  # noqa: E402
-from neura_robots.aloha import AlohaSim  # noqa: E402
-from neura_robots.aloha.arm import AlohaSimArm  # noqa: E402
-from neura_robots.aloha.cell import Cell, CellRobot, serve_page  # noqa: E402
-from neura_robots.aloha.contracts import robot_profile  # noqa: E402
-from neura_runtime.grpc_client import RobotCredentials  # noqa: E402
-from neura_runtime.runtime import RuntimeState  # noqa: E402
+from neura_contracts import RobotProfile, parse_document
+from neura_robots.aloha import AlohaSim
+from neura_robots.aloha.arm import AlohaSimArm
+from neura_robots.aloha.cell import Cell, CellRobot, serve_page
+from neura_robots.aloha.contracts import robot_profile
+from neura_runtime.grpc_client import RobotCredentials
+from neura_runtime.runtime import RuntimeState
 
 
 def _renders() -> bool:
@@ -50,7 +50,9 @@ class FakeProcess:
             state=RuntimeState.READY, session_id="ses_1", fault=None, counters=Counter()
         )
         self.client = SimpleNamespace(
-            rtt=SimpleNamespace(p99_us=lambda: 12_000), last_rejection=None, last_rejection_detail=""
+            rtt=SimpleNamespace(p99_us=lambda: 12_000),
+            last_rejection=None,
+            last_rejection_detail="",
         )
         self.connection = SimpleNamespace(late_ticks=0)
 
@@ -78,32 +80,44 @@ def _commands(robot: CellRobot) -> list[str]:
     return fresh
 
 
+# Read through functions: the controller changes these between assertions, which mypy cannot see.
+def _task(robot: CellRobot) -> Any:
+    return robot.task
+
+
+def _paused(robot: CellRobot) -> bool:
+    return robot.paused
+
+
 def test_tasks_run_back_to_back_with_a_pause_between() -> None:
     robot = _robot()
     process = FakeProcess()
     robot.assigned.process = process  # type: ignore[assignment]
     robot.step(0.0)
-    assert robot.task is not None and robot.task.seed == 1000
+    assert _task(robot) is not None
+    assert _task(robot).seed == 1000
     assert _commands(robot) == ["arm"]
 
     process.runtime.state = RuntimeState.RUNNING
     robot.step(0.1)
-    assert robot.task.started
+    assert _task(robot).started
     for _ in range(20):  # the world's time runs out (its thread is not started here)
         robot.world.sim.advance()
     robot.step(0.2)
-    assert robot.task is None
+    assert _task(robot) is None
     assert _commands(robot) == ["stop"]
     (outcome,) = robot.outcomes
     assert (outcome.seed, outcome.result, outcome.revision) == (1000, "timeout", "rev_1")
 
     process.runtime.state = RuntimeState.READY
     robot.step(0.5)  # still pausing between tasks
-    assert robot.task is None
+    assert _task(robot) is None
     robot.step(1.3)
-    assert robot.task is not None and robot.task.seed == 1001
+    assert _task(robot) is not None
+    assert _task(robot).seed == 1001
     status = robot.status()
-    assert status["tasks"] == 1 and status["task"]["seed"] == 1001
+    assert status["tasks"] == 1
+    assert status["task"]["seed"] == 1001
     assert status["rtt_p99_ms"] == 12.0
     robot.world.close()
 
@@ -113,14 +127,14 @@ def test_no_task_starts_while_paused_or_before_a_new_revision_is_taken() -> None
     robot.assigned.process = FakeProcess()  # type: ignore[assignment]
     robot.command("pause")
     robot.step(0.0)
-    assert robot.task is None
+    assert _task(robot) is None
     robot.command("resume")
     robot.assigned.pending = "rev_2"
     robot.step(0.1)
-    assert robot.task is None  # the robot switches first, at this boundary
+    assert _task(robot) is None  # the robot switches first, at this boundary
     robot.assigned.pending = None
     robot.step(0.2)
-    assert robot.task is not None
+    assert _task(robot) is not None
     robot.world.close()
 
 
@@ -189,11 +203,12 @@ def test_the_page_serves_status_and_frames_and_takes_actions_only_from_itself(
         # Actions: only from this page (a header other sites' pages cannot send), and only to
         # its own names (no DNS rebinding).
         assert call("/api/robots/aloha-1/pause", method="POST")[0] == 403
-        assert not robot.paused
+        assert not _paused(robot)
         rebound = {"X-Neura-Cell": "1", "Host": "attacker.example"}
         assert call("/api/robots/aloha-1/pause", method="POST", headers=rebound)[0] == 403
         ok = call("/api/robots/aloha-1/pause", method="POST", headers={"X-Neura-Cell": "1"})
-        assert ok[0] == 200 and robot.paused
+        assert ok[0] == 200
+        assert _paused(robot)
         assert call("/api/site", headers={"Host": "attacker.example"})[0] == 421
         assert call("/api/site")[0] == 404  # no site API configured
     finally:

@@ -1262,12 +1262,17 @@ Everything else is done in the console: sites, robots, deployments, revisions, p
 - The policy workers run as processes in the agent's container (`worker_sandbox=process`).
 - The execution profile is tuned for CPU serving: an observation may be 600 ms old when it reaches the model, and the next chunk is requested with 50 actions left, a one-second budget. On the GPU profile (100 ms, 30 actions), admission control refuses a second robot on a laptop's CPU, by design: the predicted completion exceeds the robot's starvation budget.
 
-**Verified.** In this repository's sandbox: the published flow, enrollment, signature trust, weight import, prepare, approval from the page, tasks on two robots, and switching revisions mid-task. This used a local control plane and a random-weights checkpoint of the published one's shape. The Site kit workflow (`.github/workflows/site-kit.yml`, manual) adds the image build and the published checkpoint from the Hub (`tools/smoke_site_kit.py`).
+**Verified.**
+- **In this repository's sandbox**, against a local control plane with a random-weights checkpoint of the published one's shape: the published flow, enrollment, signature trust, weight import, prepare, approval from the page, tasks on two robots, and switching revisions mid-task.
+- **On a GitHub runner** (the Site kit workflow, `.github/workflows/site-kit.yml`, manual; `tools/smoke_site_kit.py`): the kit's image builds, and `./site.sh` runs the whole flow against the development stack with the published checkpoint from the Hub. A runner's four shared vCPUs take 280 to 550 ms per forward pass and serve one robot (refill at 65 actions). That robot handed the cube over in 2 of 3 tasks, and the control plane saw its session.
 
-Building the kit found three defects, all fixed:
+Building and running the kit found these defects, all fixed:
 1. **Overlapping activations.** A robot switched to a revision whose activation had not finished, because another robot never switched. A newer approval then replaced that revision, and the gateway stopped serving it under the robot mid-task: the robot starved and faulted. The fix is in §17 (Activation).
 2. **Backbone weights.** The LeRobot adapter built ACT from the checkpoint's configuration, which fetches ImageNet backbone weights from the internet before the checkpoint's own weights overwrite them. A worker without network could never load a published ACT checkpoint. The adapter no longer fetches pretrained backbone weights.
 3. **Repeated refusals.** The robot process repeated a session refusal every half second, because its detail names each attempt's session. It now reports each refusal reason once.
+4. **Activations beyond capacity.** An activation for more robots than the server serves could only time out after ten minutes and revert. It now fails at once (§17, Activation).
+5. **Relative paths in the local site.** The local site harness (evidence and qualification) passed relative paths to a gateway running in another directory, so its workers never found the checkpoint. It now resolves them.
+6. **Builds and caches.** Compose builds through bake, which refuses to read the CA-bundle secret at `/dev/null`, outside the project. The default is now an empty file in the repository. The kit image's user has no writable home, so its caches live in `/tmp`.
 
 ---
 

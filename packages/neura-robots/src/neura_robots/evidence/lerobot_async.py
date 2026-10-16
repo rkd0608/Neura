@@ -10,9 +10,18 @@ whose joints are within ``atol=1`` of the last one it processed (unless the clie
 empty): one degree on the SO-100 it was written for, but one radian on ALOHA, which would make it
 skip nearly everything. Results say which was used.
 
-Per episode, the client is created and started afresh (the server reloads the policy, while the
-world is stopped), then runs until the world's episode ends. Each received chunk's observation
-age on arrival is recorded, and each executed action's: LeRobot does not bound either.
+The robot's camera is read as LeRobot reads a real one (``_Camera``): frames are drawn on a
+background thread, and a read returns the newest. LeRobot's client reads the camera every control
+tick while it waits for a chunk; drawing each frame in the read instead would cost the client a
+software renderer's 40 to 80 ms per tick, slowing its 50 Hz loop by a factor of two or more, which
+no real camera does.
+
+Per episode, while the world is stopped: the client is created and started afresh, and the server
+loads the policy; then one warm-up inference, through LeRobot's own calls, since a policy's first
+forward pass after loading is several times slower than the rest (Neura's workers and the
+in-process baseline are warm when an episode starts). Then the client runs until the world's
+episode ends. Each received chunk's observation age on arrival is recorded, and each executed
+action's: LeRobot does not bound either.
 """
 
 from __future__ import annotations
@@ -35,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 from neura_robots.aloha import JOINTS
 from neura_robots.aloha.world import RealTimeWorld
@@ -44,6 +54,86 @@ from neura_sim.chaos import FaultProxy, free_port
 # A chunk "arrived late" when its observation is older than this on arrival: Neura's acceptance
 # budget in the evidence profile, which Neura refuses beyond and LeRobot does not bound.
 STALE_AFTER_S = 1.5
+
+# A camera read waits for a new frame when the newest is older than this: the most LeRobot's own
+# cameras wait for one (``async_read``'s default timeout).
+FRAME_MAX_AGE_S = 0.2
+
+
+class _Camera:
+    """The simulated robot's camera, with the semantics of LeRobot's cameras' ``async_read``: a
+    background thread draws frames, and a read returns the newest without waiting for the
+    renderer, unless the newest is older than ``max_age_s`` (or none was drawn since
+    ``invalidate``): then it waits for one drawn after it asked. Each read asks for the next
+    frame, so the thread draws back to back while the robot reads every tick, and not at all
+    while it does not read."""
+
+    def __init__(
+        self, world: RealTimeWorld, camera: str = "top", max_age_s: float = FRAME_MAX_AGE_S
+    ) -> None:
+        self.world = world
+        self.camera = camera
+        self.max_age_s = max_age_s
+        self.ages_s: list[float] = []  # each read frame's age when read
+        self.waits = 0  # reads that waited for the renderer
+        self._changed = threading.Condition()
+        self._frame: NDArray[np.uint8] | None = None
+        self._drawn_at = 0.0  # when the state the frame shows was copied (monotonic)
+        self._epoch = 0
+        self._wanted = False
+        self._stopping = False
+        self._thread = threading.Thread(target=self._run, name="aloha-camera", daemon=True)
+
+    def start(self) -> _Camera:
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        try:
+            while True:
+                with self._changed:
+                    while not (self._wanted or self._stopping):
+                        self._changed.wait()
+                    if self._stopping:
+                        return
+                    self._wanted = False
+                    epoch = self._epoch
+                drawn_at = time.monotonic()
+                image = self.world.render(self.camera)
+                with self._changed:
+                    if epoch == self._epoch:  # not drawn before an invalidate
+                        self._frame, self._drawn_at = image, drawn_at
+                    self._changed.notify_all()
+        finally:
+            self.world.sim.release_renderer()
+
+    def read(self) -> NDArray[np.uint8]:
+        with self._changed:
+            asked = time.monotonic()
+            self._wanted = True
+            self._changed.notify_all()
+            if self._frame is None or asked - self._drawn_at > self.max_age_s:
+                self.waits += 1
+                while self._frame is None or self._drawn_at < asked:
+                    if self._stopping:
+                        raise RuntimeError("the camera is stopped")
+                    self._changed.wait()
+            self.ages_s.append(time.monotonic() - self._drawn_at)
+            return self._frame
+
+    def invalidate(self) -> None:
+        """A new episode: no frame drawn before now is read, and the counts start over."""
+        with self._changed:
+            self._epoch += 1
+            self._frame = None
+            self.ages_s = []
+            self.waits = 0
+
+    def stop(self) -> None:
+        with self._changed:
+            self._stopping = True
+            self._changed.notify_all()
+        self._thread.join(timeout=5)
 
 
 @functools.cache
@@ -60,9 +150,10 @@ def _robot_classes() -> tuple[type, type]:
         config_class = AlohaSimRobotConfig
         name = "neura_aloha_sim"
 
-        def __init__(self, config: Any, world: RealTimeWorld) -> None:
+        def __init__(self, config: Any, world: RealTimeWorld, camera: _Camera) -> None:
             super().__init__(config)
             self.world = world
+            self.camera = camera
             self.connected = False
             self.counters: Counter[str] = Counter()
 
@@ -95,7 +186,7 @@ def _robot_classes() -> tuple[type, type]:
 
         def get_observation(self) -> dict[str, Any]:
             observation: dict[str, Any] = dict(zip(JOINTS, self.world.qpos().tolist(), strict=True))
-            observation["top"] = self.world.render("top")
+            observation["top"] = self.camera.read()
             self.counters["observations"] += 1
             return observation
 
@@ -204,6 +295,8 @@ class _ProxyThread:
         asyncio.run_coroutine_threadsafe(self.proxy.stop(), self.loop).result(timeout=5)
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.thread.join(timeout=5)
+        if not self.thread.is_alive():
+            self.loop.close()
 
 
 # --- episodes ------------------------------------------------------------------------------------
@@ -238,14 +331,17 @@ class AsyncRun:
             free_port(), similarity_atol, workdir / "policy_server.log"
         )
         self.proxy = _ProxyThread(self.server.port)
+        self.camera = _Camera(world)
 
     def __enter__(self) -> AsyncRun:
         self.server.start()
         self.server.wait_listening()
         self.proxy.start()
+        self.camera.start()
         return self
 
     def __exit__(self, *_: object) -> None:
+        self.camera.stop()
         self.proxy.stop()
         self.server.stop()
 
@@ -254,7 +350,7 @@ class AsyncRun:
         from lerobot.async_inference.configs import RobotClientConfig
 
         robot_class, config_class = _robot_classes()
-        robot = robot_class(config_class(id="aloha"), self.world)
+        robot = robot_class(config_class(id="aloha"), self.world, self.camera)
         config = RobotClientConfig(
             policy_type="act",
             pretrained_name_or_path=str(self.checkpoint),
@@ -274,6 +370,24 @@ class AsyncRun:
             robot_client.make_robot_from_config = original
         return client, robot
 
+    def _warm(self, client: Any) -> None:
+        """One inference on the episode's first observation, through LeRobot's own calls, its
+        chunk dropped; then ``Ready``, which resets the server's state for a client (the
+        observations it has seen and predicted for) but keeps the policy."""
+        from lerobot.async_inference.helpers import TimedObservation
+        from lerobot.transport import services_pb2
+
+        observation = client.robot.get_observation()
+        observation["task"] = ""
+        client.send_observation(
+            TimedObservation(
+                timestamp=time.time(), timestep=0, observation=observation, must_go=True
+            )
+        )
+        if not client.stub.GetActions(services_pb2.Empty()).data:
+            raise RuntimeError(f"the policy server did not warm up; see {self.server.log}")
+        client.stub.Ready(services_pb2.Empty())
+
     def episode(
         self,
         seed: int,
@@ -284,6 +398,7 @@ class AsyncRun:
     ) -> EpisodeResult:
         self.server.wait_listening()  # a restarted server takes a moment
         self.world.reset(seed, max_steps)
+        self.camera.invalidate()
         client, robot = self._client()
         arrivals: list[float] = []  # observation age when its chunk arrived, seconds
         late_executed = 0  # actions executed from chunks that arrived later than the budget
@@ -315,6 +430,9 @@ class AsyncRun:
         client.control_loop_action = recording_action
         if not client.start():
             raise RuntimeError(f"the policy server did not answer; see {self.server.log}")
+        self._warm(client)
+        robot.counters.clear()
+        self.camera.invalidate()  # the episode's first read draws its frame, as Neura's does
         receiver = threading.Thread(target=client.receive_actions, daemon=True)
         loop = threading.Thread(target=client.control_loop, kwargs={"task": ""}, daemon=True)
         receiver.start()
@@ -345,11 +463,18 @@ class AsyncRun:
                 "late_chunks": sum(age > STALE_AFTER_S for age in arrivals),
                 "max_observation_age_at_arrival_ms": round(max(arrivals, default=0) * 1000),
                 "world_late_steps": self.world.late_steps,
+                "camera_waits": self.camera.waits,
+                "max_frame_age_ms": round(max(self.camera.ages_s, default=0) * 1000),
             },
         )
         label = " (warm-up, not scored)" if warmup else ""
         outcome = "success" if result.success else "fail"
-        self.progress(f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps)")
+        c = result.counters
+        self.progress(
+            f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps, "
+            f"{c['actions_executed']} actions executed, {c['chunks_received']} chunks, "
+            f"{c['observations_sent']} observations sent, max reward {result.max_reward})"
+        )
         return result
 
     def episodes(

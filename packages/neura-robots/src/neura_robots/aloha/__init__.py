@@ -214,12 +214,16 @@ class AlohaSim:
         image: NDArray[np.uint8] = renderer.render()
         return image
 
-    def close(self) -> None:
-        """Frees the calling thread's renderer; another thread's is freed when it ends (its
-        context cannot be made current here)."""
+    def release_renderer(self) -> None:
+        """Frees the calling thread's renderer: a thread that draws calls it before it ends."""
         renderer = self._renderers.pop(threading.get_ident(), None)
         if renderer is not None:
             renderer.close()
+
+    def close(self) -> None:
+        """Frees the calling thread's renderer; another thread's is freed when it ends (its
+        context cannot be made current here)."""
+        self.release_renderer()
         self._renderers.clear()
 
     # --- dm_control's semantics ----------------------------------------------------------------

@@ -162,6 +162,52 @@ def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
         assert run.pairs  # inputs and served actions, for parity
 
 
+def test_the_async_robots_camera_reads_like_lerobots() -> None:
+    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.evidence.lerobot_async import _Camera
+
+    world = RealTimeWorld(AlohaSim()).start()
+    camera = _Camera(world, max_age_s=10).start()
+    try:
+        world.reset(1000)
+        camera.invalidate()
+        first = camera.read()
+        assert camera.waits == 1  # none drawn yet: it waits for one
+        assert np.array_equal(first, world.render("top"))
+        camera.read()
+        assert camera.waits == 1  # the newest is recent: no wait for the renderer
+        world.reset(1001)  # the cube elsewhere
+        camera.invalidate()
+        moved = camera.read()
+        assert camera.waits == 1  # counted afresh, and waited: no frame of the last episode
+        assert np.array_equal(moved, world.render("top"))
+        assert not np.array_equal(moved, first)
+    finally:
+        camera.stop()
+        world.close()
+
+
+def test_lerobots_async_inference_serves_an_episode(synthetic: Path, tmp_path: Path) -> None:
+    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.evidence.lerobot_async import AsyncRun
+
+    world = RealTimeWorld(AlohaSim()).start()
+    try:
+        # Random weights barely move the arm: no observation is skipped as too similar.
+        with AsyncRun(synthetic, world, workdir=tmp_path, similarity_atol=1e-9) as run:
+            result = run.episode(1000, max_steps=100)
+    finally:
+        world.close()
+    assert result.steps == 100
+    assert result.system == "lerobot-async-scaled"
+    assert result.counters["chunks_received"] >= 1
+    assert result.counters["actions_executed"] > 0
+    assert result.counters["camera_waits"] >= 1  # the episode's first frame
+    # The warm-up's inference ran before the episode, and its observation is not counted.
+    log = (tmp_path / "policy_server.log").read_text()
+    assert log.count("Running inference for observation") > result.counters["chunks_received"]
+
+
 def test_the_site_is_given_absolute_paths(
     synthetic: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

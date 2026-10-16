@@ -433,12 +433,28 @@ They also run behind the same TCP fault proxy, so they get the same faults: adde
 2. **A camera read that took 40 to 80 ms.** While its queue is low, LeRobot's client reads the camera every control tick. The simulated robot drew each frame inside that read, so the client's 50 Hz loop ran at 20 to 40 Hz. The policy's motion played out in slow motion against a world clock that kept real time. A real camera read costs almost nothing: LeRobot's cameras draw frames on a background thread, and `async_read` returns the newest. The simulated camera now does the same. A read waits for a fresh frame only when the newest is older than 200 ms (`async_read`'s own timeout) or the episode has just started.
 3. **A cold model each episode.** The server loads the policy afresh for each client, and the first forward pass after loading took 1.1 s, against about 0.2 s warm. Neura's workers and the in-process baseline are warm when an episode starts. The async server now is too: one inference through LeRobot's own calls while the world is stopped, then `Ready` to reset its state for the client.
 
-After these fixes, both LeRobot variants succeeded on 3 of 5 seeds on the CI runner, as often as the other real-time systems.
-
 What remains is LeRobot's own design, recorded on every episode's line:
-- **Control ticks.** Its loop sends each observation inline, as a blocking RPC that returns after the server has unpacked and checked it. About 900 KB each. On the 4-vCPU runner the loop ticks about 310 times in 400 steps.
-- **Empty queue.** About 10 ticks per episode with no action queued.
-- **Observations sent.** 80 to 90 per episode, one per tick while the queue is low. The server skips most of them.
+- **Control ticks.** Its loop sends each observation inline, as a blocking RPC that returns after the server has unpacked and checked it. About 900 KB each. The loop ticks 355 to 360 times in 400 steps on one 4-vCPU runner, and about 310 on a slower one.
+- **Empty queue.** None with the scaled tolerance. A median of 19 ticks per episode as shipped, which waits for the queue to empty before the server takes an observation.
+- **Observations sent.** 90 to 120 per episode, one per tick while the queue is low. The server skips most of them.
+
+**Results: task success** (Evidence run 38900364537, 50 seeds per system, every system on the same runner: a 4-vCPU GitHub runner, CPU only).
+
+| System | Succeeded | 95% CI | Median steps to success |
+|---|---|---|---|
+| `lerobot-eval` | 38/50 (76%) | 63–86% | 288 |
+| `lerobot-realtime` | 36/50 (72%) | 58–83% | 328 |
+| `lerobot-async` | 34/50 (68%) | 54–79% | 346 |
+| `neura` | 33/50 (66%) | 52–78% | 322 |
+| `lerobot-async-scaled` | 30/50 (60%) | 46–72% | 331 |
+
+- **The intervals overlap.** On 50 seeds, no difference between the real-time systems is significant. Served by Neura, over gRPC, the gateway and a worker process, the policy does as well as LeRobot's in-process loop.
+- **The world keeps moving.** Against `lerobot-eval`, where the world waits for the policy, real-time systems take 35 to 60 more steps to succeed: while a chunk is computed, the arm stalls or keeps moving on an older plan.
+- **Seed outcomes move with timing.** `lerobot-eval` and `lerobot-realtime` agree on 46 of 50 seeds. Neura agrees with `lerobot-realtime` on 31. Neura asks for the next chunk with 30 actions left, and switches to it, computed from a newer observation, when it arrives. `lerobot-realtime` executes all 100, then stalls while the next is computed. The rates are close; which seeds succeed is not. 16 seeds succeeded for all four real-time systems, and 3 failed for all four.
+- **LeRobot's async inference.**
+  - With the scaled tolerance: 338 actions executed in 359 control ticks (medians), no empty ticks, the server at 356 ms a chunk.
+  - As shipped: 317 actions in 356 ticks, 19 empty ticks, the server at 381 ms a chunk.
+  - Every failure in every system ran the full 400 steps without finishing the hand-over, and every success reached the final reward.
 
 **Not modeled.** The simulator's software renderer shares the CPU with LeRobot's server while the client reads frames. A real camera costs the server nothing. With the camera frozen (no drawing at all), a full-size model executes about 376 actions per 400 steps on the development host, against about 340. On a real deployment the server runs on its own machine, and the network carries about 45 MB/s while the queue is low.
 

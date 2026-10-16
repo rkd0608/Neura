@@ -149,18 +149,20 @@ class LocalSite:
         workdir: Path,
         start_timeout_s: float = 180.0,
     ) -> None:
+        workdir = workdir.resolve()
         self.workdir = workdir
         gateway_port, status_port, proxy_port = free_port(), free_port(), free_port()
+        # Absolute: the gateway and its workers run in the site's directory, not the caller's.
         deployment: dict[str, Any] = {
             "revision_id": REVISION,
-            "artifact": str(artifact),
-            "robot_profile": str(robot_profile),
-            "execution_profile": str(execution_profile),
+            "artifact": str(artifact.resolve()),
+            "robot_profile": str(robot_profile.resolve()),
+            "execution_profile": str(execution_profile.resolve()),
             "robots": [ROBOT_ID],
             "device": device,
         }
         if checkpoint is not None:
-            deployment["checkpoint"] = str(checkpoint)
+            deployment["checkpoint"] = str(checkpoint.resolve())
         else:
             deployment["adapter"] = "mock"
         config = {

@@ -162,6 +162,37 @@ def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
         assert run.pairs  # inputs and served actions, for parity
 
 
+def test_the_site_is_given_absolute_paths(
+    synthetic: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gateway runs in the site's directory: a checkpoint given relative to the caller's
+    (as the evidence workflow does) must still be found."""
+    import shutil
+
+    import yaml
+
+    from neura_robots.qualify.harness import LocalSite
+
+    shutil.copytree(synthetic, tmp_path / "checkpoint")
+    deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")
+    monkeypatch.chdir(tmp_path)
+    site = LocalSite(
+        Path("contracts/artifact.json"),
+        Path("contracts/robot.json"),
+        Path("contracts/profile.json"),
+        Path("checkpoint"),
+        "cpu",
+        Path("site"),
+    )
+    config = yaml.safe_load((tmp_path / "site" / "site.yaml").read_text())
+    (served,) = config["deployments"]
+    for key in ("artifact", "robot_profile", "execution_profile", "checkpoint"):
+        assert Path(served[key]).is_absolute(), key
+        assert Path(served[key]).exists(), key
+    assert site.workdir.is_absolute()
+    assert deployment.checkpoint == synthetic
+
+
 def test_parity_with_lerobot_alone(synthetic: Path, tmp_path: Path) -> None:
     import argparse
 

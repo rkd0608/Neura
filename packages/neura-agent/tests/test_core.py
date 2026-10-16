@@ -543,6 +543,30 @@ async def test_approving_the_revision_robots_run_drops_the_one_in_flight(site: S
     assert reports[back.command_id].state == "Succeeded"
 
 
+async def test_an_activation_for_more_robots_than_the_server_serves_fails_now(
+    tmp_path: Path,
+) -> None:
+    site = Site(tmp_path, gateway_backend="workers", dev_adapter_override="mock")
+    site.cuda.append(0)
+    await site.commit([REV1])
+    await site.core.on_command(site.prepare(REV1["id"]))
+    estimate = json.loads(last_report(site).result_json)["capacity"]
+    placed = site.core.state.placements[REV1["id"]]
+    assert placed["max_robots"] == estimate["max_robots"] >= 2
+    placed["max_robots"] = 1  # as measured on a slower server
+
+    command = site.activate(REV1["id"])  # for both robots
+    await site.core.on_command(command)
+    final = site.reports()[-1]
+    assert (final.state, final.reason.code) == (
+        "Failed",
+        ReasonCode.ADMISSION_CAPACITY_EXCEEDED.value,
+    )
+    assert final.message.startswith("this server can serve 1 robot at")
+    assert site.core.pending_approvals() == []
+    assert site.core.assignment_for("robot-0") is None
+
+
 async def test_refusal_reverts_the_assignment(site: Site) -> None:
     await prepared(site, REV1, REV2)
     await activated(site, REV1["id"])

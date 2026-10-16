@@ -630,6 +630,8 @@ A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robo
 
 An activation can be approved while an earlier one is still in progress, for example after a robot that never switched. Then each robot keeps the revision it actually runs: if it already runs the earlier activation's revision, that revision becomes its `current`. The gateway keeps serving it until the robot switches at its next task boundary. The earlier activation can no longer complete, so it ends at once, without reverting anything, with `AGENT_ACTIVATION_SUPERSEDED`. Approving the revision a robot already runs clears a revision still waiting in `next`.
 
+An activation for more robots than the server can serve at the revision's execution profile fails at once with `ADMISSION_CAPACITY_EXCEEDED`. The limit is the capacity measured at prepare. The gateway's admission, which uses the same model, would refuse the extra robots a session, so the activation could only time out.
+
 **Offline authorization**
 
 - Offline authorization renews only on verified contact:

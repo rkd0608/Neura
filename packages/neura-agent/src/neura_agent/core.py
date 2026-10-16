@@ -564,6 +564,13 @@ class AgentCore:
                 "device": placed["device"],
                 "co_located_groups": placed["co_located_groups"],
             }
+        estimate = capacity.estimate(
+            binding, serving, rtt_p99_ms=self.settings.capacity_rtt_p99_ms, **estimate_args
+        )
+        if revision_id in self.state.placements:
+            # Kept for activation: robots past this would be refused sessions by admission.
+            self.state.placements[revision_id]["max_robots"] = estimate["max_robots"]
+            self.state.placements[revision_id]["limiting_factor"] = estimate["limiting_factor"]
         self.state.prepared[revision_id] = revision["revision_digest"]
         self._save()
         await self.reconcile()
@@ -571,15 +578,7 @@ class AgentCore:
             command_id,
             operation_id,
             "Succeeded",
-            result={
-                "revision_digest": revision["revision_digest"],
-                "capacity": capacity.estimate(
-                    binding,
-                    serving,
-                    rtt_p99_ms=self.settings.capacity_rtt_p99_ms,
-                    **estimate_args,
-                ),
-            },
+            result={"revision_digest": revision["revision_digest"], "capacity": estimate},
         )
 
     def _verify_publisher(self, entry: dict[str, Any]) -> None:
@@ -701,6 +700,24 @@ class AgentCore:
                 "Failed",
                 reason=ReasonCode.PROTOCOL_MESSAGE_INVALID,
                 message=f"robots {unknown} are not at this site",
+            )
+            return
+        placed = self.state.placements.get(revision_id, {})
+        most = placed.get("max_robots")
+        if most is not None and len(robot_ids) > most:
+            # The gateway's admission would refuse the others a session (the estimate is its
+            # model), so the activation could only time out: say so now.
+            self._report(
+                command_id,
+                operation_id,
+                "Failed",
+                reason=ReasonCode.ADMISSION_CAPACITY_EXCEEDED,
+                message=(
+                    f"this server can serve {most} robot{'' if most == 1 else 's'} at this "
+                    f"revision's execution profile (limited by {placed.get('limiting_factor')}), "
+                    f"not {len(robot_ids)}: activate fewer robots, or prepare a profile with a "
+                    "larger budget"
+                ),
             )
             return
         self.state.activations[command_id] = Activation(

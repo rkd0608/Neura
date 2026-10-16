@@ -35,6 +35,7 @@ Fault = Callable[["ServedRun", FaultProxy], Coroutine[Any, Any, None]]
 @dataclass(slots=True)
 class _Episode:
     seed: int
+    accepted_ages_ms: list[float] = field(default_factory=list)
     faults: list[str] = field(default_factory=list)
     done: asyncio.Event = field(default_factory=asyncio.Event)
     max_steps: int = 400
@@ -84,6 +85,21 @@ class ServedRun:
         elif self.world.done:
             episode.done.set()
 
+    def _watch_chunks(self, process: ArmProcess) -> None:
+        """Record the observation age of every chunk the runtime accepts, on arrival: the same
+        measure as for LeRobot's async client (``lerobot_async``)."""
+        runtime = process.runtime
+        accept = runtime.on_chunk
+
+        def watched(chunk: Any, now_us: int) -> bool:
+            pending = runtime._pending
+            accepted = accept(chunk, now_us)
+            if accepted and pending is not None and self._episode is not None:
+                self._episode.accepted_ages_ms.append((now_us - pending.capture_time_us) / 1000)
+            return accepted
+
+        runtime.on_chunk = watched  # type: ignore[method-assign]
+
     async def _until(self, condition: Callable[[], bool], timeout: float, what: str) -> None:
         deadline = time.monotonic() + timeout
         while not condition():
@@ -125,6 +141,7 @@ class ServedRun:
             )
             process.tick_hooks.append(self._on_tick)
             self.process = process
+            self._watch_chunks(process)
             stop = asyncio.Event()
             loop = asyncio.create_task(process.connection.run(stop))
             try:
@@ -167,6 +184,11 @@ class ServedRun:
             process.inbox.submit("reset")
         await self._until(lambda: runtime.state is RuntimeState.READY, 30, "Ready")
         await self._until(lambda: runtime.session_id is not None, 60, "a session")
+        assert self.site is not None
+        if not await self.site.workers_ready(180):  # a killed worker is restarted by the gateway
+            raise RuntimeError(
+                f"the policy workers are not ready; see {self.site.gateway.log_path}"
+            )
         before = dict(runtime.counters)
         late_before = process.connection.late_ticks
         self.world.reset(seed, max_steps)
@@ -196,6 +218,9 @@ class ServedRun:
         counters["late_ticks"] = process.connection.late_ticks - late_before
         if isinstance(self.world, RealTimeWorld):
             counters["world_late_steps"] = self.world.late_steps
+        counters["max_observation_age_at_acceptance_ms"] = round(
+            max(episode.accepted_ages_ms, default=0)
+        )
         result = EpisodeResult(
             system=self.system,
             seed=seed,

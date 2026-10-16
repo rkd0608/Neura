@@ -40,7 +40,16 @@ def open_channel(
 ) -> grpc.aio.Channel:
     """The channel to the control plane: TLS unless explicitly disabled for development, with
     the agent's client certificate (``client`` = key and certificate PEM) once it has one."""
-    options = [("grpc.max_receive_message_length", MAX_RECEIVE_BYTES)]
+    options = [
+        ("grpc.max_receive_message_length", MAX_RECEIVE_BYTES),
+        # A ping every 20 s, answered within 10 s, or the stream fails and the agent reconnects:
+        # a link that drops packets silently is noticed in about 30 s (the control plane pings
+        # too, and shows the site offline).
+        ("grpc.keepalive_time_ms", 20_000),
+        ("grpc.keepalive_timeout_ms", 10_000),
+        ("grpc.keepalive_permit_without_calls", 1),
+        ("grpc.http2.max_pings_without_data", 0),
+    ]
     if settings.control_plane_insecure:
         return grpc.aio.insecure_channel(endpoint, options=options)
     roots = settings.control_plane_ca_file.read_bytes() if settings.control_plane_ca_file else None

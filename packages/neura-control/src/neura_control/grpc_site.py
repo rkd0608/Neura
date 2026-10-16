@@ -804,6 +804,14 @@ async def start_agent_server(
         options=[
             ("grpc.max_send_message_length", 64 * 1024 * 1024),
             ("grpc.max_receive_message_length", 8 * 1024 * 1024),
+            # Each site's stream is pinged every 20 s and must answer within 10 s, or it is
+            # closed and the site shows offline: a link that drops packets silently is noticed
+            # in about 30 s, not after TCP's 15 minutes of retransmissions. Agents ping as often.
+            ("grpc.keepalive_time_ms", 20_000),
+            ("grpc.keepalive_timeout_ms", 10_000),
+            ("grpc.keepalive_permit_without_calls", 1),
+            ("grpc.http2.min_recv_ping_interval_without_data_ms", 10_000),
+            ("grpc.http2.max_ping_strikes", 0),
         ],
         maximum_concurrent_rpcs=settings.agent_max_concurrent_rpcs,
     )

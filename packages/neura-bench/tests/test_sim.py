@@ -144,7 +144,9 @@ def test_per_robot_baselines_get_a_batch_group_each_at_any_count(tmp_path: Path)
     """One process per robot needs as many distinct artifacts as robots, past any pool size."""
     files = write_files(tmp_path, contracts())
     models = suite.Models(files, [], files, tmp_path)
-    measured = SimpleNamespace(contention=SimpleNamespace(contention=Contention()))
+    measured = SimpleNamespace(
+        contention=SimpleNamespace(contention=Contention()), vlas={}, device_memory_mib=None
+    )
     builder = suite.Builder(suite.PRESETS["smoke"], models, measured)  # type: ignore[arg-type]
     builder.latency = lambda kind: FAST  # type: ignore[method-assign]
     p = suite.plan(suite.SAME_WEIGHTS, suite.DEDICATED_SHARED, 40, suite.PRESETS["smoke"])
@@ -172,3 +174,86 @@ def test_chunks_the_robot_rejects_are_misses_counted_once() -> None:
     assert summarize(window).deadline_misses == 5
     window.expired = 2
     assert summarize(window).deadline_misses == 7
+
+
+def test_processes_that_do_not_fit_in_the_device_memory_miss_the_slo(tmp_path: Path) -> None:
+    files = write_files(tmp_path, contracts())
+    # Each worker process: 500 MiB at its peak, plus 300 MiB the driver holds for it.
+    heavy = LatencyModel(FAST.points, process_overhead_mib=300)
+
+    def processes(n: int) -> Scenario:
+        bindings = suite._bindings(files, 0, n)  # one artifact, so one process, each
+        groups = tuple(
+            GroupSpec(f"g{i}", binding, "dev-0", heavy, (f"r{i}",), Policy.FIFO, 1)
+            for i, binding in enumerate(bindings)
+        )
+        return Scenario(groups=groups, warmup_us=SECOND, duration_us=5 * SECOND)
+
+    two, three = simulate(processes(2)), simulate(processes(3))
+    assert (two.peak_memory_mib, three.peak_memory_mib) == (1600, 2400)
+    device = Slo(max_memory_mib=2000)
+    assert two.meets(device)
+    assert not three.meets(device)
+    assert three.meets(Slo())  # memory unchecked (a CPU host)
+
+
+def test_a_vla_case_runs_its_model_in_batches_that_fit() -> None:
+    config = suite.PRESETS["gpu"]
+    p = suite.plan(suite.VLA_CASES["pi0"], suite.NEURA_DEADLINE, 8, config, max_batch=4)
+    assert p.groups == (("shared", "pi0", 8),)
+    assert p.max_batch == 4
+    one_each = suite.plan(suite.VLA_CASES["smolvla"], suite.DEDICATED_SHARED, 3, config)
+    assert [kind for _, kind, _ in one_each.groups] == ["smolvla"] * 3
+
+
+def test_cases_of_models_that_were_not_measured_are_left_out(tmp_path: Path) -> None:
+    files = write_files(tmp_path, contracts())
+    models = suite.Models(files, [], files, tmp_path)
+    measured = SimpleNamespace(
+        contention=SimpleNamespace(contention=Contention()),
+        vlas={"smolvla": SimpleNamespace(largest_batch=4)},
+        device_memory_mib=24_000,
+    )
+    builder = suite.Builder(suite.PRESETS["gpu"], models, measured)  # type: ignore[arg-type]
+    cases = builder.cases()
+    assert suite.VLA_CASES["smolvla"] in cases
+    assert suite.VLA_CASES["pi0"] not in cases
+    assert builder.max_batch(suite.VLA_CASES["smolvla"]) == 4
+    assert builder.max_batch(suite.SAME_WEIGHTS) == suite.PRESETS["gpu"].max_batch
+    assert builder.config.slo.max_memory_mib == 24_000
+
+
+async def test_latency_stops_at_the_first_batch_that_does_not_fit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import contextlib
+
+    from neura_adapters import PolicyError
+    from neura_bench import measure
+
+    class Backend:
+        peak_memory_mib = 0
+
+        async def infer(self, batch_id: int, batch: list[object], timeout_s: float) -> None:
+            if len(batch) >= 4:
+                raise PolicyError("CUDA out of memory", out_of_memory=True)
+            self.peak_memory_mib = 100 * len(batch)
+
+        def status(self) -> dict[str, object]:
+            return {"pid": 4242}
+
+    @contextlib.asynccontextmanager
+    async def workers(*_: object, **__: object):  # type: ignore[no-untyped-def]
+        yield [Backend()]
+
+    monkeypatch.setattr(measure, "workers", workers)
+    # The driver accounts the worker 350 MiB at a batch of 2, whose peak allocation is 200.
+    monkeypatch.setattr(measure, "process_memory_mib", lambda pid: 350 if pid == 4242 else None)
+    files = write_files(tmp_path, contracts())
+    measured = await measure.latency(
+        files, "cuda:0", batch_sizes=(1, 2, 4, 8), seconds=0.0, minimum=2
+    )
+    assert [p.batch_size for p in measured.model.points] == [1, 2]
+    assert measured.out_of_memory_at == 4
+    assert measured.largest_batch == 2
+    assert measured.model.process_overhead_mib == 150

@@ -12,7 +12,8 @@ FIXTURE = Path(__file__).with_name("fixtures") / "smoke-results.json"
 
 
 def test_the_report_states_capacity_crossovers_and_its_limits() -> None:
-    markdown = report.markdown(json.loads(FIXTURE.read_text()))
+    data = json.loads(FIXTURE.read_text())
+    markdown = report.markdown(data)
     assert markdown.startswith("# Neura GPU-sharing benchmark: CPU")
     assert "not a GPU" in markdown  # a CPU run says so up front
     for heading in (
@@ -24,8 +25,9 @@ def test_the_report_states_capacity_crossovers_and_its_limits() -> None:
         "## Reproduce",
     ):
         assert heading in markdown
-    for case in report.CASE_NAMES.values():
-        assert f"**{case}:**" in markdown  # a crossover statement per case
+    for case in data["capacity"]:
+        assert f"**{report.CASE_NAMES[case]}:**" in markdown  # a crossover statement per case
+    assert "SmolVLA" not in markdown  # a case whose model was not measured has no table
     assert "Parity with each adapter merged" in markdown
 
 

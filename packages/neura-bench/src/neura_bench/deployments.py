@@ -21,6 +21,8 @@ from neura_adapters.synthetic import (
     weights_manifest,
     write_act_checkpoint,
     write_diffusion_checkpoint,
+    write_pi0_checkpoint,
+    write_smolvla_checkpoint,
 )
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
 from neura_runtime.binding import ExecutionBinding
@@ -45,9 +47,18 @@ class DeploymentFiles:
     binding: ExecutionBinding
 
 
-Model = Literal["act", "diffusion"]
+Model = Literal["act", "diffusion", "smolvla", "pi0"]
 # Diffusion Policy predicts short chunks: 8 actions (about 0.27 s at 30 Hz), refilled at 4.
 DIFFUSION_CHUNK = {"actions_per_chunk": 8, "refill_threshold_actions": 4, "min_useful_actions": 2}
+# The vision-language-action models: language-conditioned, chunks of 50 (the example SmolVLA
+# contracts); pi0 the same, with its own adapter.
+VLAS = ("smolvla", "pi0")
+WRITERS = {
+    "act": write_act_checkpoint,
+    "diffusion": write_diffusion_checkpoint,
+    "smolvla": write_smolvla_checkpoint,
+    "pi0": write_pi0_checkpoint,
+}
 
 
 def contracts(
@@ -59,13 +70,24 @@ def contracts(
     version: str = "bench-1",
     weights: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """The example ACT/SO-101 documents, edited. ``image`` is (height, width); None keeps the
-    example's 480 x 640. ``device`` is "cpu" or "cuda". ``model="diffusion"`` turns the artifact
-    into a Diffusion Policy with 8-action chunks."""
-    artifact = copy.deepcopy(example("act-so101.artifact.yaml"))
+    """The example SO-101 documents, edited. ``image`` is (height, width); None keeps the
+    example's 480 x 640. ``device`` is "cpu" or "cuda". ``model="diffusion"`` turns the ACT
+    artifact into a Diffusion Policy with 8-action chunks; ``smolvla`` is the example SmolVLA
+    contracts, and ``pi0`` the same with pi0's adapter."""
+    vla = model in VLAS
+    artifact = copy.deepcopy(
+        example("smolvla-so101.artifact.yaml" if vla else "act-so101.artifact.yaml")
+    )
     robot = copy.deepcopy(example("so101.robot.yaml"))
-    profile = copy.deepcopy(example("act-so101-30hz.profile.yaml"))
+    profile = copy.deepcopy(
+        example("smolvla-so101-30hz.profile.yaml" if vla else "act-so101-30hz.profile.yaml")
+    )
     artifact["metadata"]["version"] = version
+    if model == "pi0":
+        artifact["metadata"]["name"] = "pi0-so101"
+        artifact["metadata"]["description"] = "pi0 policy for an SO-101-class arm (synthetic)."
+        artifact["spec"]["adapter"]["name"] = "lerobot-pi0"
+        profile["metadata"]["name"] = "pi0-so101-30hz"
     if model == "diffusion":
         artifact["metadata"]["name"] = "diffusion-so101"
         artifact["spec"]["adapter"]["name"] = "lerobot-diffusion"
@@ -133,7 +155,7 @@ def synthetic(
         contracts(model=model, image=image, device=device, precision=precision)[0]
     )
     assert isinstance(draft, ModelArtifact)
-    write = write_act_checkpoint if model == "act" else write_diffusion_checkpoint
+    write = WRITERS[model]
     robot = parse_document(contracts(model=model, image=image)[1])
     assert isinstance(robot, RobotProfile)
     # The example robot's commands are the model's actions, in the same units and order.

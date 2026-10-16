@@ -29,6 +29,14 @@ CASE_NAMES = {
     suite.MULTI_ADAPTER: "Per-robot LoRA adapters of one base model",
     suite.CO_LOCATED: "Different full fine-tunes of one architecture",
     suite.DIFFERENT: "Different architectures (ACT and Diffusion Policy)",
+    suite.VLA_CASES["smolvla"]: "Same weights on every robot: SmolVLA",
+    suite.VLA_CASES["pi0"]: "Same weights on every robot: pi0",
+}
+MODEL_NAMES = {
+    "act": "ACT",
+    "diffusion": "Diffusion Policy",
+    "smolvla": "SmolVLA",
+    "pi0": "pi0",
 }
 WORKLOAD_NAMES = {
     suite.PHASED: "phased arrivals",
@@ -124,20 +132,47 @@ def markdown(data: dict[str, Any]) -> str:
             "about GPU capacity: run `make bench` on the GPU runner for that.",
             "",
         ]
+    measured_models = [MODEL_NAMES.get(m, m) for m in data["measurements"]["latency"]]
+    vla_note = (
+        " SmolVLA reads its backbone's configuration and processor from the Hub, not its "
+        "weights; pi0 is LeRobot's (PaliGemma with Gemma 2B, and a 300M action expert), kept in "
+        "bfloat16 as LeRobot runs it, its instruction tokenized by a public tokenizer in place "
+        "of PaliGemma's gated one and padded to the same 48 tokens, so the model computes the "
+        "same shapes."
+        if any(m in data["measurements"]["latency"] for m in suite.VLA_CASES)
+        else ""
+    )
+    memory = slo.get("max_memory_mib")
+    memory_clause = (
+        f", and no more device memory than the device has ({memory} MiB: every worker "
+        "process's peak allocation plus its measured overhead, the CUDA context and caches)"
+        if memory
+        else ""
+    )
     out += [
         "Models: synthetic checkpoints with the real LeRobot architectures and random weights "
-        f"(ACT and Diffusion Policy, size `{config['size']}`, cameras "
+        f"({', '.join(measured_models)}; size `{config['size']}`, cameras "
         f"{_cameras(config['image'])}, {config['precision']}). Latency, memory and batching "
         "depend on architecture and shapes, not on what weights learned; closed-loop task "
-        "success needs trained weights and is not measured here.",
+        f"success needs trained weights and is not measured here.{vla_note}",
         "",
+    ]
+    failed = data["measurements"].get("failed_models") or {}
+    if failed:
+        out += [
+            "Not measured: "
+            + "; ".join(f"{MODEL_NAMES.get(m, m)} ({why})" for m, why in failed.items())
+            + ".",
+            "",
+        ]
+    out += [
         "## Robots per device at the SLO",
         "",
         f"SLO: at most {slo['max_misses_per_1000']} deadline misses per 1,000 requests, at most "
-        f"{slo['max_starvations_per_robot_hour']} starvation events per robot-hour, and no robot "
-        "faults. A configuration's capacity is the largest robot count at which it and every "
-        "smaller count measured met the SLO (simulation with measured latency and contention, "
-        "below).",
+        f"{slo['max_starvations_per_robot_hour']} starvation events per robot-hour, no robot "
+        f"faults{memory_clause}. A configuration's capacity is the largest robot count at which "
+        "it and every smaller count measured met the SLO (simulation with measured latency and "
+        "contention, below).",
         "",
     ]
     capacity = data["capacity"]
@@ -161,9 +196,10 @@ def markdown(data: dict[str, Any]) -> str:
 
     out += ["## Measurements on the device", ""]
     measured = data["measurements"]
-    for model in ("act", "diffusion"):
-        points = measured["latency"][model]["points"]
-        out += [f"Forward-pass latency through a worker process, {model.upper()}:", ""]
+    for model, latency in measured["latency"].items():
+        points = latency["points"]
+        name = MODEL_NAMES.get(model, model)
+        out += [f"Forward-pass latency through a worker process, {name}:", ""]
         out += _table(
             ["Batch", "p50 (ms)", "p99 (ms)", "Peak memory (MiB)", "Samples"],
             [
@@ -177,6 +213,16 @@ def markdown(data: dict[str, Any]) -> str:
                 for p in points
             ],
         )
+        notes = []
+        if latency.get("out_of_memory_at"):
+            notes.append(f"a batch of {latency['out_of_memory_at']} did not fit on the device")
+        if latency.get("process_overhead_mib"):
+            notes.append(
+                f"a worker process holds {latency['process_overhead_mib']} MiB beyond its peak "
+                "allocation (CUDA context, workspaces, cache)"
+            )
+        if notes:
+            out += ["", f"{name}: " + "; ".join(notes) + "."]
         out.append("")
     contention = measured["contention"]
     out += [
@@ -242,6 +288,21 @@ def markdown(data: dict[str, Any]) -> str:
         "synchronized arrivals. Admission assumes the worst case (every robot asks at once, "
         "behind a batch already running), so it must not exceed the synchronized capacity: "
         f"{_admission_verdict(estimate, measured_capacity)}",
+    ]
+    for model, vla_estimate in (data.get("admission_estimates_vla") or {}).items():
+        vla_capacity = (
+            capacity.get(suite.VLA_CASES[model], {})
+            .get(suite.SYNCHRONIZED, {})
+            .get(suite.NEURA_DEADLINE)
+        )
+        out += [
+            "",
+            f"For {MODEL_NAMES.get(model, model)}: {vla_estimate['max_robots']} robots (limited "
+            f"by {vla_estimate['limiting_factor']}), against "
+            f"{vla_capacity['robots_per_device'] if vla_capacity else '-'} measured with "
+            f"synchronized arrivals: {_admission_verdict(vla_estimate, vla_capacity)}",
+        ]
+    out += [
         "",
         "## Results",
         "",
@@ -276,6 +337,8 @@ def markdown(data: dict[str, Any]) -> str:
                         str(r["peak_memory_mib"]),
                     ]
                 )
+            if not rows:
+                continue  # a case whose model was not measured
             out += [f"### {CASE_NAMES[case]}: {WORKLOAD_NAMES[workload]}", ""]
             out += _table(
                 [

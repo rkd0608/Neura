@@ -84,6 +84,7 @@ class Result:
             self.misses_per_1000 <= slo.max_misses_per_1000
             and self.starvations_per_robot_hour <= slo.max_starvations_per_robot_hour
             and self.faults_per_robot_hour == 0
+            and (slo.max_memory_mib is None or self.peak_memory_mib <= slo.max_memory_mib)
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -96,6 +97,9 @@ class Slo:
 
     max_misses_per_1000: float = 1.0
     max_starvations_per_robot_hour: float = 0.0
+    # The device's memory: a configuration that needs more does not serve N robots (None: not
+    # checked, as on a CPU host).
+    max_memory_mib: int | None = None
 
 
 def summarize(window: Window) -> Result:

@@ -1,9 +1,10 @@
 """``neura-bench``: the GPU-sharing benchmark (design §9.5, §10).
 
-neura-bench run [--preset gpu|cpu|smoke] [--device cuda:0] [--out DIR]
-    build the models, measure on the device, simulate every sharing case against the
-    dedicated baselines, validate in real time, and write results.json and README.md
-    (default: bench/reports/<device>/)
+neura-bench run [--preset gpu|cpu|smoke|smoke-vla] [--device cuda:0] [--out DIR]
+    build the models (ACT, Diffusion Policy, and on a GPU SmolVLA and pi0), measure on the
+    device, simulate every sharing case against the dedicated baselines, validate in real time,
+    and write results.json and README.md (default: bench/reports/<device>/). On Google Cloud:
+    deploy/gcp/bench.sh run, or Actions, then GPU benchmark (Google Cloud).
 neura-bench report DIR
     regenerate DIR/README.md from DIR/results.json
 """
@@ -38,12 +39,16 @@ async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
         cells = await asyncio.to_thread(suite.sweep, builder)
         validation = await suite.validate(builder)
         estimate = suite.admission_estimate(config, models, measured)
+        estimates_vla = suite.admission_estimates_vla(config, models, measured)
+    # The builder's config: its SLO includes the device's memory.
+    config = builder.config
     data: dict[str, Any] = {
         "schema": 1,
         "environment": report.environment(config.device),
         "config": dataclasses.asdict(config),
         "measurements": {**measured.to_json(), "calibration": calibration.to_json()},
         "admission_estimate": estimate,
+        "admission_estimates_vla": estimates_vla,
         "cells": [
             {
                 "case": c.case,

@@ -17,14 +17,14 @@ import asyncio
 import json
 import logging
 import shutil
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from neura_adapters.synthetic import Size
 from neura_bench import measure, realtime
-from neura_bench.deployments import DeploymentFiles, synthetic, write_files
+from neura_bench.deployments import DeploymentFiles, Model, synthetic, write_files
 from neura_bench.metrics import Result, Slo
 from neura_bench.sim import SECOND, GroupSpec, LatencyModel, Scenario, simulate
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
@@ -70,6 +70,12 @@ WORKLOADS = {
     CO_LOCATED: (PHASED, BACKGROUND),
     DIFFERENT: (PHASED,),
 }
+# The vision-language-action models (SmolVLA- and pi0-class), each in its own case: the same
+# weights on every robot, against both dedicated baselines.
+VLA_CASES = {"smolvla": "same_weights_smolvla", "pi0": "same_weights_pi0"}
+for _case in VLA_CASES.values():
+    CASES[_case] = (DEDICATED, DEDICATED_SHARED, NEURA_DEADLINE)
+    WORKLOADS[_case] = (PHASED, SYNCHRONIZED)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +97,10 @@ class SuiteConfig:
     realtime_duration_s: float = 60.0
     slo: Slo = field(default_factory=Slo)
     seed: int = 1
+    # The vision-language-action models measured besides ACT and Diffusion Policy (VLA_CASES),
+    # and the robots of their real-time validation. pi0 has one size (LeRobot's).
+    vlas: tuple[str, ...] = ("smolvla", "pi0")
+    vla_realtime_robots: int = 4
 
 
 PRESETS = {
@@ -112,6 +122,7 @@ PRESETS = {
         realtime_robots=(1, 4),
         realtime_warmup_s=5.0,
         realtime_duration_s=45.0,
+        vlas=(),
     ),
     # For tests of the harness itself.
     "smoke": SuiteConfig(
@@ -130,8 +141,12 @@ PRESETS = {
         realtime_robots=(2,),
         realtime_warmup_s=2.0,
         realtime_duration_s=4.0,
+        vlas=(),
     ),
 }
+# The VLA path end to end on a CPU, before a GPU run: a two-layer SmolVLA (pi0 has one size, too
+# large for a CI runner's memory).
+PRESETS["smoke-vla"] = replace(PRESETS["smoke"], vlas=("smolvla",), vla_realtime_robots=2)
 
 
 # --- models ---------------------------------------------------------------------------------
@@ -143,6 +158,9 @@ class Models:
     fine_tunes: list[DeploymentFiles]
     diffusion: DeploymentFiles
     directory: Path
+    vlas: dict[str, DeploymentFiles] = field(default_factory=dict)
+    # A model that could not be built or measured, and why: the run goes on without it.
+    failed: dict[str, str] = field(default_factory=dict)
     _copies: dict[tuple[str, int], DeploymentFiles] = field(default_factory=dict)
 
     def copy(self, base: DeploymentFiles, index: int) -> DeploymentFiles:
@@ -172,7 +190,18 @@ def build_models(config: SuiteConfig, directory: Path) -> Models:
         for i in range(1, config.fine_tunes + 1)
     ]
     diffusion = synthetic(directory / "diffusion", model="diffusion", seed=0, **common)
-    return Models(act, tunes, diffusion, directory)
+    models = Models(act, tunes, diffusion, directory)
+    for name in config.vlas:
+        log.info("building synthetic %s", name)
+        try:
+            options = {**common, "size": "base" if name == "pi0" else config.size}
+            models.vlas[name] = synthetic(
+                directory / name, model=cast("Model", name), seed=0, **options
+            )
+        except Exception as exc:  # one model that cannot be built does not cost the run
+            log.exception("could not build %s", name)
+            models.failed[name] = f"building it: {type(exc).__name__}: {exc}"
+    return models
 
 
 # --- measurements ---------------------------------------------------------------------------
@@ -184,6 +213,9 @@ class Measurements:
     diffusion: measure.LatencyMeasurement
     contention: measure.ContentionMeasurement
     multi_adapter: measure.MultiAdapterMeasurement
+    vlas: dict[str, measure.LatencyMeasurement] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
+    device_memory_mib: int | None = None
 
     def multi_adapter_model(self) -> LatencyModel:
         """ACT's measured latency scaled by the measured cost of mixing adapters in a batch.
@@ -205,9 +237,15 @@ class Measurements:
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "latency": {"act": self.act.to_json(), "diffusion": self.diffusion.to_json()},
+            "latency": {
+                "act": self.act.to_json(),
+                "diffusion": self.diffusion.to_json(),
+                **{name: m.to_json() for name, m in self.vlas.items()},
+            },
             "contention": self.contention.to_json(),
             "multi_adapter": self.multi_adapter.to_json(),
+            "device_memory_mib": self.device_memory_mib,
+            "failed_models": self.failed,
         }
 
 
@@ -238,7 +276,24 @@ async def take_measurements(config: SuiteConfig, models: Models) -> Measurements
         rank=config.adapter_rank,
         iterations=max(10, int(config.measure_seconds * 10)),
     )
-    return Measurements(act, diffusion, contention, multi)
+    measured = Measurements(
+        act,
+        diffusion,
+        contention,
+        multi,
+        failed=dict(models.failed),
+        device_memory_mib=measure.device_memory_mib(config.device),
+    )
+    for name, files in models.vlas.items():
+        log.info("measuring %s latency", name)
+        try:
+            measured.vlas[name] = await measure.latency(
+                files, config.device, batch_sizes=sizes, seconds=config.measure_seconds
+            )
+        except Exception as exc:  # the run goes on without it
+            log.exception("could not measure %s", name)
+            measured.failed[name] = f"measuring it: {type(exc).__name__}: {exc}"
+    return measured
 
 
 # --- scenarios ------------------------------------------------------------------------------
@@ -275,15 +330,27 @@ class Plan:
 
 def model_kinds(case: str, config: SuiteConfig) -> list[str]:
     """The models a case's robots run, split evenly between them."""
+    vlas = {case: [model] for model, case in VLA_CASES.items()}
     return {
         SAME_WEIGHTS: ["act"],
         MULTI_ADAPTER: ["act"],
         CO_LOCATED: [f"tune-{i}" for i in range(config.fine_tunes)],
         DIFFERENT: ["act", "diffusion"],
+        **vlas,
     }[case]
 
 
-def plan(case: str, configuration: str, robots: int, config: SuiteConfig) -> Plan:
+def plan(
+    case: str,
+    configuration: str,
+    robots: int,
+    config: SuiteConfig,
+    *,
+    max_batch: int | None = None,
+) -> Plan:
+    """``max_batch`` caps Neura's batches below the configured maximum: the largest batch of
+    the case's model that fits on the device."""
+
     def split(kinds: list[str]) -> list[tuple[str, int]]:
         shares = [
             robots // len(kinds) + (1 if i < robots % len(kinds) else 0) for i in range(len(kinds))
@@ -291,6 +358,7 @@ def plan(case: str, configuration: str, robots: int, config: SuiteConfig) -> Pla
         return [(k, n) for k, n in zip(kinds, shares, strict=True) if n > 0]
 
     kinds = model_kinds(case, config)
+    largest = config.max_batch if max_batch is None else min(max_batch, config.max_batch)
     if configuration in (DEDICATED, DEDICATED_SHARED):
         # One robot per group: one worker process per robot.
         per_robot = [(kind, 1) for kind, n in split(kinds) for _ in range(n)]
@@ -298,13 +366,11 @@ def plan(case: str, configuration: str, robots: int, config: SuiteConfig) -> Pla
         devices = "each" if configuration == DEDICATED else "one"
         return Plan(groups, devices, Policy.FIFO, 1)
     if configuration == NEURA_MULTI_ADAPTER:
-        return Plan(
-            (("multi", "multi_adapter", robots),), "one", Policy.DEADLINE_FAIRNESS, config.max_batch
-        )
+        return Plan((("multi", "multi_adapter", robots),), "one", Policy.DEADLINE_FAIRNESS, largest)
     if configuration == NEURA_CO_LOCATED:
         groups = tuple((f"g-{kind}", kind, n) for kind, n in split(kinds))
-        return Plan(groups, "one", Policy.DEADLINE_FAIRNESS, config.max_batch)
-    return Plan((("shared", "act", robots),), "one", POLICIES[configuration], config.max_batch)
+        return Plan(groups, "one", Policy.DEADLINE_FAIRNESS, largest)
+    return Plan((("shared", kinds[0], robots),), "one", POLICIES[configuration], largest)
 
 
 def _interval_s(binding: ExecutionBinding) -> float:
@@ -331,23 +397,46 @@ class Builder:
     """Turns plans into simulated and real-time scenarios."""
 
     def __init__(self, config: SuiteConfig, models: Models, measured: Measurements) -> None:
-        self.config = config
+        # The SLO includes the device's memory once it is known.
+        memory = measured.device_memory_mib
+        self.config = replace(config, slo=replace(config.slo, max_memory_mib=memory))
         self.models = models
         self.measured = measured
         self._sim_bindings: dict[str, list[ExecutionBinding]] = {}
         # Robot-to-gateway latency in simulation, until calibrated from a real run.
         self.link = LinkModel()
 
+    def cases(self) -> dict[str, tuple[str, ...]]:
+        """Every case whose models were built and measured."""
+        missing = {VLA_CASES[m] for m in VLA_CASES if m not in self.measured.vlas}
+        return {
+            case: configurations for case, configurations in CASES.items() if case not in missing
+        }
+
+    def max_batch(self, case: str) -> int:
+        """The largest batch Neura forms for a case: the configured maximum, or less for a model
+        whose larger batches did not fit on the device."""
+        largest = [
+            self.measured.vlas[k].largest_batch
+            for k in model_kinds(case, self.config)
+            if k in self.measured.vlas
+        ]
+        return min([self.config.max_batch, *largest])
+
     def latency(self, kind: str) -> LatencyModel:
         if kind == "diffusion":
             return self.measured.diffusion.model
         if kind == "multi_adapter":
             return self.measured.multi_adapter_model()
+        if kind in self.measured.vlas:
+            return self.measured.vlas[kind].model
         return self.measured.act.model
 
     def files(self, kind: str) -> DeploymentFiles:
         if kind == "diffusion":
             return self.models.diffusion
+        if kind in self.models.vlas:
+            return self.models.vlas[kind]
         if kind.startswith("tune-"):
             return self.models.fine_tunes[int(kind.split("-")[1])]
         return self.models.act
@@ -444,7 +533,7 @@ def sweep(builder: Builder, progress: Callable[[str], None] = log.info) -> list[
     one-device-per-robot baseline is independent of N and runs once."""
     config = builder.config
     cells = []
-    for case, configurations in CASES.items():
+    for case, configurations in builder.cases().items():
         for workload in WORKLOADS[case]:
             for configuration in configurations:
                 failures = 0
@@ -452,7 +541,7 @@ def sweep(builder: Builder, progress: Callable[[str], None] = log.info) -> list[
                 if configuration == DEDICATED:
                     counts = (len(model_kinds(case, config)),)  # one robot of each model
                 for robots in counts:
-                    p = plan(case, configuration, robots, config)
+                    p = plan(case, configuration, robots, config, max_batch=builder.max_batch(case))
                     result = simulate(builder.simulation(p, workload, robots))
                     cells.append(Cell(case, workload, configuration, robots, result))
                     progress(
@@ -521,7 +610,10 @@ async def calibrate(builder: Builder) -> Calibration:
     return Calibration(p50, p99, link)
 
 
-def validation_plan(config: SuiteConfig) -> list[tuple[str, str, str, int]]:
+def validation_plan(
+    config: SuiteConfig, vlas: Sequence[str] = ()
+) -> list[tuple[str, str, str, int]]:
+    """The real-time runs: ACT's main configurations, and Neura for each measured VLA."""
     largest = max(config.realtime_robots)
     runs = [(SAME_WEIGHTS, PHASED, DEDICATED, 1)]
     runs += [(SAME_WEIGHTS, PHASED, NEURA_DEADLINE, n) for n in config.realtime_robots]
@@ -533,6 +625,11 @@ def validation_plan(config: SuiteConfig) -> list[tuple[str, str, str, int]]:
         (CO_LOCATED, PHASED, NEURA_CO_LOCATED, max(largest, config.fine_tunes)),
         (DIFFERENT, PHASED, NEURA_CO_LOCATED, max(largest, 2)),
     ]
+    runs += [
+        (VLA_CASES[m], PHASED, NEURA_DEADLINE, config.vla_realtime_robots)
+        for m in vlas
+        if m in VLA_CASES
+    ]
     return runs
 
 
@@ -541,8 +638,10 @@ async def validate(
 ) -> list[Validation]:
     """Real-time runs of the main configurations, each next to its simulation."""
     out = []
-    for case, workload, configuration, robots in validation_plan(builder.config):
-        p = plan(case, configuration, robots, builder.config)
+    for case, workload, configuration, robots in validation_plan(
+        builder.config, list(builder.measured.vlas)
+    ):
+        p = plan(case, configuration, robots, builder.config, max_batch=builder.max_batch(case))
         if configuration == DEDICATED:
             p = replace(p, devices="one")  # one robot alone on the device is the baseline
         real = await realtime.run(builder.realtime(p, workload))
@@ -603,12 +702,32 @@ def admission_estimate(
 ) -> dict[str, Any]:
     """What the gateway's admission control would admit for ACT on this device: it must not
     promise more than the measured capacity."""
-    serving = ServingConfig(max_batch=config.max_batch)
+    return _estimate(config, models.act, measured.act)
+
+
+def admission_estimates_vla(
+    config: SuiteConfig, models: Models, measured: Measurements
+) -> dict[str, Any]:
+    """The same estimate for each measured VLA."""
+    return {
+        name: _estimate(config, models.vlas[name], m, max_batch=m.largest_batch)
+        for name, m in measured.vlas.items()
+    }
+
+
+def _estimate(
+    config: SuiteConfig,
+    files: DeploymentFiles,
+    measured: measure.LatencyMeasurement,
+    *,
+    max_batch: int | None = None,
+) -> dict[str, Any]:
+    serving = ServingConfig(max_batch=min(config.max_batch, max_batch or config.max_batch))
     return capacity.estimate(
-        models.act.binding,
+        files.binding,
         serving,
         rtt_p99_ms=2.0,
-        measured=list(measured.act.model.points),
+        measured=list(measured.model.points),
         device=config.device,
     )
 

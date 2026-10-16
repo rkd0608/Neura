@@ -55,9 +55,12 @@ Response = (
 
 @dataclass(frozen=True, slots=True)
 class LatencyModel:
-    """Measured forward-pass latency per batch size (p50, p99) and peak memory."""
+    """Measured forward-pass latency per batch size (p50, p99) and peak memory, and the device
+    memory a worker process holds beyond its peak allocation (its CUDA context, the libraries'
+    workspaces, the allocator's cache), measured."""
 
     points: tuple[ProfilePoint, ...]
+    process_overhead_mib: int = 0
 
     def profile(self) -> LatencyProfile:
         return LatencyProfile(list(self.points))
@@ -463,7 +466,10 @@ class Simulation:
         memory: Counter[str] = Counter()
         for key, spec in self._group_of.items():
             sizes = self.core.groups[key].scheduler.stats.batch_sizes
-            memory[spec.device] += spec.latency.memory_mib(max(sizes) if sizes else 1)
+            memory[spec.device] += (
+                spec.latency.memory_mib(max(sizes) if sizes else 1)
+                + spec.latency.process_overhead_mib
+            )
         return window(
             before,
             after,

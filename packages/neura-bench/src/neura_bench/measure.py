@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -54,8 +56,10 @@ async def workers(
     *,
     max_batch: int,
     adapter: str | None = None,
+    warmup: Sequence[int] | None = None,
 ) -> AsyncIterator[list[WorkerBackend]]:
-    """Real worker processes, one per deployment, all on ``device``, ready to serve."""
+    """Real worker processes, one per deployment, all on ``device``, ready to serve. They warm
+    up on batches of ``warmup`` (default: of 1 and ``max_batch``)."""
     directory = Path(tempfile.mkdtemp(prefix="neura-b-"))
     backends = [
         WorkerBackend(
@@ -67,7 +71,7 @@ async def workers(
                 device=device,
                 checkpoint=files.checkpoint,
                 adapter=adapter,
-                warmup_batches=tuple(sorted({1, max_batch})),
+                warmup_batches=tuple(sorted({1, max_batch} if warmup is None else warmup)),
             ),
             command=WORKER,
             socket_dir=directory,
@@ -117,9 +121,17 @@ def _point(batch_size: int, timings: list[int], memory_mib: int) -> ProfilePoint
 class LatencyMeasurement:
     model: LatencyModel
     samples: dict[int, int]
+    # The smallest batch size that did not fit in the device's memory, if one was tried.
+    out_of_memory_at: int | None = None
+
+    @property
+    def largest_batch(self) -> int:
+        return max(p.batch_size for p in self.model.points)
 
     def to_json(self) -> dict[str, Any]:
         return {
+            "process_overhead_mib": self.model.process_overhead_mib,
+            "out_of_memory_at": self.out_of_memory_at,
             "points": [
                 {
                     "batch_size": p.batch_size,
@@ -129,7 +141,7 @@ class LatencyMeasurement:
                     "samples": self.samples[p.batch_size],
                 }
                 for p in self.model.points
-            ]
+            ],
         }
 
 
@@ -142,19 +154,69 @@ async def latency(
     minimum: int = 20,
 ) -> LatencyMeasurement:
     """Latency per batch size of one worker alone on the device, and its peak memory (batch
-    sizes run in increasing order, so the peak after each size is that size's)."""
+    sizes run in increasing order, so the peak after each size is that size's). The sizes stop at
+    the first that does not fit in the device's memory. On a GPU, the worker's whole footprint
+    is read from the driver after each size, for its overhead beyond the peak allocation."""
     sample = sample_inputs(files.binding)
-    points = []
+    points: list[ProfilePoint] = []
     samples = {}
-    async with workers([files], device, max_batch=max(batch_sizes)) as (backend,):
+    out_of_memory_at = None
+    footprint: int | None = None
+    async with workers([files], device, max_batch=max(batch_sizes), warmup=(1,)) as (backend,):
         for size in sorted(set(batch_sizes)):
             batch = [sample] * size
-            for i in range(3):
-                await _timed(backend, batch, i)
-            timings = await _loop(backend, batch, seconds=seconds, minimum=minimum)
+            try:
+                for i in range(3):
+                    await _timed(backend, batch, i)
+                timings = await _loop(backend, batch, seconds=seconds, minimum=minimum)
+            except PolicyError as exc:
+                if not exc.out_of_memory or not points:
+                    raise
+                out_of_memory_at = size
+                break
             points.append(_point(size, timings, backend.peak_memory_mib))
             samples[size] = len(timings)
-    return LatencyMeasurement(LatencyModel(tuple(points)), samples)
+            footprint = process_memory_mib(backend.status().get("pid"))
+    overhead = max(0, footprint - points[-1].memory_mib) if footprint is not None else 0
+    model = LatencyModel(tuple(points), process_overhead_mib=overhead)
+    return LatencyMeasurement(model, samples, out_of_memory_at)
+
+
+def _nvidia_smi(*args: str) -> str | None:
+    """The NVIDIA driver's tool's output, or None without one."""
+    tool = shutil.which("nvidia-smi")
+    if tool is None:
+        return None
+    try:
+        return subprocess.run(  # noqa: S603 - the driver's tool, fixed arguments
+            [tool, *args], capture_output=True, text=True, timeout=10, check=True
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def process_memory_mib(pid: int | None) -> int | None:
+    """A process's device memory as the NVIDIA driver accounts it (context and caches
+    included), or None without one."""
+    if pid is None:
+        return None
+    out = _nvidia_smi("--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits")
+    for line in (out or "").splitlines():
+        fields = [f.strip() for f in line.split(",")]
+        if len(fields) == 2 and fields[0] == str(pid) and fields[1].isdigit():
+            return int(fields[1])
+    return None
+
+
+def device_memory_mib(device: str) -> int | None:
+    """The device's memory, from the NVIDIA driver (no CUDA context in this process), or None
+    for a CPU."""
+    if not device.startswith("cuda"):
+        return None
+    index = device.partition(":")[2] or "0"
+    out = _nvidia_smi("--query-gpu=memory.total", "--format=csv,noheader,nounits", "-i", index)
+    text = (out or "").strip()
+    return int(text) if text.isdigit() else None
 
 
 @dataclass(frozen=True, slots=True)

@@ -34,6 +34,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 REMOTE_SYSTEMS = ("neura", "lerobot-async-scaled", "lerobot-async")
 SYSTEMS = ("lerobot-eval", "lerobot-realtime", *REMOTE_SYSTEMS)
 
@@ -216,8 +218,29 @@ def _run_system(
             progress=_say,
         )
         injected = neura_fault(scenario) if scenario is not None else None
-        return asyncio.run(served.episodes(seeds, max_steps=args.max_steps, fault=injected))
+        results = asyncio.run(served.episodes(seeds, max_steps=args.max_steps, fault=injected))
+        if scenario is None and served.pairs:
+            ctx.header.setdefault("parity", {})["neura"] = parity(ctx, served.pairs)
+        return results
     raise SystemExit(f"unknown system {system!r}; known: {', '.join(SYSTEMS)}")
+
+
+def parity(ctx: Context, pairs: list[Any]) -> dict[str, Any]:
+    """The chunks Neura served against LeRobot alone (``predict_action_chunk`` with the
+    checkpoint's processors) on the same inputs: the robot's state and camera frame as sent."""
+    from neura_robots.evidence.policy import LocalPolicy
+
+    policy = LocalPolicy(ctx.checkpoint, ctx.args.device)
+    differences = []
+    for state, image, served in pairs:
+        reference = policy.predict_chunk(image, state)
+        differences.append(float(np.max(np.abs(reference[: len(served)] - served))))
+    return {
+        "samples": len(differences),
+        "max_abs_difference": max(differences),
+        "median_abs_difference": sorted(differences)[len(differences) // 2],
+        "units": "the model's action units (radians; the grippers 0-1)",
+    }
 
 
 def _systems(text: str, allowed: tuple[str, ...]) -> list[str]:
@@ -253,6 +276,8 @@ def closed_loop(args: argparse.Namespace) -> int:
                 "summary": summarize(results),
                 "episodes": [r.to_json() for r in results],
             }
+        if "parity" in ctx.header:
+            report["parity"] = ctx.header["parity"]
         if args.reference is not None and "lerobot-eval" in report["systems"]:
             report["reference"] = reference_agreement(
                 json.loads(args.reference.read_text(encoding="utf-8")),

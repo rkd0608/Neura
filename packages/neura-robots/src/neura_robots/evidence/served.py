@@ -18,13 +18,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from neura_robots.aloha import AlohaSim
+import numpy as np
+from numpy.typing import NDArray
+
+from neura_robots.aloha import JOINTS, AlohaSim
 from neura_robots.aloha.arm import AlohaSimArm
 from neura_robots.aloha.contracts import Deployment
 from neura_robots.aloha.world import LockstepWorld, RealTimeWorld
 from neura_robots.evidence.results import EpisodeResult
 from neura_robots.process import ArmProcess
 from neura_robots.qualify.harness import REVISION, ROBOT_ID, TOKEN, LocalSite
+from neura_runtime import tensors
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
 from neura_sim.chaos import FaultProxy
 
@@ -54,6 +58,7 @@ class ServedRun:
         progress: Callable[[str], None] = lambda _: None,
         system: str = "neura",
         realtime: bool = True,
+        parity_samples: int = 20,
     ) -> None:
         self.deployment = deployment
         self.task = task
@@ -68,6 +73,9 @@ class ServedRun:
         self.arm = AlohaSimArm(self.world, deployment.binding.robot)
         self.process: ArmProcess | None = None
         self.site: LocalSite | None = None
+        # (state, image, actions) of accepted chunks, for parity with LeRobot alone
+        self.parity_samples = parity_samples
+        self.pairs: list[tuple[NDArray[np.float64], NDArray[np.uint8], NDArray[np.float64]]] = []
         self._episode: _Episode | None = None
 
     def _on_tick(self, now_us: int) -> None:
@@ -86,18 +94,42 @@ class ServedRun:
             episode.done.set()
 
     def _watch_chunks(self, process: ArmProcess) -> None:
-        """Record the observation age of every chunk the runtime accepts, on arrival: the same
-        measure as for LeRobot's async client (``lerobot_async``)."""
+        """Record the observation age of every chunk the runtime accepts, on arrival (the same
+        measure as for LeRobot's async client, ``lerobot_async``), and, for parity, the inputs
+        and actions of the first ``parity_samples`` accepted chunks."""
         runtime = process.runtime
         accept = runtime.on_chunk
+        capture = self.arm.capture
+        captured: dict[int, tuple[NDArray[np.float64], NDArray[np.uint8]]] = {}
+
+        def watched_capture(now_us: int) -> Any:
+            snapshot = capture(now_us)
+            frame = snapshot.images.get("top")
+            if len(self.pairs) < self.parity_samples and frame is not None:
+                state = np.array([snapshot.state[j] for j in JOINTS])
+                image = np.frombuffer(frame.data, dtype=np.uint8).reshape(
+                    frame.height, frame.width, 3
+                )
+                captured[snapshot.state_time_us] = (state, image.copy())
+                while len(captured) > 8:
+                    captured.pop(next(iter(captured)))
+            return snapshot
 
         def watched(chunk: Any, now_us: int) -> bool:
             pending = runtime._pending
             accepted = accept(chunk, now_us)
             if accepted and pending is not None and self._episode is not None:
                 self._episode.accepted_ages_ms.append((now_us - pending.capture_time_us) / 1000)
+                inputs = captured.pop(pending.capture_time_us, None)
+                if inputs is not None and len(self.pairs) < self.parity_samples:
+                    binding = runtime.binding
+                    actions = tensors.decode(
+                        chunk.actions, shape=(binding.chunk_length, binding.action_dim)
+                    ).astype(np.float64)
+                    self.pairs.append((inputs[0], inputs[1], actions))
             return accepted
 
+        self.arm.capture = watched_capture  # type: ignore[method-assign]
         runtime.on_chunk = watched  # type: ignore[method-assign]
 
     async def _until(self, condition: Callable[[], bool], timeout: float, what: str) -> None:

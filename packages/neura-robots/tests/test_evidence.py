@@ -158,3 +158,20 @@ def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
         assert result.steps == 150
         assert result.faults == []
         assert result.counters["chunks_accepted"] >= 2
+        assert result.counters["max_observation_age_at_acceptance_ms"] > 0
+        assert run.pairs  # inputs and served actions, for parity
+
+
+def test_parity_with_lerobot_alone(synthetic: Path, tmp_path: Path) -> None:
+    import argparse
+
+    from neura_robots.evidence.cli import Context, parity
+    from neura_robots.evidence.served import ServedRun
+
+    deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")
+    run = ServedRun(deployment, workdir=tmp_path / "site", parity_samples=3)
+    asyncio.run(run.episodes([1000], max_steps=150))
+    ctx = Context(argparse.Namespace(device="cpu"), tmp_path, synthetic, deployment, {})
+    measured = parity(ctx, run.pairs)
+    assert measured["samples"] == 3
+    assert measured["max_abs_difference"] < 1e-4

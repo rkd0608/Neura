@@ -17,7 +17,7 @@ FROM ${PYTHON_IMAGE} AS build
 ARG UV_VERSION=0.11.32
 SHELL ["/bin/sh", "-eu", "-c"]
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle; fi; \
     pip install --no-cache-dir --root-user-action=ignore "uv==${UV_VERSION}"
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -37,17 +37,17 @@ COPY packages/neura-sdk/pyproject.toml packages/neura-sdk/README.md packages/neu
 COPY packages/neura-adapters/pyproject.toml packages/neura-adapters/README.md packages/neura-adapters/
 COPY packages/neura-bench/pyproject.toml packages/neura-bench/README.md packages/neura-bench/
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-install-workspace
 COPY packages packages
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --all-packages --no-editable
 
 # The same environment plus PyTorch (with its CUDA libraries) and LeRobot: the models group.
 FROM build AS build-models
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     uv sync --frozen --no-dev --group models --all-packages --no-editable
 
 FROM ${PYTHON_IMAGE} AS runtime-base
@@ -118,12 +118,12 @@ CMD ["neura-worker"]
 # --- NucleiLabs site (static) -------------------------------------------------------------------
 FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS landing-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     corepack enable && corepack prepare pnpm@10.28.0 --activate
 WORKDIR /src/landing
 COPY landing/package.json landing/pnpm-lock.yaml ./
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     pnpm install --frozen-lockfile
 COPY landing ./
 # The site shares the console's design tokens.
@@ -144,12 +144,12 @@ HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["wget", "-qO-", "http:/
 # --- web console --------------------------------------------------------------------------------
 FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS console-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     corepack enable && corepack prepare pnpm@10.28.0 --activate
 WORKDIR /src/console
 COPY console/package.json console/pnpm-lock.yaml ./
 RUN --mount=type=secret,id=ca_bundle,required=false \
-    if [ -f /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     pnpm install --frozen-lockfile
 COPY console ./
 COPY api /src/api

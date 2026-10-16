@@ -236,12 +236,13 @@ infrastructure() {
 # --- release --------------------------------------------------------------------------------------
 
 build_images() {
-    local tag=$1 domain=$2 target
+    local tag=$1 domain=$2 target secret=()
     g auth configure-docker "$REGISTRY_HOST" >/dev/null 2>&1
+    [[ -z ${NEURA_BUILD_CA_BUNDLE:-} ]] || secret=(--secret "id=ca_bundle,src=$NEURA_BUILD_CA_BUNDLE")
     for target in neura-control neura-console neura-landing; do
         step "building $target:$tag"
         docker build --quiet --platform=linux/amd64 -f deploy/docker/Dockerfile --target "$target" \
-            --secret "id=ca_bundle,src=${NEURA_BUILD_CA_BUNDLE:-/dev/null}" \
+            ${secret[@]+"${secret[@]}"} \
             --build-arg "VITE_CONSOLE_URL=https://console.$domain/sign-in" \
             --build-arg "VITE_DOCS_URL=$DOCS_URL" \
             --build-arg "VITE_CONTACT_URL=$CONTACT_URL" \

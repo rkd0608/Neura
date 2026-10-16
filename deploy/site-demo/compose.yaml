@@ -90,6 +90,7 @@ volumes:
   kit:
 
 secrets:
-  # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.
+  # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file
+  # here (not /dev/null: Compose's bake builder reads only files under the project).
   ca_bundle:
-    file: ${NEURA_BUILD_CA_BUNDLE:-/dev/null}
+    file: ${NEURA_BUILD_CA_BUNDLE:-./empty-ca-bundle.pem}

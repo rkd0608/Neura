@@ -405,6 +405,43 @@ Workloads: homogeneous (N identical sessions), heterogeneous (mixed models and r
 
 Reported metrics: deadline misses per 1,000 requests, starvation events per robot-hour, late-trimmed actions, observation age at dispatch (p50/p99/max), GPU-hours per robot-hour, peak memory, closed-loop task success (simulation) with confidence intervals. Each report states the crossover point where sharing stops paying.
 
+### 10.1 Closed-loop evidence in simulation (`neura-evidence`, the Evidence workflow)
+
+One published policy, served five ways, on the scene it was trained for:
+- **The policy.** LeRobot's `act_aloha_sim_transfer_cube_human`, migrated to LeRobot's processor format by LeRobot's own tool. Every system loads the same migrated files.
+- **The scene.** gym-aloha's transfer-cube scene, ported to plain MuJoCo (`neura_robots.aloha`). Every run checks the port against gym-aloha step for step: physics, rewards, contacts and camera frames identical.
+- **The seeds.** Episode *i* uses seed 1000 + *i* for every system, so outcomes compare seed by seed. Every system gets one warm-up episode first, which is not scored.
+- **The clock.** Except for `lerobot-eval`, the world advances every 20 ms of wall-clock time on its own thread, whatever the robot software is doing. It keeps moving while the policy computes, while a chunk is late and while the robot holds (`RealTimeWorld`). An episode is 400 world steps.
+
+| System | What it is |
+|---|---|
+| `lerobot-eval` | LeRobot's own protocol, in process: the world waits while the policy computes. LeRobot publishes its success rates this way. The workflow runs LeRobot's `lerobot-eval` on gym-aloha too, as the reference |
+| `lerobot-realtime` | In process, in the robot's 50 Hz loop (as `lerobot-record --policy.path` runs a policy): the robot stalls while the model computes |
+| `neura` | The full Neura path: robot runtime, gRPC, site gateway, policy workers |
+| `lerobot-async-scaled` | LeRobot's remote inference (`PolicyServer` and `RobotClient`, unmodified), its joint-similarity tolerance scaled to radians |
+| `lerobot-async` | The same, as shipped. Its tolerance is one unit of joint distance: one degree on the SO-100 it was written for, one radian on ALOHA, so it skips nearly every observation unless the queue is empty |
+
+The remote systems use matched settings:
+- chunks of 100 actions;
+- the next chunk requested with 30 left (Neura's refill point, LeRobot's `chunk_size_threshold` 0.3);
+- the newest chunk replaces the old (LeRobot's `latest_only`).
+
+They also run behind the same TCP fault proxy, so they get the same faults: added delay each way, a network stall, and the model process killed mid-episode.
+
+**Fair to LeRobot's remote inference.** Its first runs scored 0 of 10. Three defects were in the harness, not in LeRobot:
+1. **One renderer on two threads.** LeRobot's client draws the camera from its own thread. One MuJoCo renderer's EGL context on two threads failed with `EGL_BAD_ACCESS`. Each thread now has its own renderer, and the images are identical.
+2. **A camera read that took 40 to 80 ms.** While its queue is low, LeRobot's client reads the camera every control tick. The simulated robot drew each frame inside that read, so the client's 50 Hz loop ran at 20 to 40 Hz. The policy's motion played out in slow motion against a world clock that kept real time. A real camera read costs almost nothing: LeRobot's cameras draw frames on a background thread, and `async_read` returns the newest. The simulated camera now does the same. A read waits for a fresh frame only when the newest is older than 200 ms (`async_read`'s own timeout) or the episode has just started.
+3. **A cold model each episode.** The server loads the policy afresh for each client, and the first forward pass after loading took 1.1 s, against about 0.2 s warm. Neura's workers and the in-process baseline are warm when an episode starts. The async server now is too: one inference through LeRobot's own calls while the world is stopped, then `Ready` to reset its state for the client.
+
+After these fixes, both LeRobot variants succeeded on 3 of 5 seeds on the CI runner, as often as the other real-time systems.
+
+What remains is LeRobot's own design, recorded on every episode's line:
+- **Control ticks.** Its loop sends each observation inline, as a blocking RPC that returns after the server has unpacked and checked it. About 900 KB each. On the 4-vCPU runner the loop ticks about 310 times in 400 steps.
+- **Empty queue.** About 10 ticks per episode with no action queued.
+- **Observations sent.** 80 to 90 per episode, one per tick while the queue is low. The server skips most of them.
+
+**Not modeled.** The simulator's software renderer shares the CPU with LeRobot's server while the client reads frames. A real camera costs the server nothing. With the camera frozen (no drawing at all), a full-size model executes about 376 actions per 400 steps on the development host, against about 340. On a real deployment the server runs on its own machine, and the network carries about 45 MB/s while the queue is low.
+
 ---
 
 ## 11. Transport and protocol

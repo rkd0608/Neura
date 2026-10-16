@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 98 codes.
+Catalog version 1, 99 codes.
 
 ## Contracts
 
@@ -125,6 +125,7 @@ Catalog version 1, 98 codes.
 | `AGENT_GENERATION_STALE` | warning | no |  | The desired state is older than the one the site already committed. |
 | `AGENT_ACTIVATION_REFUSED` | info | no |  | The site operator refused the activation. |
 | `AGENT_ACTIVATION_TIMED_OUT` | warning | no |  | Robots did not switch to the approved revision within the activation window. |
+| `AGENT_ACTIVATION_SUPERSEDED` | info | no |  | A newer activation for the same robots was approved before every robot switched. |
 | `AGENT_BOUNDARY_DENIED` | error | no |  | The instruction is outside the boundaries configured on this server. |
 | `AGENT_OPERATION_INTERRUPTED` | warning | yes |  | The site agent restarted while the operation was running; run it again. |
 

@@ -130,6 +130,8 @@ class AgentCore:
         # Offline time is state.offline_elapsed_s at this monotonic instant, plus what passed since.
         self._elapsed_mark = monotonic()
         self._accounted_at: float | None = None
+        # Robot name -> the revision of its live session, from the gateway's last status.
+        self._running: dict[str, str] = {}
 
     # --- helpers ------------------------------------------------------------------------------
 
@@ -753,13 +755,28 @@ class AgentCore:
         activation.approved_at = self._clock()
         for name in activation.robot_names:
             assignment = self.state.assignments.setdefault(name, Assignment())
-            if assignment.current != activation.revision_id:
-                assignment.next = activation.revision_id
+            if assignment.next is not None and self._running.get(name) == assignment.next:
+                # It already switched for an activation still in progress: that revision is the
+                # one it runs, and the gateway keeps serving it until the robot switches again.
+                assignment.current = assignment.next
+            assignment.next = (
+                None if assignment.current == activation.revision_id else activation.revision_id
+            )
+        superseded = self._supersede(activation)
         self._save()
         self.audit.write(
             "approval", command_id=command_id, operator=operator, revision_id=activation.revision_id
         )
         await self.reconcile()
+        for older in superseded:
+            self._report(
+                older.command_id,
+                older.operation_id,
+                "Failed",
+                reason=ReasonCode.AGENT_ACTIVATION_SUPERSEDED,
+                message=f"superseded by the activation of {activation.revision_id}, approved by "
+                f"{operator} before every robot switched",
+            )
         self._report(
             command_id,
             activation.operation_id,
@@ -768,6 +785,22 @@ class AgentCore:
         )
         await self.watch_activations({})
         return activation
+
+    def _supersede(self, activation: Activation) -> list[Activation]:
+        """Approved activations that can no longer complete: another revision was just approved
+        for some of their robots. They end without reverting anything."""
+        robots = set(activation.robot_names)
+        superseded = [
+            a
+            for a in self.state.activations.values()
+            if a.command_id != activation.command_id
+            and a.approved_at is not None
+            and a.revision_id != activation.revision_id
+            and robots & set(a.robot_names)
+        ]
+        for older in superseded:
+            del self.state.activations[older.command_id]
+        return superseded
 
     async def refuse(self, command_id: str, operator: str, note: str = "") -> None:
         activation = self.state.activations.pop(command_id, None)
@@ -791,6 +824,8 @@ class AgentCore:
         running = {
             s["robot_id"]: s["revision_id"] for s in (gateway_status or {}).get("sessions", [])
         }
+        if gateway_status:
+            self._running = running
         ids = {name: rid for rid, name in self.robot_names().items()}
         for command_id, activation in list(self.state.activations.items()):
             if activation.approved_at is None:

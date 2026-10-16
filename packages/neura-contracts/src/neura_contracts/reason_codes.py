@@ -97,6 +97,7 @@ class ReasonCode(StrEnum):
     AGENT_GENERATION_STALE = "AGENT_GENERATION_STALE"
     AGENT_ACTIVATION_REFUSED = "AGENT_ACTIVATION_REFUSED"
     AGENT_ACTIVATION_TIMED_OUT = "AGENT_ACTIVATION_TIMED_OUT"
+    AGENT_ACTIVATION_SUPERSEDED = "AGENT_ACTIVATION_SUPERSEDED"
     AGENT_BOUNDARY_DENIED = "AGENT_BOUNDARY_DENIED"
     AGENT_OPERATION_INTERRUPTED = "AGENT_OPERATION_INTERRUPTED"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
@@ -699,6 +700,13 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="warning",
         retryable=False,
         message='Robots did not switch to the approved revision within the activation window.',
+    ),
+    ReasonCode.AGENT_ACTIVATION_SUPERSEDED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_ACTIVATION_SUPERSEDED,
+        area="agent",
+        severity="info",
+        retryable=False,
+        message='A newer activation for the same robots was approved before every robot switched.',
     ),
     ReasonCode.AGENT_BOUNDARY_DENIED: ReasonCodeInfo(
         code=ReasonCode.AGENT_BOUNDARY_DENIED,

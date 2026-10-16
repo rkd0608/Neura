@@ -628,6 +628,8 @@ What M4 built, and where it deliberately differs from the plan above.
 
 A refusal (`AGENT_ACTIVATION_REFUSED`), a cancel from the control plane, or robots not switching within the activation window (`AGENT_ACTIVATION_TIMED_OUT`, 10 minutes by default) reverts the assignment.
 
+An activation can be approved while an earlier one is still in progress, for example after a robot that never switched. Then each robot keeps the revision it actually runs: if it already runs the earlier activation's revision, that revision becomes its `current`. The gateway keeps serving it until the robot switches at its next task boundary. The earlier activation can no longer complete, so it ends at once, without reverting anything, with `AGENT_ACTIVATION_SUPERSEDED`. Approving the revision a robot already runs clears a revision still waiting in `next`.
+
 **Offline authorization**
 
 - Offline authorization renews only on verified contact:

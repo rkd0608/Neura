@@ -504,6 +504,12 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: false,
     message: "Robots did not switch to the approved revision within the activation window.",
   },
+  AGENT_ACTIVATION_SUPERSEDED: {
+    area: "agent",
+    severity: "info",
+    retryable: false,
+    message: "A newer activation for the same robots was approved before every robot switched.",
+  },
   AGENT_BOUNDARY_DENIED: {
     area: "agent",
     severity: "error",

@@ -77,6 +77,7 @@ def revision(
 
 REV1 = revision("rev_01J0000000000000000000001")
 REV2 = revision("rev_01J0000000000000000000002", refill=25)
+REV3 = revision("rev_01J0000000000000000000003", refill=20)
 
 
 class FakeGateway:
@@ -487,6 +488,59 @@ async def test_both_revisions_are_served_until_every_robot_switched(site: Site) 
     assert site.reports()[-1].state == "Succeeded"
     config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
     assert [d["revision_id"] for d in config["deployments"]] == [REV2["id"]]
+
+
+async def test_a_newer_activation_keeps_serving_what_each_robot_runs(site: Site) -> None:
+    """Approved while the previous activation is still in progress (one robot switched to REV2,
+    the other never did): the robot running REV2 keeps it until it switches to REV3 at its task
+    boundary, and the previous activation ends as superseded instead of timing out."""
+    await prepared(site, REV1, REV2, REV3)
+    await activated(site, REV1["id"])
+    second = site.activate(REV2["id"])
+    await site.core.on_command(second)
+    await site.core.approve(second.command_id, "ops@site")
+    site.gateway.sessions = [{"robot_id": "robot-0", "revision_id": REV2["id"]}]
+    await site.core.watch_activations(await site.gateway.status())
+    site.drain()
+
+    third = site.activate(REV3["id"])
+    await site.core.on_command(third)
+    await site.core.approve(third.command_id, "ops@site")
+    config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
+    served = {d["revision_id"]: d["robots"] for d in config["deployments"]}
+    assert served == {
+        REV1["id"]: ["robot-1"],
+        REV2["id"]: ["robot-0"],
+        REV3["id"]: ["robot-0", "robot-1"],
+    }
+    reports = {r.command_id: r for r in site.reports()}
+    assert reports[second.command_id].state == "Failed"
+    assert reports[second.command_id].reason.code == ReasonCode.AGENT_ACTIVATION_SUPERSEDED.value
+    assert [a.command_id for a in site.core.pending_approvals()] == [third.command_id]
+
+    site.running(REV3["id"])
+    await site.core.watch_activations(await site.gateway.status())
+    assert site.reports()[-1].state == "Succeeded"
+    config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
+    assert [d["revision_id"] for d in config["deployments"]] == [REV3["id"]]
+
+
+async def test_approving_the_revision_robots_run_drops_the_one_in_flight(site: Site) -> None:
+    await prepared(site, REV1, REV2)
+    await activated(site, REV1["id"])
+    second = site.activate(REV2["id"])
+    await site.core.on_command(second)
+    await site.core.approve(second.command_id, "ops@site")
+    back = site.activate(REV1["id"])  # changed their mind before any robot switched
+    await site.core.on_command(back)
+    await site.core.approve(back.command_id, "ops@site")
+    assert all(
+        (a.current, a.next) == (REV1["id"], None) for a in site.core.state.assignments.values()
+    )
+    await site.core.watch_activations(await site.gateway.status())
+    reports = {r.command_id: r for r in site.reports()}
+    assert reports[second.command_id].reason.code == ReasonCode.AGENT_ACTIVATION_SUPERSEDED.value
+    assert reports[back.command_id].state == "Succeeded"
 
 
 async def test_refusal_reverts_the_assignment(site: Site) -> None:

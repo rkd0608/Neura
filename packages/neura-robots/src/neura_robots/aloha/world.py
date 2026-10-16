@@ -147,9 +147,13 @@ class RealTimeWorld:
             return self.sim.targets()
 
     def render(self, camera: str = "top") -> NDArray[np.uint8]:
-        with self._lock:
-            mujoco.mj_copyData(self._shadow, self.sim.model, self.sim.data)
+        self.copy_state(self._shadow)
         return self.sim.render(camera, data=self._shadow)
+
+    def copy_state(self, into: mujoco.MjData) -> None:
+        """The scene's state now, for a renderer on another thread (an onlooker's camera)."""
+        with self._lock:
+            mujoco.mj_copyData(into, self.sim.model, self.sim.data)
 
     @property
     def steps(self) -> int:

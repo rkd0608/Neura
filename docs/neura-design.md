@@ -1238,6 +1238,35 @@ Verified locally: the same compose file and edge config with Postgres in place o
 
 What this does not give: high availability. A VM restart or a release that replaces the control plane interrupts the console and API for seconds to minutes, which falls short of the illustrative 99.9% of §21.2 only if it happens often; robots are unaffected (§13). When a partner's contract needs more, the same images move to a regional managed instance group or Cloud Run behind a TCP proxy load balancer (still passing TLS through for agents), with Cloud SQL high availability.
 
+### 20.11 The site kit: a customer's site on any machine
+
+`deploy/site-demo` runs a customer's side on any machine with Docker, connected to a Neura (the cloud of §20.10 or a development stack). It is for people evaluating Neura, and for the team to use Neura the way a customer does. No GPU is needed.
+
+**What the kit runs.**
+- **The ML team's release** (`./site.sh publish`). It takes a LeRobot ACT checkpoint, by default the published `act_aloha_sim_transfer_cube_human`. It writes the three contracts, signs the artifact with a publisher key it makes, and registers the contracts in the project.
+- **The site's server** (`./site.sh connect`, with the console's install command). The site agent enrolls outbound, trusts the publisher key and imports the weights, each file checked against the artifact.
+- **The robots.** `neura-aloha-cell` runs two simulated ALOHAs (`neura_robots.aloha`: gym-aloha's scene on plain MuJoCo, step for step identical to gym-aloha) behind the robot runtime and `AssignedArm`, each on its own thread as on its own computer, with mutual TLS to the gateway. A cell controller does what a PLC and an operator do:
+  - when a robot is ready, it resets the scene and arms a task;
+  - when the cube is handed over or the time is up, it ends the task;
+  - it starts no task while a new revision waits to be taken.
+
+  A fault latches until someone resets it on the page.
+- **The cell's page** (`127.0.0.1:8095`). It shows each robot live (its own renderer, without shadows, on its own thread) with its state, revision, tasks and successes, and the round trip. It also shows the site agent's connection and the activations waiting for the site operator, which the page approves with the operator credential. Actions need a header that another site's page cannot send, and requests must name the page's own host.
+
+Everything else is done in the console: sites, robots, deployments, revisions, prepare and activate. The kit is one image, holding the agent, the cell and the publisher tools. It uses the models group's locked versions with PyTorch's CPU build, and Mesa for the cameras.
+
+**Development settings.**
+- The agent issues the simulated robots their certificates (`dev_robot_certificate_dir`).
+- The policy workers run as processes in the agent's container (`worker_sandbox=process`).
+- The execution profile is tuned for CPU serving: an observation may be 600 ms old when it reaches the model, and the next chunk is requested with 50 actions left, a one-second budget. On the GPU profile (100 ms, 30 actions), admission control refuses a second robot on a laptop's CPU, by design: the predicted completion exceeds the robot's starvation budget.
+
+**Verified.** In this repository's sandbox: the published flow, enrollment, signature trust, weight import, prepare, approval from the page, tasks on two robots, and switching revisions mid-task. This used a local control plane and a random-weights checkpoint of the published one's shape. The Site kit workflow (`.github/workflows/site-kit.yml`, manual) adds the image build and the published checkpoint from the Hub (`tools/smoke_site_kit.py`).
+
+Building the kit found three defects, all fixed:
+1. **Overlapping activations.** A robot switched to a revision whose activation had not finished, because another robot never switched. A newer approval then replaced that revision, and the gateway stopped serving it under the robot mid-task: the robot starved and faulted. The fix is in §17 (Activation).
+2. **Backbone weights.** The LeRobot adapter built ACT from the checkpoint's configuration, which fetches ImageNet backbone weights from the internet before the checkpoint's own weights overwrite them. A worker without network could never load a published ACT checkpoint. The adapter no longer fetches pretrained backbone weights.
+3. **Repeated refusals.** The robot process repeated a session refusal every half second, because its detail names each attempt's session. It now reports each refusal reason once.
+
 ---
 
 ## 21. Service levels

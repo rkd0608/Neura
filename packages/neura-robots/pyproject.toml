@@ -20,6 +20,7 @@ neura-arm = "neura_robots.cli:main"
 neura-arm-emulator = "neura_robots.emulator:main"
 neura-qualify = "neura_robots.qualify.cli:main"
 neura-evidence = "neura_robots.evidence.cli:main"
+neura-aloha-cell = "neura_robots.aloha.cell:main"
 
 [project.optional-dependencies]
 # Real SO-101 arms through LeRobot (its Feetech bus, calibration and cameras). LeRobot brings
@@ -32,6 +33,8 @@ so101 = [
 # evaluates its published ALOHA policies on (neura_robots.aloha.fidelity).
 sim = [
     "mujoco==3.8.1",
+    # The robot cell's page (aloha.cell) sends its cameras as JPEG.
+    "pillow>=11",
 ]
 
 [build-system]

@@ -115,6 +115,34 @@ CMD ["neura-worker"]
 FROM runtime-models AS neura-worker-gpu
 CMD ["neura-worker"]
 
+# --- The site kit (deploy/site-demo) -----------------------------------------------------------
+# A demonstration site on any machine with Docker (amd64 or arm64, no GPU): the site agent and its
+# policy workers, the simulated ALOHA cell and the publisher's tools, in one image. The models
+# group's locked versions, with PyTorch's CPU build in place of the CUDA one (a few hundred MB
+# instead of several GB).
+FROM build AS build-kit
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
+    uv export --frozen --no-dev --group models --all-packages --no-emit-workspace --no-hashes \
+        --no-header --no-annotate --output-file /tmp/models.txt; \
+    grep -v -E '^(nvidia-|cuda-|triton=)' /tmp/models.txt > /tmp/models-cpu.txt; \
+    uv pip install --python /app/.venv --torch-backend cpu --requirements /tmp/models-cpu.txt
+
+FROM runtime-base AS neura-site-kit
+# Software OpenGL (Mesa) for the simulated cameras.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build-kit /app/.venv /app/.venv
+COPY deploy/site-demo/kit.py /app/kit.py
+RUN mkdir -p /kit && chown neura:neura /kit
+ENV MUJOCO_GL=egl \
+    HF_HOME=/kit/.huggingface \
+    NEURA_AGENT_LOCAL_HOST=0.0.0.0
+USER neura
+EXPOSE 8090 8095 50051
+CMD ["neura-agent"]
+
 # --- NucleiLabs site (static) -------------------------------------------------------------------
 FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS landing-build
 RUN --mount=type=secret,id=ca_bundle,required=false \

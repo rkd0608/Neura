@@ -1,0 +1,95 @@
+# The site kit: a customer's site on this machine, connected to your Neura (README.md here).
+# ./site.sh drives it and writes the values below to .env; nothing here needs editing.
+#
+# - site-agent: the agent as it runs on a site's server. It dials out to Neura (nothing listens
+#               for the internet), and runs the gateway and the policy workers that serve the
+#               model to the robots, on this machine's CPU.
+# - cell:       two (or more) simulated ALOHA robots on the real robot runtime, connected to the
+#               gateway with mutual TLS, running their task back to back; and the cell's page at
+#               http://127.0.0.1:8095 with their cameras and the site's pending approvals.
+# - kit:        the publisher's tools (./site.sh publish), run on demand.
+#
+# DEVELOPMENT settings, and why: the agent issues the simulated robots their certificates (real
+# robots make their own keys and send a certificate request), and runs the policy workers as
+# processes in its container (a production site runs them in the artifact's pinned runtime image,
+# with no network). Both are refused by the agent without NEURA_AGENT_DEVELOPMENT.
+name: neura-site
+
+x-kit: &kit
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile
+    target: neura-site-kit
+    secrets: [ca_bundle]
+  image: neura-site-kit:local
+
+services:
+  site-agent:
+    <<: *kit
+    hostname: ${NEURA_SERVER_NAME:-site-server-1}
+    environment:
+      NEURA_AGENT_STATE_DIR: /var/lib/neura/agent
+      # Before enrollment, to check Neura is reachable; afterwards the enrolled endpoint.
+      NEURA_AGENT_CONTROL_PLANE_URL: ${NEURA_URL:?run ./site.sh connect first}
+      NEURA_AGENT_DEVELOPMENT: "true"
+      NEURA_AGENT_GATEWAY_LISTEN: 0.0.0.0:50051
+      NEURA_AGENT_GATEWAY_TLS_NAMES: '["site-agent"]'
+      NEURA_AGENT_WORKER_SANDBOX: process
+      NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR: /var/lib/neura/robot-certs
+      # The site operator's credential (its hash): approvals at the site need it.
+      NEURA_AGENT_OPERATOR_TOKEN_SHA256: ${NEURA_OPERATOR_TOKEN_SHA256:?run ./site.sh connect first}
+    volumes:
+      - agent-state:/var/lib/neura
+      - robot-certs:/var/lib/neura/robot-certs
+      - kit:/kit:ro
+    ports:
+      - "127.0.0.1:8090:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  cell:
+    <<: *kit
+    command: ["neura-aloha-cell"]
+    environment:
+      NEURA_CELL_GATEWAY: site-agent:50051
+      NEURA_CELL_CERT_DIR: /var/lib/neura/robot-certs
+      NEURA_CELL_LISTEN: 0.0.0.0:8095
+      NEURA_CELL_TASK: ${NEURA_CELL_TASK:-transfer_cube}
+      NEURA_CELL_RESET_AFTER_S: ${NEURA_CELL_RESET_AFTER_S:-0}
+      NEURA_CELL_SITE_API: http://site-agent:8090
+      NEURA_CELL_OPERATOR: ${NEURA_CELL_OPERATOR:-site operator}
+      NEURA_AGENT_OPERATOR_TOKEN: ${NEURA_OPERATOR_TOKEN:?run ./site.sh connect first}
+    volumes:
+      - robot-certs:/var/lib/neura/robot-certs:ro
+    ports:
+      - "127.0.0.1:8095:8095"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8095/api/cell', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      site-agent:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kit:
+    <<: *kit
+    profiles: [tools]
+    entrypoint: ["python", "/app/kit.py"]
+    volumes:
+      - kit:/kit
+
+volumes:
+  agent-state:
+  robot-certs:
+  kit:
+
+secrets:
+  # Optional CA bundle for builds behind a TLS-intercepting proxy. Defaults to an empty file.
+  ca_bundle:
+    file: ${NEURA_BUILD_CA_BUNDLE:-/dev/null}

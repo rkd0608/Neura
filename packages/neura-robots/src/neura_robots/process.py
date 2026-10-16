@@ -149,13 +149,14 @@ class ArmProcess:
             self.say(self._describe())
         rejection = self.client.last_rejection
         refused = (rejection.value, self.client.last_rejection_detail) if rejection else None
-        if refused != self._last_rejection:
-            self._last_rejection = refused
-            if refused is not None:
-                self.say(
-                    f"{self.robot_id}: the gateway refused a session ({refused[0]}: "
-                    f"{refused[1]}); retrying"
-                )
+        # Said once per reason: the detail names each attempt's session.
+        last = self._last_rejection[0] if self._last_rejection else None
+        if refused is not None and refused[0] != last:
+            self.say(
+                f"{self.robot_id}: the gateway refused a session ({refused[0]}: "
+                f"{refused[1]}); retrying"
+            )
+        self._last_rejection = refused
 
     def _describe(self) -> str:
         runtime = self.runtime
@@ -272,6 +273,8 @@ class AssignedArm:
         self.poll = poll_seconds
         self.process: ArmProcess | None = None
         self.refused: str | None = None
+        # A newly assigned revision, waiting for the current task to end.
+        self.pending: str | None = None
 
     async def run(self, stop: asyncio.Event) -> None:
         task: asyncio.Task[None] | None = None
@@ -296,6 +299,7 @@ class AssignedArm:
                     if self.refused != f"waiting:{wanted}":
                         self.say(f"revision {wanted} assigned: switching after this task")
                         self.refused = f"waiting:{wanted}"
+                        self.pending = wanted
                 else:
                     assert assignment is not None
                     try:
@@ -307,6 +311,7 @@ class AssignedArm:
                             self.arm.adopt(binding.robot)
                     except (ValueError, KeyError, ContractError, ArmError) as exc:
                         self.refused = wanted
+                        self.pending = None
                         self.say(f"refused revision {wanted}: {exc}")
                         continue
                     if task is not None:
@@ -325,6 +330,7 @@ class AssignedArm:
                         on_quit=stop.set,
                     )
                     self.refused = None
+                    self.pending = None
                     self.say(f"serving revision {wanted}")
                     process_stop = asyncio.Event()
                     task = asyncio.create_task(self.process.connection.run(process_stop))

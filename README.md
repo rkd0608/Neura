@@ -192,6 +192,21 @@ From GitHub instead: add the service account's JSON key as the `GCP_SA_KEY` secr
 Without `NEURA_DOMAIN` the stack is served at `<ip>.sslip.io`. With a domain, point it and its
 `console.`, `agents.` and `enroll.` names at the address `up` prints.
 
+## Being the customer: the site kit
+
+`deploy/site-demo` runs a customer's site on any machine with Docker, CPU only, connected to your
+Neura: a site server and two simulated ALOHA robots running LeRobot's published ACT policy, with
+a page at `http://127.0.0.1:8095` to watch them. Publish the model, add the site and robots in the
+console, connect, then prepare, activate and approve:
+
+```bash
+cd deploy/site-demo
+./site.sh publish 'https://console.<domain>/o/<org>/p/<project>'
+./site.sh connect '<the install command from the console>'
+```
+
+The walkthrough is in [deploy/site-demo/README.md](deploy/site-demo/README.md) (design §20.11).
+
 ## Conventions
 
 - **Generated files are committed and checked.** Edit the source (`proto/`, `catalog/`, contract

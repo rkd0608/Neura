@@ -1716,6 +1716,7 @@ dependencies = [
 [package.optional-dependencies]
 sim = [
     { name = "mujoco" },
+    { name = "pillow" },
 ]
 so101 = [
     { name = "lerobot", extra = ["feetech"] },
@@ -1732,6 +1733,7 @@ requires-dist = [
     { name = "neura-server", editable = "packages/neura-server" },
     { name = "neura-sim", editable = "packages/neura-sim" },
     { name = "numpy", specifier = ">=2.2" },
+    { name = "pillow", marker = "extra == 'sim'", specifier = ">=11" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 provides-extras = ["so101", "sim"]

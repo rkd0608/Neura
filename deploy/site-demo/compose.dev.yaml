@@ -1,0 +1,16 @@
+# For trying the kit against the local development stack (deploy/compose) instead of a Neura
+# in the cloud: the site agent joins that stack's network and talks to its control plane in
+# plaintext. COMPOSE_FILE=compose.yaml:compose.dev.yaml ./site.sh publish http://control-plane:8080/...
+# (tools/smoke_site_kit.py does this.)
+services:
+  site-agent:
+    environment:
+      NEURA_AGENT_CONTROL_PLANE_INSECURE: "true"
+    networks: [default, dev]
+  kit:
+    networks: [default, dev]
+
+networks:
+  dev:
+    name: neura-dev_default
+    external: true

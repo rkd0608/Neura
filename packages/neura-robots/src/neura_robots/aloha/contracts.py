@@ -242,7 +242,10 @@ def execution_profile(
         "kind": "ExecutionProfile",
         "metadata": {
             "name": f"{artifact_document['metadata']['name']}-50hz",
-            "version": f"evidence-{per_chunk}-{chunking.refill_at}",
+            "version": (
+                f"chunk{per_chunk}-refill{chunking.refill_at}"
+                f"-dispatch{chunking.max_age_at_dispatch_us // 1000}ms"
+            ),
             "description": "ACT on the simulated ALOHA at 50 Hz, replace merge.",
         },
         "spec": {

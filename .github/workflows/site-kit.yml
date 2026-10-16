@@ -1,0 +1,82 @@
+name: Site kit
+
+# The site kit (deploy/site-demo) end to end on a runner, as a customer uses it: its image built,
+# the development control plane (deploy/compose), and tools/smoke_site_kit.py driving ./site.sh
+# with the published ALOHA checkpoint from the Hugging Face Hub. Started by hand: it builds
+# images and runs for a while.
+on:
+  workflow_dispatch:
+    inputs:
+      tasks:
+        description: "Tasks each robot must complete"
+        type: number
+        default: 3
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  smoke:
+    name: Publish, connect, approve, and the robots at work
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: The kit's image
+        working-directory: deploy/site-demo
+        env:
+          # Compose needs values to read the file; site.sh writes the real ones to .env.
+          NEURA_URL: http://unset.invalid
+          NEURA_OPERATOR_TOKEN: unset
+          NEURA_OPERATOR_TOKEN_SHA256: unset
+        run: |
+          time docker compose --profile tools build kit
+          docker image ls neura-site-kit
+      - name: Inside the image, PyTorch for the CPU and the simulated cameras
+        run: |
+          docker run --rm neura-site-kit:local python -c "
+          import mujoco, torch
+          from neura_robots.aloha import AlohaSim
+          sim = AlohaSim()
+          sim.reset(0)
+          frame = sim.render('top')
+          print('torch', torch.__version__, 'cuda', torch.cuda.is_available())
+          print('mujoco', mujoco.__version__, 'frame', frame.shape, 'mean', round(float(frame.mean()), 1))
+          assert frame.mean() > 10, 'the camera rendered nothing'
+          "
+          docker run --rm neura-site-kit:local sh -c \
+            'ls /app/.venv/lib/python3.13/site-packages | grep -i -E "^(nvidia|triton)" || echo "no CUDA libraries"; du -sh /app/.venv'
+      - name: The development control plane
+        run: docker compose -f deploy/compose/compose.yaml up -d --wait control-plane
+      - name: The SDK, for the smoke test's API calls
+        run: uv sync --frozen
+      - name: The kit, end to end
+        env:
+          TASKS: ${{ inputs.tasks }}
+        run: uv run python tools/smoke_site_kit.py --tasks "$TASKS" --out out/site-kit
+      - name: Logs
+        if: failure()
+        run: |
+          (cd deploy/site-demo && COMPOSE_FILE=compose.yaml:compose.dev.yaml \
+            docker compose logs --no-color --tail 400 site-agent cell) || true
+          docker compose -f deploy/compose/compose.yaml logs --no-color --tail 100 control-plane || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: site-kit
+          path: out/site-kit
+          if-no-files-found: ignore

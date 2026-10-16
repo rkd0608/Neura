@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot cell</title>
+<style>
+:root {
+  color-scheme: dark;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --bg: #09090b;
+  --surface: #111114;
+  --surface-2: #17171b;
+  --surface-3: #1f1f24;
+  --border: #26262c;
+  --border-strong: #36363e;
+  --text: #ededf0;
+  --text-2: #b0b0bb;
+  --text-3: #8a8a96;
+  --accent: #a595ff;
+  --accent-soft: rgb(165 149 255 / 13%);
+  --on-accent: #0d0a1f;
+  --ok: #5ad48f;
+  --ok-soft: rgb(90 212 143 / 12%);
+  --warn: #f2b84b;
+  --warn-soft: rgb(242 184 75 / 12%);
+  --danger: #ff7a72;
+  --danger-soft: rgb(255 122 114 / 12%);
+  --info: #7fb2ff;
+  --info-soft: rgb(127 178 255 / 12%);
+  --muted-soft: rgb(255 255 255 / 6%);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #fafafb;
+    --surface: #ffffff;
+    --surface-2: #f5f5f7;
+    --surface-3: #ececf0;
+    --border: #e5e5ea;
+    --border-strong: #d0d0d8;
+    --text: #121216;
+    --text-2: #4d4d58;
+    --text-3: #63636e;
+    --accent: #5a41d8;
+    --accent-soft: #efecff;
+    --on-accent: #ffffff;
+    --ok: #0c7a42;
+    --ok-soft: #e3f6ec;
+    --warn: #8a5a00;
+    --warn-soft: #fff3d6;
+    --danger: #b42318;
+    --danger-soft: #fdecea;
+    --info: #1d55c9;
+    --info-soft: #e8efff;
+    --muted-soft: #ededf1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+h1 small { margin-left: 8px; color: var(--text-3); font-weight: 400; }
+main { padding: 20px 24px 40px; max-width: 1480px; margin: 0 auto; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.muted { color: var(--text-3); }
+.site { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--text-2); }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.chip.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.chip.danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.chip.info { color: var(--info); background: var(--info-soft); border-color: transparent; }
+.chip.muted { color: var(--text-3); }
+.approvals { display: grid; gap: 10px; margin-bottom: 20px; }
+.approval {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  background: var(--warn-soft);
+}
+.approval strong { font-weight: 600; }
+.empty {
+  padding: 48px 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  text-align: center;
+  color: var(--text-2);
+}
+.empty p { margin: 6px 0; }
+.grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); }
+.robot {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.robot-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+.robot-head h2 { margin: 0; font: 600 14px var(--font-mono); }
+.view { position: relative; aspect-ratio: 4 / 3; background: #000; }
+.view img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.overlay {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  font: 12.5px var(--font-mono);
+}
+.overlay:empty { display: none; }
+.cams { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; }
+.cams button {
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #ddd;
+  font: 12px var(--font-sans);
+  cursor: pointer;
+}
+.cams button[aria-pressed="true"] { background: rgb(255 255 255 / 88%); color: #111; }
+.banner { margin: 0; padding: 10px 16px; font-size: 13px; }
+.banner.danger { background: var(--danger-soft); color: var(--danger); }
+.banner.info { background: var(--info-soft); color: var(--info); }
+.banner:empty { display: none; }
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin: 0;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stat { flex: 1 1 110px; padding: 10px 16px; background: var(--surface); }
+.stat dt { color: var(--text-3); font-size: 12px; }
+.stat dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.recent { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 16px 0; min-height: 26px; }
+.recent span { width: 14px; height: 14px; border-radius: 3px; background: var(--surface-3); }
+.recent .success { background: var(--ok); }
+.recent .timeout { background: var(--text-3); }
+.recent .fault { background: var(--danger); }
+.recent .stopped { background: transparent; outline: 1px solid var(--text-3); outline-offset: -1px; }
+.legend { padding: 4px 16px 0; color: var(--text-3); font-size: 12px; }
+.log { margin: 10px 16px 0; padding: 0; list-style: none; color: var(--text-2); }
+.log li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log time { color: var(--text-3); margin-right: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px 16px; }
+button.action {
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 500 13px var(--font-sans);
+  cursor: pointer;
+}
+button.action:hover:not(:disabled) { border-color: var(--text-3); }
+button.action:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.danger { color: var(--danger); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+footer { color: var(--text-3); font-size: 12.5px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Robot cell<small id="task">ALOHA</small></h1>
+  <div class="site" id="site"><span class="chip muted">Site agent: checking</span></div>
+</header>
+<main>
+  <section class="approvals" id="approvals" aria-live="polite"></section>
+  <div id="empty" class="empty" hidden>
+    <p><strong>No robots yet.</strong></p>
+    <p>Add robots to this site in the Neura console: the site issues each one a certificate and
+      it appears here, connected to the site gateway.</p>
+  </div>
+  <section class="grid" id="robots" aria-live="off"></section>
+  <footer>Each robot is the simulated ALOHA behind Neura's robot runtime, connected to this
+    site's gateway with mutual TLS. It runs the revision the site assigns it and switches only
+    between tasks. The cameras here are for people; the policy sees the top camera.</footer>
+</main>
+<template id="robot-template">
+  <article class="robot">
+    <div class="robot-head"><h2 data-f="name"></h2><span class="chip" data-f="state"></span></div>
+    <div class="view">
+      <img alt="" data-f="img">
+      <div class="cams" role="group" aria-label="Camera">
+        <button type="button" data-cam="angle" aria-pressed="true">Room</button>
+        <button type="button" data-cam="top" aria-pressed="false">Policy camera</button>
+        <button type="button" data-cam="front_close" aria-pressed="false">Close-up</button>
+      </div>
+      <div class="overlay" data-f="overlay"></div>
+    </div>
+    <p class="banner" data-f="banner"></p>
+    <dl class="stats">
+      <div class="stat"><dt>Revision</dt><dd class="mono" data-f="revision"></dd></div>
+      <div class="stat"><dt>Tasks</dt><dd data-f="tasks"></dd></div>
+      <div class="stat"><dt>Succeeded</dt><dd data-f="successes"></dd></div>
+      <div class="stat"><dt>Chunks served</dt><dd data-f="chunks"></dd></div>
+      <div class="stat"><dt>Round trip p99</dt><dd data-f="rtt"></dd></div>
+    </dl>
+    <div class="recent" data-f="recent" aria-label="Recent tasks"></div>
+    <div class="legend">Recent tasks: green succeeded, grey out of time, red faulted, outlined stopped</div>
+    <ul class="log mono" data-f="log"></ul>
+    <div class="actions">
+      <button type="button" class="action" data-act="pause">Pause</button>
+      <button type="button" class="action" data-act="takeover">Take over</button>
+      <button type="button" class="action primary" data-act="reset">Reset</button>
+    </div>
+  </article>
+</template>
+<script>
+"use strict";
+const STATES = {
+  Unassigned: ["muted", "No revision assigned"],
+  Disconnected: ["warn", "Connecting"],
+  Ready: ["muted", "Ready"],
+  Armed: ["info", "Starting a task"],
+  Running: ["ok", "Running"],
+  Waiting: ["warn", "Holding: waiting for actions"],
+  Faulted: ["danger", "Faulted: holding"],
+  Starting: ["muted", "Starting"],
+};
+const cards = new Map();
+
+function el(tag, attrs, text) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+async function post(path) {
+  const response = await fetch(path, { method: "POST", headers: { "X-Neura-Cell": "1" } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) alert(body.message || body.detail || `${response.status}`);
+  return body;
+}
+
+function short(id) {
+  return id ? (id.length > 18 ? id.slice(0, 10) + "…" + id.slice(-6) : id) : "—";
+}
+
+function card(name) {
+  if (cards.has(name)) return cards.get(name);
+  const node = document.getElementById("robot-template").content.firstElementChild.cloneNode(true);
+  const f = (key) => node.querySelector(`[data-f="${key}"]`);
+  const c = { node, f, camera: "angle" };
+  f("name").textContent = name;
+  const img = f("img");
+  const watch = () => { img.src = `/robots/${encodeURIComponent(name)}/stream?camera=${c.camera}`; };
+  img.alt = `${name}, live`;
+  img.addEventListener("error", () => setTimeout(watch, 2000));
+  watch();
+  node.querySelectorAll("[data-cam]").forEach((button) => {
+    button.addEventListener("click", () => {
+      c.camera = button.dataset.cam;
+      node.querySelectorAll("[data-cam]").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      watch();
+    });
+  });
+  node.querySelectorAll("[data-act]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const act = button.dataset.act === "pause" && c.paused ? "resume" : button.dataset.act;
+      post(`/api/robots/${encodeURIComponent(name)}/${act}`).then(refresh);
+    });
+  });
+  document.getElementById("robots").append(node);
+  cards.set(name, c);
+  return c;
+}
+
+function render(robot) {
+  const c = card(robot.name);
+  const f = c.f;
+  c.paused = robot.paused;
+  const [tone, label] = STATES[robot.state] || ["muted", robot.state];
+  const state = f("state");
+  state.className = `chip ${tone}`;
+  state.textContent = robot.paused && robot.state === "Ready" ? "Paused" : label;
+  const task = robot.task;
+  f("overlay").textContent = task
+    ? `task ${task.seed} · ${task.steps}/${task.max_steps} steps · reward ${task.reward}/4`
+    : "";
+  let banner = "";
+  let tone2 = "info";
+  if (robot.fault) {
+    tone2 = "danger";
+    banner = `Fault latched: ${robot.fault}. The robot holds until it is reset`;
+    banner += robot.reset_in_s !== undefined ? ` (the cell resets it in ${robot.reset_in_s} s).` : ".";
+  } else if (robot.pending_revision) {
+    banner = `Revision ${robot.pending_revision} assigned: switching after this task.`;
+  } else if (robot.refused_revision) {
+    tone2 = "danger";
+    banner = `Refused revision ${robot.refused_revision}: it does not fit this robot.`;
+  } else if (robot.state === "Unassigned") {
+    banner = "Waiting for the site to assign a revision: activate a deployment in the Neura console.";
+  } else if (robot.refusal) {
+    tone2 = "danger";
+    banner = `The site gateway refuses this robot a session: ${robot.refusal}. Retrying.`;
+  } else if (robot.session === false) {
+    banner = "Opening a session with the site gateway.";
+  }
+  const b = f("banner");
+  b.className = `banner ${tone2}`;
+  b.textContent = banner;
+  f("revision").textContent = short(robot.revision);
+  f("revision").title = robot.revision || "";
+  f("tasks").textContent = robot.tasks;
+  f("successes").textContent = robot.tasks
+    ? `${robot.successes} (${Math.round((100 * robot.successes) / robot.tasks)}%)`
+    : "—";
+  f("chunks").textContent = robot.chunks ?? "—";
+  f("rtt").textContent = robot.rtt_p99_ms != null && robot.chunks ? `${robot.rtt_p99_ms} ms` : "—";
+  const recent = f("recent");
+  recent.replaceChildren(...robot.recent.map((o) =>
+    el("span", { class: o.result, title: `task ${o.seed}: ${o.result}${o.detail ? " (" + o.detail + ")" : ""}, ${o.steps} steps, revision ${o.revision}` })));
+  f("log").replaceChildren(...robot.lines.slice(-4).map((line) => {
+    const li = el("li");
+    li.append(el("time", {}, new Date(line.at * 1000).toLocaleTimeString()), line.text);
+    li.title = line.text;
+    return li;
+  }));
+  const pause = c.node.querySelector('[data-act="pause"]');
+  pause.textContent = robot.paused ? "Resume" : "Pause";
+  pause.disabled = robot.state === "Unassigned";
+  c.node.querySelector('[data-act="takeover"]').disabled = !["Armed", "Running", "Waiting"].includes(robot.state);
+  c.node.querySelector('[data-act="reset"]').disabled = robot.state !== "Faulted";
+}
+
+async function refresh() {
+  try {
+    const cell = await (await fetch("/api/cell")).json();
+    document.getElementById("task").textContent =
+      cell.task === "insertion" ? "ALOHA · peg insertion" : "ALOHA · cube transfer";
+    document.getElementById("empty").hidden = !cell.waiting_for_certificates;
+    cell.robots.forEach(render);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+async function refreshSite() {
+  const site = document.getElementById("site");
+  const approvals = document.getElementById("approvals");
+  let body;
+  try {
+    const response = await fetch("/api/site");
+    if (response.status === 404) { site.replaceChildren(); return; }
+    body = await response.json();
+    if (!response.ok) throw new Error(body.message || response.status);
+  } catch (error) {
+    site.replaceChildren(el("span", { class: "chip danger" }, "Site agent not answering"));
+    approvals.replaceChildren();
+    return;
+  }
+  const chips = [];
+  if (!body.enrolled) {
+    chips.push(el("span", { class: "chip warn" }, "Site agent not enrolled"));
+  } else {
+    chips.push(el("span", { class: `chip ${body.connected ? "ok" : "warn"}` },
+      body.connected ? "Connected to Neura" : "Offline from Neura"));
+    if (body.identity) chips.push(el("span", { class: "mono muted", title: `server ${body.identity.server_id}` }, short(body.identity.site_id)));
+    const offline = body.offline_authorization;
+    if (offline && offline.remaining_s != null && !body.connected) {
+      chips.push(el("span", { class: "muted" }, `runs offline for ${Math.round(offline.remaining_s / 3600)} h more`));
+    }
+  }
+  site.replaceChildren(...chips);
+  approvals.replaceChildren(...body.pending_approvals.filter((a) => !a.approved_by).map((a) => {
+    const row = el("div", { class: "approval" });
+    const text = el("div");
+    const what = a.kind === "rollback" ? "Rollback" : "Activation";
+    text.append(el("strong", {}, `${what} awaiting the site operator's approval`), el("br"),
+      `Revision `, el("span", { class: "mono" }, a.revision_id), ` for ${a.robot_names.join(", ")}`);
+    const buttons = el("div", { class: "actions", style: "padding:0" });
+    const approve = el("button", { type: "button", class: "action primary" }, "Approve");
+    const refuse = el("button", { type: "button", class: "action danger" }, "Refuse");
+    approve.disabled = refuse.disabled = !body.can_approve;
+    if (!body.can_approve) approve.title = "Set NEURA_AGENT_OPERATOR_TOKEN for the cell to approve here";
+    approve.addEventListener("click", () => post(`/api/site/approvals/${a.command_id}/approve`).then(refreshSite));
+    refuse.addEventListener("click", () => post(`/api/site/approvals/${a.command_id}/refuse`).then(refreshSite));
+    buttons.append(approve, refuse);
+    row.append(text, buttons);
+    return row;
+  }));
+}
+
+refresh();
+refreshSite();
+setInterval(refresh, 500);
+setInterval(refreshSite, 2000);
+</script>
+</body>
+</html>

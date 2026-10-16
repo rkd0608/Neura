@@ -145,7 +145,8 @@ EOF
 
 infrastructure() {
     step "enabling the APIs"
-    g services enable compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com \
+    g services enable iam.googleapis.com cloudresourcemanager.googleapis.com \
+        compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com \
         artifactregistry.googleapis.com iap.googleapis.com
 
     step "service account $SA"

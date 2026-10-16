@@ -1288,6 +1288,19 @@ Building and running the kit found these defects, all fixed:
 
 The robots must keep working throughout: their gateway is at the site, and the site runs on its signed configuration until its offline authorization expires. Neura must show the site offline during the partition, and the site must reconnect afterwards. The test saves each phase's tasks, faults and Neura's view of the site, and the cameras.
 
+**Verified** (Staging site run 3, against the deployed Neura). The test ran on the default `e2-standard-8` with two robots. Prepare measured 270 ms per forward pass (555 ms for a batch of two), which serves two robots with the next chunk requested at 65 actions left.
+
+| Phase | Tasks (robot 1 / 2) | Succeeded | Robot faults | Neura's view of the site |
+| --- | --- | --- | --- | --- |
+| As is, 90 s | 10 / 10 | 5 / 5 | none | connected (9 of 9 samples) |
+| 150 ms ± 30 ms, 2% loss, 90 s | 11 / 10 | 4 / 6 | none | connected (4 of 4) |
+| Partitioned from Neura, 120 s | 12 / 13 | 6 / 4 | none | offline from 64 s in (sampled every 10 s) |
+| Restored, 90 s | 11 / 10 | 8 / 2 | none | connected at the first sample |
+
+The robots never stopped and never faulted, whatever the uplink did: their gateway is at the site. Neura saw the partition and the reconnection.
+
+The success rate, 40 of 87 tasks, is below lerobot-eval's 70% for this checkpoint. Two causes are likely, neither measured apart yet. On these CPUs a chunk is computed from an observation a quarter to half a second old. And the robot executes 35 of each chunk's 100 actions before replacing it. On a GPU a forward pass takes milliseconds. The evidence workflow measures the same policy served by Neura against LeRobot alone.
+
 **Liveness of the agent's stream.** Planning the partition test found a gap. Neura showed a site connected for as long as its gRPC stream was open. A partition that drops packets, rather than resetting connections, would leave the stream "open" until TCP gave up (about 15 minutes of retransmissions) or the edge closed it as idle (10 minutes). Both ends now send HTTP/2 keepalive pings every 20 s and close the stream when one goes unanswered for 10 s. The site shows offline about 30 s after a silent partition, and the agent starts reconnecting.
 
 ---

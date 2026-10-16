@@ -9,7 +9,8 @@
 #   deploy/gcp/deploy.sh ssh [CMD]     a shell on the VM (through IAP)
 #
 # Settings (environment):
-#   NEURA_GCP_PROJECT    project id (default: gcloud's configured project)
+#   GCP_SA_KEY           a service account's JSON key (its contents), instead of `gcloud auth login`
+#   NEURA_GCP_PROJECT    project id (default: the key's project, else gcloud's configured project)
 #   NEURA_GCP_REGION     default us-central1;  NEURA_GCP_ZONE  default <region>-a
 #   NEURA_DOMAIN         e.g. nucleilabs.ai. Unset: <ip>.sslip.io, which works with no DNS setup.
 #                        With your own domain, point <domain>, console., agents. and enroll. at the
@@ -28,13 +29,33 @@ set -euo pipefail
 case "${1:-}" in
 up | release | admin-token | status | ssh) ;;
 *)
-    sed -n '2,25p' "$0"
+    sed -n '2,/^set -euo/{/^set -euo/!p}' "$0"
     exit 2
     ;;
 esac
 
 cd "$(dirname "$0")/../.."
 HERE=deploy/gcp
+
+for tool in gcloud docker uv openssl; do
+    command -v "$tool" >/dev/null || {
+        echo "deploy.sh needs $tool on PATH" >&2
+        exit 2
+    }
+done
+
+# Credentials: the account gcloud is signed in with or, when GCP_SA_KEY holds a service account's
+# JSON key (a CI secret), that service account. The key goes to gcloud through a private temporary
+# file, removed once gcloud has it; the key's project is the default project.
+if [[ -n ${GCP_SA_KEY:-} ]]; then
+    key_file=$(mktemp)
+    trap 'rm -f "$key_file"' EXIT
+    (umask 077 && printf '%s' "$GCP_SA_KEY" >"$key_file")
+    gcloud auth activate-service-account --key-file="$key_file" --quiet >/dev/null
+    : "${NEURA_GCP_PROJECT:=$(python3 -c \
+        'import json, sys; print(json.load(open(sys.argv[1]))["project_id"])' "$key_file")}"
+    rm -f "$key_file"
+fi
 
 PROJECT=${NEURA_GCP_PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}
 [[ -n $PROJECT ]] || {

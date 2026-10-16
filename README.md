@@ -186,6 +186,9 @@ deploy/gcp/deploy.sh admin-token    # the first admin API token, to sign in to t
 deploy/gcp/deploy.sh release        # later: ship the current commit
 ```
 
+From GitHub instead: add the service account's JSON key as the `GCP_SA_KEY` secret (environment
+`production`), then run Actions → Deploy (`.github/workflows/deploy.yml`, manual only).
+
 Without `NEURA_DOMAIN` the stack is served at `<ip>.sslip.io`. With a domain, point it and its
 `console.`, `agents.` and `enroll.` names at the address `up` prints.
 

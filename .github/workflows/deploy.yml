@@ -1,0 +1,62 @@
+name: Deploy
+
+# Deploys Neura's cloud side to Google Cloud with deploy/gcp/deploy.sh (design §20.10). It runs only
+# when started by hand (Actions → Deploy → Run workflow), never on a push.
+#
+# Needs the GCP_SA_KEY secret, in the "production" environment or the repository: the full JSON key
+# of a service account with the Owner role on the project. The project is the key's. Optional
+# repository variables: NEURA_DOMAIN, NEURA_ACME_EMAIL, NEURA_CONTACT_URL.
+#
+# The first admin API token is never printed here: read it in the Cloud console (Secret Manager →
+# neura-admin-token) or with `deploy/gcp/deploy.sh admin-token`.
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "up: create or update the infrastructure, then release. release: ship this commit."
+        type: choice
+        options: [up, release]
+        default: up
+      domain:
+        description: "Domain (default: the NEURA_DOMAIN variable, else the one already deployed, else <ip>.sslip.io)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  deploy:
+    name: ${{ inputs.command }}
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Deploy
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          COMMAND: ${{ inputs.command }}
+          NEURA_DOMAIN: ${{ inputs.domain || vars.NEURA_DOMAIN }}
+          NEURA_ACME_EMAIL: ${{ vars.NEURA_ACME_EMAIL }}
+          NEURA_CONTACT_URL: ${{ vars.NEURA_CONTACT_URL }}
+        shell: bash
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"
+            exit 1
+          fi
+          deploy/gcp/deploy.sh "$COMMAND" | tee -a "$GITHUB_STEP_SUMMARY"

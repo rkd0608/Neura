@@ -7,6 +7,8 @@ observation through ``preprocess_observation``, the checkpoint's own preprocesso
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +16,33 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-def checkpoint_path(spec: str | Path) -> Path:
+def checkpoint_path(spec: str | Path, workdir: Path) -> tuple[Path, bool]:
+    """(local checkpoint, migrated). A checkpoint saved before LeRobot 0.4 has its normalization
+    inside the model and no processor files: it is migrated into ``workdir`` with LeRobot's own
+    tool (``lerobot.processor.migrate_policy_normalization``), which changes its files."""
     text = str(spec)
     if text.startswith("hub:"):
         from huggingface_hub import snapshot_download
 
-        return Path(snapshot_download(repo_id=text.removeprefix("hub:")))
-    return Path(text)
+        path = Path(snapshot_download(repo_id=text.removeprefix("hub:")))
+    else:
+        path = Path(text)
+    if (path / "policy_preprocessor.json").is_file():
+        return path, False
+    migrated = workdir / "migrated"
+    subprocess.run(  # noqa: S603 - LeRobot's own migration, on a checkpoint we were given
+        [
+            sys.executable,
+            "-m",
+            "lerobot.processor.migrate_policy_normalization",
+            "--pretrained-path",
+            str(path),
+            "--output-dir",
+            str(migrated),
+        ],
+        check=True,
+    )
+    return migrated, True
 
 
 class LocalPolicy:

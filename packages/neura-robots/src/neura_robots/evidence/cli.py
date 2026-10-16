@@ -64,6 +64,27 @@ def _hardware() -> dict[str, Any]:
     return info
 
 
+def reference_agreement(
+    eval_info: dict[str, Any], episodes: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """LeRobot's own ``lerobot-eval`` on gym-aloha (``eval_info.json``) against this port's
+    ``lerobot-eval`` protocol, seed by seed."""
+    theirs = {int(e["seed"]): bool(e["success"]) for e in eval_info["per_episode"]}
+    ours = {int(e["seed"]): bool(e["success"]) for e in episodes}
+    common = sorted(set(theirs) & set(ours))
+    agree = [seed for seed in common if theirs[seed] == ours[seed]]
+    return {
+        "tool": "lerobot-eval on gym-aloha (dm_control), Python 3.12",
+        "episodes_compared": len(common),
+        "same_outcome": len(agree),
+        "different_outcome_seeds": [seed for seed in common if seed not in agree],
+        "lerobot_eval_success_rate": round(sum(theirs[s] for s in common) / len(common), 4)
+        if common
+        else None,
+        "lerobot_eval_pc_success_reported": eval_info.get("aggregated", {}).get("pc_success"),
+    }
+
+
 def closed_loop(args: argparse.Namespace) -> int:
     from neura_robots.aloha import AlohaSim
     from neura_robots.aloha.contracts import Chunking, write
@@ -80,6 +101,7 @@ def closed_loop(args: argparse.Namespace) -> int:
     seeds = list(range(args.first_seed, args.first_seed + args.episodes))
     with tempfile.TemporaryDirectory(prefix="ne-") as scratch:
         work = Path(scratch)
+        migrated = False
         if args.synthetic:
             from neura_robots.evidence.synthetic import write_checkpoint
 
@@ -89,7 +111,7 @@ def closed_loop(args: argparse.Namespace) -> int:
             if not args.checkpoint:
                 raise SystemExit("give --checkpoint (a directory or hub:<repo>) or --synthetic")
             _say(f"fetching {args.checkpoint}")
-            checkpoint = checkpoint_path(args.checkpoint)
+            checkpoint, migrated = checkpoint_path(args.checkpoint, work)
             source = str(args.checkpoint).removeprefix("hub:")
         chunking = Chunking(actions_per_chunk=args.actions_per_chunk, refill_at=args.refill_at)
         deployment = write(
@@ -107,6 +129,8 @@ def closed_loop(args: argparse.Namespace) -> int:
             "checkpoint": {
                 "source": source,
                 "synthetic": bool(args.synthetic),
+                # Saved before LeRobot 0.4: migrated with LeRobot's own tool (new files).
+                "migrated_to_processors": migrated,
                 "weights": [
                     w.model_dump(mode="json") for w in deployment.binding.artifact.spec.weights
                 ],
@@ -155,6 +179,11 @@ def closed_loop(args: argparse.Namespace) -> int:
                 "summary": summarize(results),
                 "episodes": [r.to_json() for r in results],
             }
+        if args.reference is not None and "lerobot-eval" in report["systems"]:
+            report["reference"] = reference_agreement(
+                json.loads(args.reference.read_text(encoding="utf-8")),
+                report["systems"]["lerobot-eval"]["episodes"],
+            )
         report["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     args.out.write_text(json.dumps(report, indent=1), encoding="utf-8")
     for system, data in report["systems"].items():
@@ -185,6 +214,9 @@ def main(argv: list[str] | None = None) -> int:
     loop.add_argument("--device", default="cpu")
     loop.add_argument("--actions-per-chunk", type=int, default=100)
     loop.add_argument("--refill-at", type=int, default=30, help="actions left when Neura refills")
+    loop.add_argument(
+        "--reference", type=Path, help="eval_info.json of lerobot-eval on gym-aloha, same seeds"
+    )
     loop.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "closed-loop":

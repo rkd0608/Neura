@@ -1,0 +1,154 @@
+name: Evidence
+
+# Published policies on the scenes they were trained for, served by Neura and by the in-process
+# alternatives, with the same seeds (packages/neura-robots/src/neura_robots/evidence). Started by
+# hand: it downloads checkpoints from the Hugging Face Hub and runs for tens of minutes on CPU.
+#
+# - reference: LeRobot's own lerobot-eval on gym-aloha (dm_control, Python 3.12), the protocol
+#   LeRobot publishes its success rates with, and gym-aloha's side of the fidelity check;
+# - evidence: the fidelity check of Neura's MuJoCo port against it (step for step), then
+#   neura-evidence closed-loop for every system, compared seed by seed with the reference.
+on:
+  workflow_dispatch:
+    inputs:
+      checkpoint:
+        description: "LeRobot checkpoint on the Hub"
+        type: string
+        default: lerobot/act_aloha_sim_transfer_cube_human
+      task:
+        description: "ALOHA task the checkpoint was trained on"
+        type: choice
+        options: [transfer_cube, insertion]
+        default: transfer_cube
+      episodes:
+        description: "Episodes per system (seeds from 1000)"
+        type: number
+        default: 50
+      systems:
+        description: "Systems to run"
+        type: string
+        default: lerobot-eval,lerobot-realtime,neura
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+  MUJOCO_GL: egl
+
+jobs:
+  reference:
+    name: lerobot-eval on gym-aloha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Headless OpenGL
+        run: sudo apt-get update -q && sudo apt-get install -yq libegl1 libgl1 libosmesa6
+      - name: LeRobot with gym-aloha (Python 3.12)
+        run: |
+          uv venv -q -p 3.12 /tmp/ref
+          uv pip install -q --python /tmp/ref --torch-backend cpu "lerobot[aloha]==0.6.1"
+      - name: lerobot-eval
+        env:
+          CHECKPOINT: ${{ inputs.checkpoint }}
+          TASK: ${{ inputs.task }}
+          EPISODES: ${{ inputs.episodes }}
+        run: |
+          case "$TASK" in
+            transfer_cube) GYM=AlohaTransferCube-v0 ;;
+            insertion) GYM=AlohaInsertion-v0 ;;
+          esac
+          /tmp/ref/bin/lerobot-eval --policy.path="$CHECKPOINT" --policy.device=cpu \
+            --env.type=aloha --env.task="$GYM" \
+            --eval.n_episodes="$EPISODES" --eval.batch_size=1 --seed=1000 \
+            --output_dir=out/reference
+      - name: gym-aloha side of the fidelity check
+        run: |
+          for task in transfer_cube insertion; do
+            /tmp/ref/bin/python -I packages/neura-robots/src/neura_robots/aloha/fidelity.py \
+              record --impl gym-aloha --task "$task" --dtype float32 \
+              --out "out/reference/fidelity-$task.npz"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reference
+          path: |
+            out/reference/eval_info.json
+            out/reference/fidelity-*.npz
+
+  evidence:
+    name: Neura and the in-process baselines
+    needs: reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Headless OpenGL
+        run: sudo apt-get update -q && sudo apt-get install -yq libegl1 libgl1 libosmesa6
+      - name: Install (with PyTorch, LeRobot and MuJoCo)
+        run: make models-setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: reference
+          path: out/reference
+      - name: Fidelity of the MuJoCo port, step for step
+        run: |
+          for task in transfer_cube insertion; do
+            uv run --group models python -m neura_robots.aloha.fidelity record --impl neura \
+              --task "$task" --dtype float32 --out "out/fidelity-$task.npz"
+            uv run --group models python -m neura_robots.aloha.fidelity compare \
+              "out/reference/fidelity-$task.npz" "out/fidelity-$task.npz" \
+              | tee "out/fidelity-$task.json"
+          done
+      - name: Closed loop
+        env:
+          CHECKPOINT: ${{ inputs.checkpoint }}
+          TASK: ${{ inputs.task }}
+          EPISODES: ${{ inputs.episodes }}
+          SYSTEMS: ${{ inputs.systems }}
+        run: |
+          uv run --group models neura-evidence closed-loop --checkpoint "hub:$CHECKPOINT" \
+            --task "$TASK" --episodes "$EPISODES" --systems "$SYSTEMS" \
+            --reference out/reference/eval_info.json --out out/closed-loop.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f out/closed-loop.json ]; then
+            python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("out/closed-loop.json"))
+          print("\n| System | Success | 95% CI | Inference median (ms) |\n|---|---|---|---|")
+          for name, v in d["systems"].items():
+              s = v["summary"]
+              low, high = s["success_rate_95ci"]
+              ms = s.get("inference_ms", {}).get("median", "")
+              print(f"| {name} | {s['successes']}/{s['episodes']} | {low:.0%}-{high:.0%} | {ms} |")
+          if "reference" in d:
+              r = d["reference"]
+              print(f"\nlerobot-eval on gym-aloha: {r['lerobot_eval_success_rate']:.0%}; "
+                    f"same outcome as the port on {r['same_outcome']}/{r['episodes_compared']} seeds")
+          EOF
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: evidence
+          path: |
+            out/closed-loop.json
+            out/fidelity-*.json

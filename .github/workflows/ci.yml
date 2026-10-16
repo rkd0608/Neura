@@ -65,9 +65,13 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
+      - name: Headless OpenGL (the simulated ALOHA renders its camera)
+        run: sudo apt-get update -q && sudo apt-get install -yq libegl1 libgl1 libosmesa6
       - name: Install (with PyTorch and LeRobot)
         run: make models-setup
       - name: Model tests and a smoke run of the benchmark
+        env:
+          MUJOCO_GL: egl
         run: make test-models
       - name: Hardware qualification suite on the emulated SO-101 arm
         run: make qualify-emulated

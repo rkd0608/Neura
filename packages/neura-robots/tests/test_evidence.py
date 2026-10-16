@@ -13,10 +13,27 @@ import pytest
 os.environ.setdefault("MUJOCO_GL", "egl")
 pytest.importorskip("mujoco")
 
-from neura_contracts import FaultResponse, RobotProfile, parse_document
-from neura_robots.aloha import JOINTS, AlohaSim
-from neura_robots.aloha.arm import AlohaSimArm
-from neura_robots.aloha.contracts import Chunking, robot_profile, write
+
+def _renders() -> bool:
+    from neura_robots.aloha import AlohaSim
+
+    sim = AlohaSim()
+    try:
+        sim.render("top")
+        return True
+    except Exception:
+        return False
+    finally:
+        sim.close()
+
+
+if not _renders():
+    pytest.skip("no offscreen OpenGL (install libegl1, or set MUJOCO_GL)", allow_module_level=True)
+
+from neura_contracts import FaultResponse, RobotProfile, parse_document  # noqa: E402
+from neura_robots.aloha import JOINTS, AlohaSim  # noqa: E402
+from neura_robots.aloha.arm import AlohaSimArm  # noqa: E402
+from neura_robots.aloha.contracts import Chunking, robot_profile, write  # noqa: E402
 
 
 def _robot() -> RobotProfile:

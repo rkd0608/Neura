@@ -1,0 +1,121 @@
+name: GPU benchmark (Google Cloud)
+
+# The GPU-sharing benchmark (design §9.5, §10, §16 step 0) on one NVIDIA L4 in Google Cloud
+# (deploy/gcp/bench.sh): ACT, Diffusion Policy, SmolVLA and pi0, robots per GPU shared by Neura
+# against one GPU per robot. Started by hand. Needs the GCP_SA_KEY secret of the Deploy workflow
+# and an L4 in the project's GPU quota (the run says how to ask for one when there is none).
+#
+# First, SmolVLA through the whole suite on a CPU runner (a two-layer model), so a broken VLA path
+# costs no GPU time. The report is uploaded as an artifact and committed to the bench-reports
+# branch, under bench/reports/<gpu>/.
+on:
+  workflow_dispatch:
+    inputs:
+      spot:
+        description: "A Spot VM: a fraction of the price; Google can take it back (then run again)"
+        type: boolean
+        default: true
+      hours:
+        description: "The VM is deleted after this many hours, finished or not"
+        type: number
+        default: 3
+      skip_smoke:
+        description: "Skip the CPU run of SmolVLA first"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-gcp
+  cancel-in-progress: false
+
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  smoke:
+    name: SmolVLA through the suite on a CPU
+    if: ${{ !inputs.skip_smoke }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Install (with PyTorch and LeRobot)
+        run: uv sync --frozen --group models
+      - name: The suite, with a two-layer SmolVLA
+        run: uv run --group models neura-bench run --preset smoke-vla --out smoke-vla
+      - name: Summary
+        if: always()
+        run: |
+          [ ! -f smoke-vla/README.md ] || head -n 40 smoke-vla/README.md >> "$GITHUB_STEP_SUMMARY"
+
+  gpu:
+    name: On an L4
+    needs: smoke
+    if: ${{ always() && (needs.smoke.result == 'success' || needs.smoke.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 240
+    permissions:
+      contents: write # the report, committed to the bench-reports branch
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Benchmark
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          NEURA_BENCH_SPOT: ${{ inputs.spot }}
+          NEURA_BENCH_HOURS: ${{ inputs.hours }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"
+            exit 1
+          fi
+          deploy/gcp/bench.sh run | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: bench-report
+          path: bench-report
+          if-no-files-found: ignore
+      - name: Commit the report to bench-reports
+        if: success()
+        run: |
+          label=$(python3 - <<'EOF'
+          import json, re
+          name = json.load(open("bench-report/results.json"))["environment"]["device_name"]
+          name = re.sub(r"\(r\)|\(tm\)|cpu @.*|@.*", "", name.lower())
+          print(re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60])
+          EOF
+          )
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth 1 origin bench-reports 2>/dev/null; then
+            git worktree add reports FETCH_HEAD
+            git -C reports switch -c bench-reports
+          else
+            git worktree add --orphan -b bench-reports reports
+          fi
+          mkdir -p "reports/bench/reports/$label"
+          cp bench-report/README.md bench-report/results.json "reports/bench/reports/$label/"
+          git -C reports add bench
+          git -C reports commit -q -m "GPU benchmark report: $label, from $(git rev-parse --short HEAD)"
+          git -C reports push origin bench-reports
+          echo "Committed to bench-reports: bench/reports/$label" >> "$GITHUB_STEP_SUMMARY"
+      - name: Delete the VM, whatever happened
+        if: always()
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: '[ -z "$GCP_SA_KEY" ] || deploy/gcp/bench.sh delete'

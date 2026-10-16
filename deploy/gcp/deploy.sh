@@ -82,6 +82,15 @@ SECRETS=(neura-db-password neura-manifest-signing-key neura-agent-ca-cert neura-
 g() { gcloud --project "$PROJECT" --quiet "$@"; }
 step() { echo "--> $*" >&2; }
 exists() { g "$@" >/dev/null 2>&1; }
+# A new service account takes a few seconds to be visible to IAM; bind its roles with retries.
+bind() {
+    local attempt
+    for attempt in 1 2 3 4 5 6; do
+        g "$@" >/dev/null && return 0
+        [[ $attempt == 6 ]] || sleep 10
+    done
+    return 1
+}
 
 address() { g compute addresses describe "$VM-ip" --region "$REGION" --format='value(address)'; }
 
@@ -153,25 +162,25 @@ infrastructure() {
     exists iam service-accounts describe "$SA" ||
         g iam service-accounts create "$SA_NAME" --display-name="Neura host"
     for role in roles/cloudsql.client roles/logging.logWriter roles/monitoring.metricWriter; do
-        g projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" --role="$role" \
-            --condition=None >/dev/null
+        bind projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" \
+            --role="$role" --condition=None
     done
 
     step "Artifact Registry $REGISTRY"
     exists artifacts repositories describe "$REPO" --location "$REGION" ||
         g artifacts repositories create "$REPO" --location "$REGION" --repository-format=docker
-    g artifacts repositories add-iam-policy-binding "$REPO" --location "$REGION" \
-        --member="serviceAccount:$SA" --role=roles/artifactregistry.reader >/dev/null
+    bind artifacts repositories add-iam-policy-binding "$REPO" --location "$REGION" \
+        --member="serviceAccount:$SA" --role=roles/artifactregistry.reader
 
     step "secrets"
     generate_secrets
     for name in "${SECRETS[@]}"; do
-        g secrets add-iam-policy-binding "$name" --member="serviceAccount:$SA" \
-            --role=roles/secretmanager.secretAccessor >/dev/null
+        bind secrets add-iam-policy-binding "$name" --member="serviceAccount:$SA" \
+            --role=roles/secretmanager.secretAccessor
     done
     # The VM adds the bootstrap admin token; it cannot read it back.
-    g secrets add-iam-policy-binding neura-admin-token --member="serviceAccount:$SA" \
-        --role=roles/secretmanager.secretVersionAdder >/dev/null
+    bind secrets add-iam-policy-binding neura-admin-token --member="serviceAccount:$SA" \
+        --role=roles/secretmanager.secretVersionAdder
 
     step "Cloud SQL $SQL (a first create takes several minutes)"
     if ! exists sql instances describe "$SQL"; then

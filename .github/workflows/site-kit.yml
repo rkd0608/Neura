@@ -11,6 +11,17 @@ on:
         description: "Tasks each robot must complete"
         type: number
         default: 3
+      # A runner's 4 shared vCPUs take about 550 ms per forward pass of the published ACT (a
+      # recent laptop, about 100-150 ms): one robot, with the next chunk requested at 65 actions
+      # left (a 1.3 s budget, 35 actions a chunk).
+      robots:
+        description: "Robots at the site"
+        type: number
+        default: 1
+      refill_at:
+        description: "Actions left of a chunk when the next is requested"
+        type: number
+        default: 65
 
 permissions:
   contents: read
@@ -67,7 +78,11 @@ jobs:
       - name: The kit, end to end
         env:
           TASKS: ${{ inputs.tasks }}
-        run: uv run python tools/smoke_site_kit.py --tasks "$TASKS" --out out/site-kit
+          ROBOTS: ${{ inputs.robots }}
+          REFILL_AT: ${{ inputs.refill_at }}
+        run: |
+          uv run python tools/smoke_site_kit.py --tasks "$TASKS" --robots "$ROBOTS" \
+            --refill-at "$REFILL_AT" --out out/site-kit
       - name: Logs
         if: failure()
         run: |

@@ -10,7 +10,8 @@ stack's control plane (deploy/compose) and with the published ALOHA checkpoint f
    model), then activation, approved by the site operator (./site.sh approve).
 6. The robots run tasks: each completes some without a fault. The cell's cameras are saved.
 
-Usage: uv run python tools/smoke_site_kit.py [--tasks 3] [--out DIR] [--checkpoint REPO|DIR]
+Usage: uv run python tools/smoke_site_kit.py [--tasks 3] [--robots 2] [--refill-at N]
+                                            [--out DIR] [--checkpoint REPO|DIR]
 Needs the development control plane:
     docker compose -f deploy/compose/compose.yaml up -d control-plane
 """
@@ -38,7 +39,6 @@ API = "http://127.0.0.1:8080"
 # The control plane as the kit's containers reach it, on the development stack's network.
 API_IN_NETWORK = "http://control-plane:8080"
 CELL = "http://127.0.0.1:8095"
-ROBOTS = ("aloha-1", "aloha-2")
 
 
 def step(message: str) -> None:
@@ -99,10 +99,17 @@ def cell() -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tasks", type=int, default=3, help="tasks each robot must complete")
+    parser.add_argument(
+        "--robots", type=int, default=2, help="robots at the site (as many as it can serve)"
+    )
+    parser.add_argument(
+        "--refill-at", type=int, default=None, help="the execution profile's (default: the kit's)"
+    )
     parser.add_argument("--checkpoint", default=None, help="default: the kit's")
     parser.add_argument("--out", type=Path, default=ROOT / "out" / "site-kit")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    names = [f"aloha-{i}" for i in range(1, args.robots + 1)]
     token = dev_token()
     neura = Client(API, token=token, max_retries=5)
 
@@ -114,6 +121,8 @@ def main() -> int:
 
     step("./site.sh publish: the ML team's release")
     extra = ["--checkpoint", args.checkpoint] if args.checkpoint else []
+    if args.refill_at is not None:
+        extra += ["--refill-at", str(args.refill_at)]
     site_sh("publish", f"{API_IN_NETWORK}/o/{org}/p/{project}", *extra, token=token)
     contracts = {
         "robot_profile_id": neura.list_robot_profiles(project)["items"][0]["metadata"]["id"],
@@ -142,7 +151,7 @@ def main() -> int:
                 }
             },
         )["metadata"]["id"]
-        for name in ROBOTS
+        for name in names
     ]
     install = neura.create_enrollment_token(site, body={"ttl_minutes": 30})["install_command"]
 
@@ -150,8 +159,8 @@ def main() -> int:
     site_sh("connect", install)
     wait_for("the site to connect", lambda: neura.get_site(site)["status"].get("connected"), 120)
     wait_for(
-        "both robots in the cell",
-        lambda: len(cell()["robots"]) == len(ROBOTS) or None,
+        f"{len(names)} robots in the cell",
+        lambda: len(cell()["robots"]) == len(names) or None,
         120,
     )
 
@@ -187,8 +196,11 @@ def main() -> int:
     print(
         f"    capacity: {capacity['max_robots']} robots on this server; p99 ms by batch {latency}"
     )
-    if capacity["max_robots"] < len(ROBOTS):
-        raise SystemExit(f"this server cannot serve {len(ROBOTS)} robots: {capacity}")
+    if capacity["max_robots"] < len(names):
+        raise SystemExit(
+            f"this server can serve {capacity['max_robots']} robots at this profile, not "
+            f"{len(names)} (try --robots or --refill-at): {capacity}"
+        )
 
     step("activation, approved by the site operator")
     activation = neura.request_activation(deployment, body={"revision_id": revision})

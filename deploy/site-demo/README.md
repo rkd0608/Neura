@@ -68,6 +68,13 @@ there, connected to the gateway, waiting for a revision.
    artifact `act-aloha-transfer-cube` and its execution profile.
 2. **Prepare** the revision. The site checks the contracts and the signature, loads the model
    and measures it, then reports how many robots this machine can serve at this profile.
+
+   A recent laptop serves two or more: on a CPU, a forward pass takes 100 to 150 ms. A slower
+   machine may serve fewer; a 4-core cloud VM takes about 550 ms and serves one. An activation
+   for more robots than that fails at once with `ADMISSION_CAPACITY_EXCEEDED`. Then either:
+   - remove a robot from the deployment;
+   - or give each request more time: `./site.sh publish <url> --refill-at 65`, then add a
+     revision with the new execution profile.
 3. **Activate** it. On the cell's page an approval appears: approve it as the site operator (or
    run `./site.sh approve`). The cloud can ask, but only the site can say yes.
 

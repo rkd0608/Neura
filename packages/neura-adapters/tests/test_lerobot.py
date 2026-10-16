@@ -176,3 +176,45 @@ def test_profiler_measures_latency_per_batch_size(checkpoint: Path, binding_fact
     assert measured.memory_source == "process_peak_rss"
     # Four requests in one pass cost less than four passes of one.
     assert measured.points[1].p50_us < 4 * measured.points[0].p50_us
+
+
+def _word_tokenizer(directory: Path) -> Path:
+    """A tokenizer made here (no Hub): a few words, a pad token."""
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    vocab = {"[PAD]": 0, "[UNK]": 1, "pick": 2, "up": 3, "the": 4, "object": 5}
+    backend = Tokenizer(models.WordLevel(vocab, unk_token="[UNK]"))
+    backend.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=backend, pad_token="[PAD]", unk_token="[UNK]"
+    )
+    tokenizer.save_pretrained(directory)
+    return directory
+
+
+def test_a_gated_tokenizer_is_substituted_and_the_pipeline_says_so(tmp_path: Path) -> None:
+    pytest.importorskip("transformers", reason="needs LeRobot's smolvla and pi extras")
+    import json
+
+    from lerobot.processor import PolicyProcessorPipeline
+    from lerobot.processor.tokenizer_processor import TokenizerProcessorStep
+
+    from neura_adapters.synthetic import (
+        PALIGEMMA_TOKENIZER,
+        rename_tokenizer,
+        substituted_tokenizer,
+    )
+
+    local = str(_word_tokenizer(tmp_path / "tokenizer"))
+    with substituted_tokenizer(PALIGEMMA_TOKENIZER, local):
+        step = TokenizerProcessorStep(tokenizer_name=PALIGEMMA_TOKENIZER, max_length=48)
+    # The same fixed number of tokens as pi0 asks of PaliGemma's tokenizer.
+    tokens = step._tokenize_text(["pick up the object\n"])
+    assert tokens["input_ids"].shape == (1, 48)
+    pipeline = PolicyProcessorPipeline(steps=[step], name="policy_preprocessor")
+    pipeline.save_pretrained(tmp_path / "checkpoint")
+    rename_tokenizer(tmp_path / "checkpoint", PALIGEMMA_TOKENIZER, local)
+    saved = json.loads((tmp_path / "checkpoint" / "policy_preprocessor.json").read_text())
+    names = [s["config"].get("tokenizer_name") for s in saved["steps"]]
+    assert names == [local]  # loading it asks for the tokenizer it was built with

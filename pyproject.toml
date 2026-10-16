@@ -133,6 +133,7 @@ filterwarnings = ["error"]
 [[tool.mypy.overrides]]
 module = [
     "lerobot.*", "torch", "torch.*", "torchvision", "torchvision.*", "mujoco", "mujoco.*",
+    "tokenizers", "tokenizers.*", "transformers", "transformers.*",
     "gym_aloha", "gym_aloha.*", "PIL", "PIL.*",
 ]
 ignore_missing_imports = true

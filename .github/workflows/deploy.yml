@@ -45,7 +45,8 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
+          # deploy.sh needs uv only to make the first keys; nothing worth caching.
+          enable-cache: false
       - name: Deploy
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}

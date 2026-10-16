@@ -136,8 +136,13 @@ RUN apt-get update \
 COPY --from=build-kit /app/.venv /app/.venv
 COPY deploy/site-demo/kit.py /app/kit.py
 RUN mkdir -p /kit && chown neura:neura /kit
+# Caches in /tmp: the user's home (/app) is not writable. LeRobot's checkpoint migration builds the
+# policy, which fetches its pretrained backbone (only the publish step has the network for that).
 ENV MUJOCO_GL=egl \
     HF_HOME=/kit/.huggingface \
+    XDG_CACHE_HOME=/tmp/cache \
+    XDG_CONFIG_HOME=/tmp/config \
+    TORCH_HOME=/tmp/cache/torch \
     NEURA_AGENT_LOCAL_HOST=0.0.0.0
 USER neura
 EXPOSE 8090 8095 50051

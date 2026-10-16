@@ -28,6 +28,7 @@ import signal
 import tempfile
 import threading
 import time
+import urllib.request
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -182,6 +183,29 @@ class LocalSite:
         self.gateway = GatewayProcess(path, workdir / "gateway.log")
         self.proxy = FaultProxy(proxy_port, gateway_port)
         self.target = f"127.0.0.1:{proxy_port}"
+        self.status_url = f"http://127.0.0.1:{status_port}/v1/local/dataplane"
+
+    def status(self) -> dict[str, Any]:
+        """The gateway's local status API (empty while it starts)."""
+        try:
+            with urllib.request.urlopen(self.status_url, timeout=2) as response:  # noqa: S310 - loopback
+                status: dict[str, Any] = json.load(response)
+        except (OSError, ValueError):
+            return {}
+        return status
+
+    def workers(self) -> list[dict[str, Any]]:
+        groups = self.status().get("groups", {}).values()
+        return [g["worker"] for g in groups if "worker" in g]
+
+    async def workers_ready(self, timeout_s: float) -> bool:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            workers = await asyncio.to_thread(self.workers)
+            if workers and all(w.get("state") == "ready" for w in workers):
+                return True
+            await asyncio.sleep(0.25)
+        return False
 
     async def __aenter__(self) -> LocalSite:
         await self.gateway.start()

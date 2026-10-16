@@ -1,5 +1,6 @@
-"""The robot-side process for a real arm (design §7): the runtime, the session client and the
-gateway connection around a connected ``So101Arm``, driven by a local operator.
+"""The robot-side process for an arm (design §7): the runtime, the session client and the
+gateway connection around a connected arm (``arm.Arm``: the SO-101, or the simulated ALOHA),
+driven by a local operator.
 
 Nothing moves without the operator: the process never arms on its own. Operator commands arrive
 as lines (from a terminal, a pipe, or ``neura-qualify``) and run on the control loop, the one
@@ -34,7 +35,8 @@ from typing import Any
 import grpc
 
 from neura_contracts import ContractError, FaultResponse, RobotProfile
-from neura_robots.so101 import ArmError, So101Arm
+from neura_robots.arm import Arm
+from neura_robots.so101 import ArmError
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.grpc_client import GatewayConnection, RobotCredentials, fetch_assignment
 from neura_runtime.runtime import ACTIVE_STATES, RobotRuntime, RuntimeState, TransitionError
@@ -73,7 +75,7 @@ class OperatorInbox:
 class ArmProcess:
     def __init__(
         self,
-        arm: So101Arm,
+        arm: Arm,
         binding: ExecutionBinding,
         robot_id: str,
         revision_id: str,
@@ -249,7 +251,7 @@ class AssignedArm:
 
     def __init__(
         self,
-        open_arm: Callable[[RobotProfile], So101Arm],
+        open_arm: Callable[[RobotProfile], Arm],
         robot_id: str,
         *,
         gateway: str,
@@ -260,7 +262,7 @@ class AssignedArm:
         poll_seconds: float = 2.0,
     ) -> None:
         self.open_arm = open_arm  # connects the arm for the first revision's robot profile
-        self.arm: So101Arm | None = None
+        self.arm: Arm | None = None
         self.robot_id = robot_id
         self.gateway = gateway
         self.credentials = credentials

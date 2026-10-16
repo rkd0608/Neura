@@ -19,6 +19,7 @@ dependencies = [
 neura-arm = "neura_robots.cli:main"
 neura-arm-emulator = "neura_robots.emulator:main"
 neura-qualify = "neura_robots.qualify.cli:main"
+neura-evidence = "neura_robots.evidence.cli:main"
 
 [project.optional-dependencies]
 # Real SO-101 arms through LeRobot (its Feetech bus, calibration and cameras). LeRobot brings

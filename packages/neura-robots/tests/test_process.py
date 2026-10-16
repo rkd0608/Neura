@@ -147,7 +147,9 @@ async def test_nothing_moves_until_the_operator_arms(
     await robot.until(lambda: any(line.startswith("{") for line in said))
     status = json.loads(next(line for line in said if line.startswith("{")))
     assert status["state"] == "Ready"
-    assert set(status["positions"]) == set(robot.process.arm.commands)
+    arm = robot.process.arm
+    assert isinstance(arm, So101Arm)
+    assert set(status["positions"]) == set(arm.commands)
 
 
 async def test_a_bus_failure_latches_and_reset_needs_a_working_arm(

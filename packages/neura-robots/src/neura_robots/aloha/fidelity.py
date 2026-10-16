@@ -97,8 +97,8 @@ def _record_neura(task: str, seed: int, actions: NDArray[np.float64]) -> dict[st
     return out
 
 
-def record(impl: str, task: str, seed: int, steps: int, path: Path) -> None:
-    actions = scripted_actions(steps, seed)
+def record(impl: str, task: str, seed: int, steps: int, path: Path, dtype: str = "float64") -> None:
+    actions = scripted_actions(steps, seed).astype(dtype)
     data = (_record_gym_aloha if impl == "gym-aloha" else _record_neura)(task, seed, actions)
     import mujoco
 
@@ -154,12 +154,15 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--seed", type=int, default=1000)
     rec.add_argument("--steps", type=int, default=400)
     rec.add_argument("--out", type=Path, required=True)
+    rec.add_argument(
+        "--dtype", choices=["float64", "float32"], default="float64", help="policies emit float32"
+    )
     cmp = sub.add_parser("compare")
     cmp.add_argument("reference", type=Path)
     cmp.add_argument("candidate", type=Path)
     args = parser.parse_args(argv)
     if args.command == "record":
-        record(args.impl, args.task, args.seed, args.steps, args.out)
+        record(args.impl, args.task, args.seed, args.steps, args.out, args.dtype)
         return 0
     result = compare(args.reference, args.candidate)
     print(json.dumps(result, indent=2))

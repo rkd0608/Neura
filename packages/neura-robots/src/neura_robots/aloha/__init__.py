@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -67,11 +67,11 @@ _GRIPPER_SPAN = PUPPET_GRIPPER_POSITION_OPEN - PUPPET_GRIPPER_POSITION_CLOSE
 MAX_REWARD = 4
 
 
-def normalize_gripper(position: float) -> float:
+def normalize_gripper(position: Any) -> Any:
     return (position - PUPPET_GRIPPER_POSITION_CLOSE) / _GRIPPER_SPAN
 
 
-def unnormalize_gripper(value: float) -> float:
+def unnormalize_gripper(value: Any) -> Any:
     return value * _GRIPPER_SPAN + PUPPET_GRIPPER_POSITION_CLOSE
 
 
@@ -141,35 +141,36 @@ class AlohaSim:
         self.max_reward_seen = self.reward
         self.steps = 0
 
-    def step(self, action: NDArray[np.float64]) -> Step:
+    def step(self, action: NDArray[np.floating[Any]]) -> Step:
         """Apply one command vector (14) and advance one control period."""
-        action = np.asarray(action, dtype=np.float64)
+        self.set_targets(action)
+        return self.advance()
+
+    def set_targets(self, action: NDArray[np.floating[Any]]) -> None:
+        """The 14 commands (6 joints and a normalized gripper per arm) as the 16 position
+        targets, without advancing time. The arithmetic is gym-aloha's, in the action's own
+        precision (a policy's float32 actions stay float32 until they reach the actuators)."""
+        action = np.asarray(action)
         if action.shape != (14,):
             raise ValueError(f"an ALOHA action has 14 values, got {action.shape}")
-        left_gripper = unnormalize_gripper(float(action[6]))
-        right_gripper = unnormalize_gripper(float(action[13]))
+        if not np.issubdtype(action.dtype, np.floating):
+            action = action.astype(np.float64)
+        left = unnormalize_gripper(action[6])
+        right = unnormalize_gripper(action[13])
         self.data.ctrl[:] = np.concatenate(
-            [
-                action[:6],
-                [left_gripper, -left_gripper],
-                action[7:13],
-                [right_gripper, -right_gripper],
-            ]
+            [action[:6], [left, -left], action[7:13], [right, -right]]
         )
+
+    def advance(self) -> Step:
+        """Advance one control period with the current position targets: servos keep tracking
+        their last goal whether or not a new command arrived."""
         self._legacy_step()
         self.steps += 1
         self.reward = self._reward()
         self.max_reward_seen = max(self.max_reward_seen, self.reward)
         return Step(self.reward, self.reward == MAX_REWARD)
 
-    def hold_step(self) -> Step:
-        """Advance one control period with the position targets unchanged: what servos do while
-        no new command arrives."""
-        self._legacy_step()
-        self.steps += 1
-        self.reward = self._reward()
-        self.max_reward_seen = max(self.max_reward_seen, self.reward)
-        return Step(self.reward, self.reward == MAX_REWARD)
+    hold_step = advance
 
     @property
     def success(self) -> bool:
@@ -197,10 +198,14 @@ class AlohaSim:
             [ctrl[:6], [normalize_gripper(ctrl[6])], ctrl[8:14], [normalize_gripper(ctrl[14])]]
         ).astype(np.float64)
 
-    def render(self, camera: str = "top") -> NDArray[np.uint8]:
+    def render(
+        self, camera: str = "top", *, data: mujoco.MjData | None = None
+    ) -> NDArray[np.uint8]:
+        """The camera's view of the scene, or of ``data`` (a copy of its state). The renderer
+        belongs to the thread that first renders."""
         if self._renderer is None:
             self._renderer = mujoco.Renderer(self.model, self.height, self.width)
-        self._renderer.update_scene(self.data, camera=camera)
+        self._renderer.update_scene(self.data if data is None else data, camera=camera)
         image: NDArray[np.uint8] = self._renderer.render()
         return image
 

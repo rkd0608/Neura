@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,7 +102,7 @@ class GatewayConnection:
         self._max_message_bytes = max_message_bytes
         self._on_tick = on_tick
         self._clock = clock
-        self._send: asyncio.Queue[dataplane_pb2.RobotMessage] = asyncio.Queue(maxsize=SEND_QUEUE)
+        self._send = _Outbox(SEND_QUEUE)
         self._calls: set[asyncio.Task[None]] = set()
         self.ticks = 0
         self.late_ticks = 0
@@ -193,20 +194,65 @@ class GatewayConnection:
     ) -> None:
         backoff = 0.1
         while not stop.is_set():
+            ended = asyncio.Event()
             try:
-                call = stub.Stream(self._outgoing(), metadata=self._metadata)
+                call = stub.Stream(self._outgoing(ended), metadata=self._metadata)
                 async for message in call:
                     backoff = 0.1
                     self.client.on_gateway_message(message, self._clock())
             except grpc.aio.AioRpcError as exc:
                 log.debug("stream ended: %s", exc.code())
+            finally:
+                ended.set()
             self.client.on_stream_closed(self._clock())
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 2.0)
 
-    async def _outgoing(self) -> AsyncIterator[dataplane_pb2.RobotMessage]:
-        while True:
-            yield await self._send.get()
+    async def _outgoing(self, ended: asyncio.Event) -> AsyncIterator[dataplane_pb2.RobotMessage]:
+        """The messages of one stream attempt. gRPC can leave the request iterator of a call
+        that already failed waiting here: once its attempt has ended it takes nothing more, so
+        no message meant for the next attempt goes to a dead call."""
+        while not ended.is_set():
+            message = self._send.pop()
+            if message is not None:
+                yield message  # taken and handed over without yielding to the loop in between
+                continue
+            arrived = asyncio.ensure_future(self._send.wait())
+            gone = asyncio.ensure_future(ended.wait())
+            try:
+                await asyncio.wait({arrived, gone}, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                arrived.cancel()
+                gone.cancel()
+
+
+class _Outbox:
+    """The observation stream's bounded send queue (FIFO)."""
+
+    def __init__(self, maxsize: int) -> None:
+        self._items: deque[dataplane_pb2.RobotMessage] = deque()
+        self._maxsize = maxsize
+        self._ready = asyncio.Event()
+
+    def put_nowait(self, message: dataplane_pb2.RobotMessage) -> None:
+        if len(self._items) >= self._maxsize:
+            raise asyncio.QueueFull
+        self._items.append(message)
+        self._ready.set()
+
+    def pop(self) -> dataplane_pb2.RobotMessage | None:
+        if not self._items:
+            return None
+        message = self._items.popleft()
+        if not self._items:
+            self._ready.clear()
+        return message
+
+    async def wait(self) -> None:
+        await self._ready.wait()
+
+    def __len__(self) -> int:
+        return len(self._items)
 
 
 async def fetch_assignment(

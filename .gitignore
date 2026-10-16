@@ -16,3 +16,6 @@ node_modules/
 # Docs site (site/)
 site/build/
 site/.docusaurus/
+
+# LeRobot's async inference writes its logs to ./logs (neura-evidence runs it)
+logs/

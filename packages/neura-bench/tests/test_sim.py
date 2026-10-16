@@ -257,3 +257,20 @@ async def test_latency_stops_at_the_first_batch_that_does_not_fit(
     assert measured.out_of_memory_at == 4
     assert measured.largest_batch == 2
     assert measured.model.process_overhead_mib == 150
+
+
+def test_robots_of_a_language_conditioned_model_arm_with_an_instruction(tmp_path: Path) -> None:
+    files = write_files(tmp_path, contracts(model="smolvla"))
+    assert files.binding.language_input is not None
+    names = ("r0", "r1")
+    result = simulate(
+        Scenario(
+            groups=(
+                GroupSpec("vla", files.binding, "dev-0", FAST, names, Policy.DEADLINE_FAIRNESS, 4),
+            ),
+            warmup_us=SECOND,
+            duration_us=5 * SECOND,
+        )
+    )
+    assert result.requests > 0  # armed and served
+    assert result.faults_per_robot_hour == 0

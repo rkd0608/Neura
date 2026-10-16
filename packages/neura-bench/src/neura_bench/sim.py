@@ -222,6 +222,11 @@ class Scenario:
     seed: int = 1
 
 
+# The instruction a language-conditioned model's simulated robots give (the one its latency is
+# measured with, neura_adapters.base.blank_inputs).
+INSTRUCTION = "pick up the object"
+
+
 class _Robot:
     def __init__(self, site: Simulation, name: str, binding: ExecutionBinding, revision: str):
         self.site = site
@@ -233,6 +238,9 @@ class _Robot:
         self.runtime = RobotRuntime(
             binding, SimController(arm), SimSensors(arm, binding.robot, image_bytes=frames)
         )
+        if binding.language_input is not None:
+            # A language-conditioned model arms only with an instruction: the one it is measured on.
+            self.runtime.set_instruction(INSTRUCTION[: binding.language_max_bytes])
         self.client = SessionClient(
             self.runtime, SessionConfig(robot_id=name, revision_id=revision)
         )

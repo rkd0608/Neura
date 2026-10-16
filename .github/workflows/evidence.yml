@@ -7,7 +7,9 @@ name: Evidence
 # - reference: LeRobot's own lerobot-eval on gym-aloha (dm_control, Python 3.12), the protocol
 #   LeRobot publishes its success rates with, and gym-aloha's side of the fidelity check;
 # - evidence: the fidelity check of Neura's MuJoCo port against it (step for step), then
-#   neura-evidence closed-loop for every system, compared seed by seed with the reference.
+#   neura-evidence closed-loop for every system, compared seed by seed with the reference;
+# - faults: the same faults (latency, a network stall, the model process killed) for Neura and
+#   LeRobot's own remote inference.
 on:
   workflow_dispatch:
     inputs:
@@ -25,9 +27,13 @@ on:
         type: number
         default: 50
       systems:
-        description: "Systems to run"
+        description: "Systems to run (closed loop)"
         type: string
-        default: lerobot-eval,lerobot-realtime,neura
+        default: lerobot-eval,lerobot-realtime,neura,lerobot-async-scaled,lerobot-async
+      fault_episodes:
+        description: "Episodes per system and fault scenario (0: skip the faults job)"
+        type: number
+        default: 10
 
 permissions:
   contents: read
@@ -161,3 +167,40 @@ jobs:
           path: |
             out/closed-loop.json
             out/fidelity-*.json
+
+  faults:
+    name: The same faults for Neura and LeRobot's remote inference
+    needs: reference
+    if: inputs.fault_episodes > 0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Headless OpenGL
+        run: sudo apt-get update -q && sudo apt-get install -yq libegl1 libgl1 libosmesa6
+      - name: Install (with PyTorch, LeRobot and MuJoCo)
+        run: make models-setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: reference
+          path: out/reference
+      - name: Faults
+        env:
+          CHECKPOINT: ${{ inputs.checkpoint }}
+          TASK: ${{ inputs.task }}
+          EPISODES: ${{ inputs.fault_episodes }}
+        run: |
+          uv run --group models neura-evidence faults --checkpoint out/reference/checkpoint \
+            --source "$CHECKPOINT (migrated by LeRobot's migrate_policy_normalization)" \
+            --task "$TASK" --episodes "$EPISODES" --out out/faults.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: faults
+          path: out/faults.json

@@ -51,7 +51,7 @@ dev = [
     "types-pyyaml>=6.0.12",
 ]
 # Real models (PyTorch, LeRobot): `uv sync --group models`. Not part of the default setup.
-models = ["neura-adapters[lerobot]", "neura-robots[so101]"]
+models = ["neura-adapters[lerobot]", "neura-robots[so101,sim]"]
 
 [tool.ruff]
 line-length = 100
@@ -131,6 +131,6 @@ filterwarnings = ["error"]
 # PyTorch and LeRobot are optional (the models group). LeRobot ships no type information; PyTorch
 # is treated the same so type checking gives the same result with and without the models group.
 [[tool.mypy.overrides]]
-module = ["lerobot.*", "torch", "torch.*"]
+module = ["lerobot.*", "torch", "torch.*", "mujoco", "mujoco.*", "gym_aloha", "gym_aloha.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

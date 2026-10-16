@@ -1,7 +1,7 @@
 [project]
 name = "neura-robots"
 version = "0.1.0.dev0"
-description = "Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, the robot-side process for real arms and the hardware qualification harness."
+description = "Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, the ALOHA tasks in physics simulation, the robot-side process for arms and the hardware qualification harness."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -25,6 +25,12 @@ neura-qualify = "neura_robots.qualify.cli:main"
 # PyTorch; robot computers that run LeRobot already have it.
 so101 = [
     "lerobot[feetech]>=0.6.1,<0.7",
+]
+# The ALOHA tasks in physics simulation (neura_robots.aloha). Pinned to the MuJoCo that
+# gym-aloha's dm_control uses, so the simulation is step-for-step identical to the one LeRobot
+# evaluates its published ALOHA policies on (neura_robots.aloha.fidelity).
+sim = [
+    "mujoco==3.8.1",
 ]
 
 [build-system]

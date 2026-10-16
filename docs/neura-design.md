@@ -475,10 +475,15 @@ LeRobot's remote inference reported no fault in any scenario: it has no way to. 
   - LeRobot's client blocks its control loop on every observation it sends, so each tick waited for a round trip. Its loop ticked 155 times in 400 steps as shipped, and 270 with the scaled tolerance. The arm moved in slow motion.
   - A profile with room for the network would leave margin for this delay (the site kit's CPU profile allows 600 ms at dispatch). This run did not measure one: in §20.12 the robots and the gateway share the site's server, and the impaired link is the site's uplink to Neura.
 - **400 ms added each way.**
-  - Neura faulted in every episode: in 7 its starvation grace ran out, and in 3 admission refused the robot a session, because the round trip it measured left no budget.
+  - Neura faulted in every episode: in 7 its starvation grace ran out, and in 3 the robot was refused a new session (see the stall, below).
   - LeRobot kept executing chunks computed from observations 1.2 to 1.5 s old (medians; the oldest 1.9 s). Per episode, 22 actions with the scaled tolerance and 68 as shipped came from chunks older than 1.5 s, the age past which Neura refuses a chunk.
 - **Network stalled.**
-  - Neura faulted in 7 episodes: 4 from starvation, held after the grace period, and 3 refused a session after the stall.
+  - Neura faulted in 7 episodes: 4 from starvation, held after the grace period, and 3 refused a new session after the stall.
+  - **Why it was refused** (reproduced on the development host, where the gateway said why). The stall outlasted the robot's lease, so the robot opened a new session. Admission refused it: `ADMISSION_CAPACITY_EXCEEDED: 1 sessions: observation age at dispatch 233637 us exceeds 100000 us`.
+    - Admission assumes a batch is already running when a request arrives. With one robot, that batch can only be the robot's own previous request, which is never in flight at the same time.
+    - By then the gateway had measured this CPU's inference time, and that one imagined batch put the predicted wait past the profile's 100 ms dispatch budget.
+    - The same robot had been served one episode earlier, its observations 120 ms old on arrival. So episodes alternated: served, then refused on reconnecting, then served again.
+    - A proposed fix counts only the other robots' requests in that batch (§9.3); it waits on a decision, because it raises recorded capacity figures.
   - When the stall ended, LeRobot executed the chunk it had been waiting for, computed from an observation 3.3 s old: 16 actions with the scaled tolerance, 90 as shipped.
 - **Model process killed.**
   - Neura faulted in every episode (`STARVATION_GRACE_EXHAUSTED`), 1 s after its queue ran out, the arm held.

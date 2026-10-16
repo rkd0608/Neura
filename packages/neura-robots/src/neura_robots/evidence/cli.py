@@ -304,6 +304,10 @@ def _table(rows: dict[str, Any], prefix: str = "") -> None:
         shown = [f"{k} {medians[k]:g}" for k in SHOWN_COUNTERS if k in medians]
         if shown:
             print(f"{indent}medians: " + ", ".join(shown))
+        # Neura's runtime counts every reason code it was given (refusals, timeouts, starvation).
+        codes = [f"{k} {v:g}" for k, v in medians.items() if k.isupper() and v]
+        if codes:
+            print(f"{indent}reason codes, medians: " + ", ".join(codes))
 
 
 def closed_loop(args: argparse.Namespace) -> int:

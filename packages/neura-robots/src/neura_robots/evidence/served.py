@@ -295,5 +295,14 @@ class ServedRun:
         label = " (warm-up, not scored)" if warmup else ""
         outcome = "success" if result.success else "fail"
         faults = f", {', '.join(result.faults)}" if result.faults else ""
-        self.progress(f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps{faults})")
+        # Refused at every request (each observation too old to dispatch, say), an armed robot
+        # waits without moving and without a fault: say why it was never served.
+        refused = ""
+        reasons = {k: v for k, v in result.counters.items() if k.isupper()}
+        if not result.counters.get("chunks_accepted") and reasons:
+            code, count = max(reasons.items(), key=lambda kv: kv[1])
+            refused = f", no chunk accepted: {code} x{count}"
+        self.progress(
+            f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps{faults}{refused})"
+        )
         return result

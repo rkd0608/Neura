@@ -456,6 +456,36 @@ What remains is LeRobot's own design, recorded on every episode's line:
   - As shipped: 317 actions in 356 ticks, 19 empty ticks, the server at 381 ms a chunk.
   - Every failure in every system ran the full 400 steps without finishing the hand-over, and every success reached the final reward.
 
+**Results: the same faults** (Evidence run 38915350398, 10 seeds per cell, every cell on the same runner, which was slower than the closed-loop one: LeRobot's server took 410 to 490 ms a chunk there, against about 360).
+
+| Scenario | `neura` | `lerobot-async-scaled` | `lerobot-async` |
+|---|---|---|---|
+| No fault | 9/10 | 2/10 | 4/10 |
+| 100 ms added each way | 0/10, 1 faulted | 1/10 | 0/10 |
+| 400 ms added each way | 0/10, 10 faulted | 0/10 | 0/10 |
+| Network stalled 3 s, 2 s in | 0/10, 7 faulted | 0/10 | 0/10 |
+| Model process killed 2 s in | 0/10, 10 faulted | 0/10 | 0/10 |
+
+LeRobot's remote inference reported no fault in any scenario: it has no way to. What each system did, from the summary's medians:
+- **No fault.**
+  - Neura accepted 5 chunks an episode, each from an observation 342 ms old on arrival.
+  - LeRobot's loop ticked 313 to 324 times in 400 steps and executed about 295 actions. That is too few to finish the hand-over on most seeds; the closed-loop runner executed 317 to 338.
+- **100 ms added each way.**
+  - Neura's evidence profile, tuned for a GPU, allows an observation to be at most 100 ms old when it reaches the model. With 100 ms added on the way in, the gateway expired nearly every request (`REQUEST_EXPIRED`). The robot stayed armed and did not move. It started no task, so it did not fault.
+  - LeRobot's client blocks its control loop on every observation it sends, so each tick waited for a round trip. Its loop ticked 155 times in 400 steps as shipped, and 270 with the scaled tolerance. The arm moved in slow motion.
+  - A profile with room for the network would leave margin for this delay (the site kit's CPU profile allows 600 ms at dispatch). This run did not measure one: in §20.12 the robots and the gateway share the site's server, and the impaired link is the site's uplink to Neura.
+- **400 ms added each way.**
+  - Neura faulted in every episode: in 7 its starvation grace ran out, and in 3 admission refused the robot a session, because the round trip it measured left no budget.
+  - LeRobot kept executing chunks computed from observations 1.2 to 1.5 s old (medians; the oldest 1.9 s). Per episode, 22 actions with the scaled tolerance and 68 as shipped came from chunks older than 1.5 s, the age past which Neura refuses a chunk.
+- **Network stalled.**
+  - Neura faulted in 7 episodes: 4 from starvation, held after the grace period, and 3 refused a session after the stall.
+  - When the stall ended, LeRobot executed the chunk it had been waiting for, computed from an observation 3.3 s old: 16 actions with the scaled tolerance, 90 as shipped.
+- **Model process killed.**
+  - Neura faulted in every episode (`STARVATION_GRACE_EXHAUSTED`), 1 s after its queue ran out, the arm held.
+  - LeRobot executed the 100 actions it had queued, then had nothing to execute for about 100 ticks. The restarted server had no policy loaded: the client sends its policy instructions only once, at start. Its log filled with `UNAVAILABLE` errors, and nothing told the robot or an operator.
+
+From this run on, each Neura episode that never got a chunk says why (`no chunk accepted: REQUEST_EXPIRED x29`, say), and each summary gives the median count of every reason code the robot was given.
+
 **Not modeled.** The simulator's software renderer shares the CPU with LeRobot's server while the client reads frames. A real camera costs the server nothing. With the camera frozen (no drawing at all), a full-size model executes about 376 actions per 400 steps on the development host, against about 340. On a real deployment the server runs on its own machine, and the network carries about 45 MB/s while the queue is low.
 
 ---

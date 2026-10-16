@@ -176,6 +176,19 @@ def test_a_summary_counts_fault_reasons_and_takes_counter_medians() -> None:
     assert summary["counter_medians"] == {"late_ticks": 2}  # 0, 2 and 6
 
 
+def test_the_summary_table_says_what_a_system_was_told(capsys: pytest.CaptureFixture[str]) -> None:
+    from neura_robots.evidence.cli import _table
+    from neura_robots.evidence.results import EpisodeResult, summarize
+
+    refused = {"REQUEST_EXPIRED": 380, "late_ticks": 1}
+    results = [EpisodeResult("neura", 1000 + i, False, 0, 400, counters=refused) for i in range(3)]
+    _table({"neura": {"summary": summarize(results)}})
+    out = capsys.readouterr().out
+    assert "0/3 succeeded" in out
+    assert "medians: late_ticks 1" in out
+    assert "reason codes, medians: REQUEST_EXPIRED 380" in out
+
+
 def test_the_async_robots_camera_reads_like_lerobots() -> None:
     from neura_robots.aloha.world import RealTimeWorld
     from neura_robots.evidence.lerobot_async import _Camera

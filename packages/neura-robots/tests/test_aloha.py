@@ -173,7 +173,7 @@ def test_renders_from_any_thread() -> None:
     except Exception as exc:  # no OpenGL on this machine
         sim.close()
         pytest.skip(f"no offscreen rendering: {exc}")
-    there: list[np.ndarray] = []
+    there: list[np.typing.NDArray[np.uint8]] = []
     errors: list[BaseException] = []
 
     def other() -> None:

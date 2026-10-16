@@ -31,8 +31,10 @@ import asyncio
 import contextlib
 import functools
 import os
+import re
 import signal
 import socket
+import statistics
 import subprocess
 import sys
 import threading
@@ -426,13 +428,26 @@ class AsyncRun:
                 late_executed += 1
             return perform(verbose)
 
+        ticks = starved = 0  # control loop ticks; ticks with no action queued, after the first
+        available = client.actions_available
+
+        def recording_available() -> bool:  # called once at the top of each tick
+            nonlocal ticks, starved
+            ticks += 1
+            queued: bool = available()
+            if not queued and arrivals:
+                starved += 1
+            return queued
+
         client._aggregate_action_queues = recording_aggregate
         client.control_loop_action = recording_action
+        client.actions_available = recording_available
         if not client.start():
             raise RuntimeError(f"the policy server did not answer; see {self.server.log}")
         self._warm(client)
         robot.counters.clear()
         self.camera.invalidate()  # the episode's first read draws its frame, as Neura's does
+        log_mark = self.server.log.stat().st_size
         receiver = threading.Thread(target=client.receive_actions, daemon=True)
         loop = threading.Thread(target=client.control_loop, kwargs={"task": ""}, daemon=True)
         receiver.start()
@@ -449,6 +464,7 @@ class AsyncRun:
             client.channel.close()
         self.proxy.call(self.proxy.proxy.reset)
         self.proxy.proxy.delay_s = 0.0
+        server_ms = self._server_times(log_mark)
         result = EpisodeResult(
             system=self.system,
             seed=seed,
@@ -465,17 +481,33 @@ class AsyncRun:
                 "world_late_steps": self.world.late_steps,
                 "camera_waits": self.camera.waits,
                 "max_frame_age_ms": round(max(self.camera.ages_s, default=0) * 1000),
+                "control_ticks": ticks,
+                "starved_ticks": starved,
+                "server_chunks": len(server_ms),
+                "server_chunk_ms_median": round(statistics.median(server_ms)) if server_ms else 0,
+                "server_chunk_ms_max": round(max(server_ms, default=0)),
             },
         )
         label = " (warm-up, not scored)" if warmup else ""
         outcome = "success" if result.success else "fail"
         c = result.counters
         self.progress(
-            f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps, "
-            f"{c['actions_executed']} actions executed, {c['chunks_received']} chunks, "
-            f"{c['observations_sent']} observations sent, max reward {result.max_reward})"
+            f"{self.system} seed {seed}{label}: {outcome} ({result.steps} steps; "
+            f"{c['actions_executed']} actions executed in {c['control_ticks']} control ticks, "
+            f"{c['starved_ticks']} with none queued; {c['observations_sent']} observations sent, "
+            f"{c['chunks_received']} chunks back; server {c['server_chunk_ms_median']} ms a chunk, "
+            f"{c['server_chunk_ms_max']} at most; max reward {result.max_reward})"
         )
         return result
+
+    def _server_times(self, since: int) -> list[float]:
+        """The server's time for each chunk since the log was ``since`` bytes long, as it logs it
+        (its observation's preparation, the policy's pre-processing, forward pass and
+        post-processing)."""
+        with self.server.log.open("rb") as log:
+            log.seek(since)
+            text = log.read().decode(errors="replace")
+        return [float(ms) for ms in re.findall(r"Observation \d+ \| Total time: ([\d.]+)ms", text)]
 
     def episodes(
         self, seeds: list[int], *, max_steps: int = 400, fault: AsyncFault | None = None

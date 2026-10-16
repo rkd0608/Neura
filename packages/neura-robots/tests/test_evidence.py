@@ -203,6 +203,9 @@ def test_lerobots_async_inference_serves_an_episode(synthetic: Path, tmp_path: P
     assert result.counters["chunks_received"] >= 1
     assert result.counters["actions_executed"] > 0
     assert result.counters["camera_waits"] >= 1  # the episode's first frame
+    assert result.counters["control_ticks"] >= result.counters["actions_executed"]
+    assert result.counters["server_chunks"] >= result.counters["chunks_received"]
+    assert result.counters["server_chunk_ms_median"] > 0
     # The warm-up's inference ran before the episode, and its observation is not counted.
     log = (tmp_path / "policy_server.log").read_text()
     assert log.count("Running inference for observation") > result.counters["chunks_received"]

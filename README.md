@@ -207,6 +207,11 @@ cd deploy/site-demo
 
 The walkthrough is in [deploy/site-demo/README.md](deploy/site-demo/README.md) (design §20.11).
 
+For staging, `deploy/gcp/site.sh up` puts the same site on a server in its own network and
+region of the Google Cloud project, and `deploy/gcp/site.sh test` runs the customer's whole flow
+against the deployed Neura over the internet, with latency, loss and a partition on the site's
+uplink (Actions → Staging site; design §20.12).
+
 ## Conventions
 
 - **Generated files are committed and checked.** Edit the source (`proto/`, `catalog/`, contract

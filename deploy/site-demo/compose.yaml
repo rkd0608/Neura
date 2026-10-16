@@ -58,6 +58,8 @@ services:
       NEURA_CELL_GATEWAY: site-agent:50051
       NEURA_CELL_CERT_DIR: /var/lib/neura/robot-certs
       NEURA_CELL_LISTEN: 0.0.0.0:8095
+      # Other names the page is reached by (a site in the cloud: .cloudshell.dev).
+      NEURA_CELL_ALLOW_HOSTS: ${NEURA_CELL_ALLOW_HOSTS:-}
       NEURA_CELL_TASK: ${NEURA_CELL_TASK:-transfer_cube}
       NEURA_CELL_RESET_AFTER_S: ${NEURA_CELL_RESET_AFTER_S:-0}
       NEURA_CELL_SITE_API: http://site-agent:8090

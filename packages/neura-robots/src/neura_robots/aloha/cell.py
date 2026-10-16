@@ -534,9 +534,13 @@ class _Handler(BaseHTTPRequestHandler):
         log.debug("%s " + format, self.address_string(), *args)
 
     def _host_allowed(self) -> bool:
-        """Only requests addressed to this page's own names (against DNS rebinding)."""
+        """Only requests addressed to this page's own names (against DNS rebinding). A name
+        starting with a dot allows its subdomains (".cloudshell.dev": Cloud Shell's web preview
+        of a page forwarded from a site in the cloud)."""
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
-        return host in self.allowed_hosts
+        return host in self.allowed_hosts or any(
+            name.startswith(".") and host.endswith(name) for name in self.allowed_hosts
+        )
 
     def _send(self, code: int, body: bytes, content_type: str) -> None:
         self.send_response(code)
@@ -691,7 +695,8 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-host",
         action="append",
         default=[h for h in env("NEURA_CELL_ALLOW_HOSTS", "").split(",") if h],
-        help="another name the page is reached by (localhost and 127.0.0.1 always are)",
+        help="another name the page is reached by (localhost and 127.0.0.1 always are); "
+        ".example.com allows its subdomains",
     )
     parser.add_argument("--view-fps", type=float, default=float(env("NEURA_CELL_VIEW_FPS", "10")))
     parser.add_argument(

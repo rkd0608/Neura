@@ -1274,6 +1274,22 @@ Building and running the kit found these defects, all fixed:
 5. **Relative paths in the local site.** The local site harness (evidence and qualification) passed relative paths to a gateway running in another directory, so its workers never found the checkpoint. It now resolves them.
 6. **Builds and caches.** Compose builds through bake, which refuses to read the CA-bundle secret at `/dev/null`, outside the project. The default is now an empty file in the repository. The kit image's user has no writable home, so its caches live in `/tmp`.
 
+### 20.12 A staging site in the cloud
+
+`deploy/gcp/site.sh` runs the site kit (§20.11) as a customer's site in Google Cloud, against the deployed Neura (§20.10). The robots and the site server are where a customer's are, and the cloud is across the internet.
+
+**The site.** The server is a Spot VM (`e2-standard-8` by default) in another region (`us-east1`; Neura is in `us-central1`) and in its own VPC. No firewall rule lets traffic in except SSH from Identity-Aware Proxy, so the site only dials out, as one behind a customer's firewall. Its service account can only pull the kit's image, which `up` builds and pins by digest in Artifact Registry. Its startup script installs Docker and lays out the kit from the instance metadata. The VM stops itself after a few hours (`--max-run-duration`). Google can also reclaim it at any time, as a site can lose power. It costs about $0.07 an hour while it runs.
+
+**The test.** `site.sh test` (the Staging site workflow, `tools/staging_site_test.py`) does the customer's whole flow:
+1. The console's calls go through the API, with the admin token read from Secret Manager and never printed.
+2. The site operator's commands run on the server over SSH through IAP: `publish`, `connect`, `approve`.
+3. Two robots work, then the site's uplink is impaired: 150 ms ± 30 ms of latency and 2% loss (netem on the server's interface).
+4. Then the site is partitioned from Neura (iptables drops every packet to Neura's address), then restored.
+
+The robots must keep working throughout: their gateway is at the site, and the site runs on its signed configuration until its offline authorization expires. Neura must show the site offline during the partition, and the site must reconnect afterwards. The test saves each phase's tasks, faults and Neura's view of the site, and the cameras.
+
+**Liveness of the agent's stream.** Planning the partition test found a gap. Neura showed a site connected for as long as its gRPC stream was open. A partition that drops packets, rather than resetting connections, would leave the stream "open" until TCP gave up (about 15 minutes of retransmissions) or the edge closed it as idle (10 minutes). Both ends now send HTTP/2 keepalive pings every 20 s and close the stream when one goes unanswered for 10 s. The site shows offline about 30 s after a silent partition, and the agent starts reconnecting.
+
 ---
 
 ## 21. Service levels

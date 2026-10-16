@@ -1,0 +1,16 @@
+# The kit with its image from a registry (NEURA_KIT_IMAGE, pinned by digest) instead of built
+# from this repository: a site on a server that has only Docker. deploy/gcp/site.sh sets
+# COMPOSE_FILE=compose.yaml:compose.image.yaml and the image in .env.
+services:
+  site-agent:
+    image: ${NEURA_KIT_IMAGE:?set NEURA_KIT_IMAGE}
+    build: !reset null
+    pull_policy: missing
+  cell:
+    image: ${NEURA_KIT_IMAGE:?set NEURA_KIT_IMAGE}
+    build: !reset null
+    pull_policy: missing
+  kit:
+    image: ${NEURA_KIT_IMAGE:?set NEURA_KIT_IMAGE}
+    build: !reset null
+    pull_policy: missing

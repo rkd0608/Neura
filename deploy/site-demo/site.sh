@@ -77,8 +77,13 @@ cmd_publish() {
   fi
   [[ -n $NEURA_TOKEN ]] || die "no API token"
   export NEURA_TOKEN
-  step "building the kit's image (the first time takes a few minutes)"
-  "${COMPOSE[@]}" --profile tools build kit
+  if [[ -n "$(get NEURA_KIT_IMAGE)" ]]; then
+    step "the kit's image: $(get NEURA_KIT_IMAGE)"
+    "${COMPOSE[@]}" --profile tools pull --quiet kit
+  else
+    step "building the kit's image (the first time takes a few minutes)"
+    "${COMPOSE[@]}" --profile tools build kit
+  fi
   step "the ML team's release: the model, its contracts, signed, registered in Neura"
   "${COMPOSE[@]}" --profile tools run --rm -T -e NEURA_TOKEN kit publish --url "$url" "$@"
   cat <<EOF

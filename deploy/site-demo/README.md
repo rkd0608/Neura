@@ -85,6 +85,15 @@ The robots start: each task, the cube is somewhere new. Watch the robots on the 
 
 Watch the same robots in the console: sessions, faults and activity.
 
+## The site in the cloud instead
+
+To run the site where a customer's would be, across the internet from Neura: run
+`deploy/gcp/site.sh up` (or Actions, then Staging site, then `up`). It creates a server in its
+own network and region of your Google Cloud project, with this kit in `/opt/neura-site`; the
+server can only dial out. Then follow the same steps over SSH from Cloud Shell, with
+`sudo /opt/neura-site/site.sh ...`, or let `deploy/gcp/site.sh test` run them all and add real
+network faults (design §20.12). `deploy/gcp/site.sh page` explains how to watch the robots.
+
 ## Things to try
 
 - **Ship another revision while they work.** Publish with different settings, for example

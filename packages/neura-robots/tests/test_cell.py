@@ -179,7 +179,7 @@ def test_the_page_serves_status_and_frames_and_takes_actions_only_from_itself(
     robot.camera.start()
     cell.robots["aloha-1"] = robot
     robot.snapshot = robot.status()
-    server = serve_page(cell, "127.0.0.1:0", [])
+    server = serve_page(cell, "127.0.0.1:0", [".cloudshell.dev"])
     base = f"http://127.0.0.1:{server.server_address[1]}"
 
     def call(path: str, *, method: str = "GET", headers: dict[str, str] | None = None) -> Any:
@@ -210,6 +210,9 @@ def test_the_page_serves_status_and_frames_and_takes_actions_only_from_itself(
         assert ok[0] == 200
         assert _paused(robot)
         assert call("/api/site", headers={"Host": "attacker.example"})[0] == 421
+        assert call("/api/site", headers={"Host": "cloudshell.dev.attacker.example"})[0] == 421
+        preview = {"Host": "8080-cs-1234-default.cs-us-east1-abcd.cloudshell.dev"}
+        assert call("/api/cell", headers=preview)[0] == 200
         assert call("/api/site")[0] == 404  # no site API configured
     finally:
         server.shutdown()

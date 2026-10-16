@@ -1,0 +1,80 @@
+name: Staging site
+
+# A customer's site in Google Cloud against the deployed Neura (deploy/gcp/site.sh, design §20.12):
+# the site kit on its own server, in its own network and region, which only dials out. Started by
+# hand. Needs the GCP_SA_KEY secret of the Deploy workflow, and Neura deployed by it.
+#
+#   up      push the kit's image; create (or update) the site's network and server
+#   test    the customer's whole flow over the internet, then real network faults on the site's
+#           uplink: latency and loss, then a partition from Neura (tools/staging_site_test.py)
+#   status  the server, and what its site agent reports
+#   stop    stop the server: no CPU billed, its disk and enrollment kept
+#   delete  delete the server and its disk
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        type: choice
+        options: [up, test, status, stop, delete]
+        default: up
+      robots:
+        description: "test: robots at the site"
+        type: number
+        default: 2
+      refill_at:
+        description: "test: actions left of a chunk when the next is requested (empty: the kit's 50)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-site
+  cancel-in-progress: false
+
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  site:
+    name: ${{ inputs.command }}
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Site
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          COMMAND: ${{ inputs.command }}
+          ROBOTS: ${{ inputs.robots }}
+          REFILL_AT: ${{ inputs.refill_at }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"
+            exit 1
+          fi
+          args=()
+          if [ "$COMMAND" = test ]; then
+            args=(--robots "$ROBOTS")
+            [ -z "$REFILL_AT" ] || args+=(--refill-at "$REFILL_AT")
+          fi
+          deploy/gcp/site.sh "$COMMAND" "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && inputs.command == 'test'
+        with:
+          name: staging-site
+          path: out/staging-site
+          if-no-files-found: ignore

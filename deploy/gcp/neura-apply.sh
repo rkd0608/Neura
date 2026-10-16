@@ -93,6 +93,9 @@ Wants=network-online.target
 ExecStart=/usr/local/sbin/neura-apply watch
 Restart=always
 RestartSec=5
+# Also on the serial console, which deploy.sh reads when a release fails.
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target

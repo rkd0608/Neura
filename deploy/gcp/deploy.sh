@@ -47,9 +47,21 @@ done
 # Credentials: the account gcloud is signed in with or, when GCP_SA_KEY holds a service account's
 # JSON key (a CI secret), that service account. The key goes to gcloud through a private temporary
 # file, removed once gcloud has it; the key's project is the default project.
+# Temporary files, removed when the script exits however it exits.
+CLEANUP=()
+trap '[[ ${#CLEANUP[@]} -eq 0 ]] || rm -rf "${CLEANUP[@]}"' EXIT
+# scratch VAR [-d]: a new temporary file (or directory) in VAR. Not $(scratch): a subshell would
+# lose the cleanup entry.
+scratch() {
+    local name=$1
+    shift
+    printf -v "$name" '%s' "$(mktemp "$@")"
+    CLEANUP+=("${!name}")
+}
+
 if [[ -n ${GCP_SA_KEY:-} ]]; then
     key_file=$(mktemp)
-    trap 'rm -f "$key_file"' EXIT
+    CLEANUP+=("$key_file")
     (umask 077 && printf '%s' "$GCP_SA_KEY" >"$key_file")
     gcloud auth activate-service-account --key-file="$key_file" --quiet >/dev/null
     : "${NEURA_GCP_PROJECT:=$(python3 -c \
@@ -132,8 +144,7 @@ generate_secrets() {
             g secrets versions add neura-manifest-signing-key --data-file=-
     fi
     if ! has_version neura-agent-ca-key; then
-        tmp=$(mktemp -d)
-        trap 'rm -rf "$tmp"' RETURN
+        scratch tmp -d
         (umask 077 && uv run --quiet python - "$tmp" <<'EOF')
 import sys
 from pathlib import Path
@@ -248,9 +259,8 @@ release() {
     domain=$(domain)
     build_images "$tag" "$domain"
 
-    config=$(mktemp)
-    startup=$(mktemp)
-    trap 'rm -f "$config" "$startup"' RETURN
+    scratch config
+    scratch startup
     cat >"$config" <<EOF
 PROJECT=$PROJECT
 DOMAIN=$domain
@@ -306,13 +316,21 @@ wait_for() {
         fi
         if [[ $(guest state) == failed && $(guest attempt) == "$image" ]]; then
             echo "the VM failed to apply the release:" >&2
-            echo "  deploy/gcp/deploy.sh ssh 'sudo journalctl -u google-startup-scripts -u neura-watch -n 100'" >&2
+            vm_log
             return 1
         fi
         sleep 10
     done
     echo "the VM did not apply the release in 20 minutes" >&2
+    vm_log
     return 1
+}
+
+# The VM's boot and apply output, from its serial console (no SSH needed).
+vm_log() {
+    g compute instances get-serial-port-output "$VM" --zone "$ZONE" 2>/dev/null |
+        grep -E 'startup-script|neura-apply' | tail -n 80 >&2 || true
+    echo "more: deploy/gcp/deploy.sh ssh 'sudo journalctl -u google-startup-scripts -u neura-watch -n 200'" >&2
 }
 
 bootstrap_admin() {

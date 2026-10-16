@@ -20,6 +20,11 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml

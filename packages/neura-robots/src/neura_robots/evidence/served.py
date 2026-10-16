@@ -36,6 +36,18 @@ from neura_sim.chaos import FaultProxy
 Fault = Callable[["ServedRun", FaultProxy], Coroutine[Any, Any, None]]
 
 
+def _log_tail(site: LocalSite, lines: int = 25) -> str:
+    """The end of the gateway's log (its workers' output included), without tracebacks' frames:
+    enough to see why it does not serve, where only the error reaches (a CI log)."""
+    path = site.gateway.log_path
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return f"; no log at {path}"
+    kept = [line for line in text if line and not line.startswith(" ")][-lines:]
+    return f"; the end of {path}:\n" + "\n".join(kept)
+
+
 @dataclass(slots=True)
 class _Episode:
     seed: int
@@ -182,16 +194,14 @@ class ServedRun:
                     lambda: runtime.session_id is not None, start_timeout_s, "a session"
                 )
                 if not await site.workers_ready(start_timeout_s):
-                    raise RuntimeError(f"the site is not serving; see {site.gateway.log_path}")
+                    raise RuntimeError(f"the site is not serving{_log_tail(site)}")
                 # One unscored warm-up episode: the first requests also pay for lazy
                 # initialization, here as in the in-process baselines.
                 warm = await self._episode_run(
                     seeds[0] - 1, max_steps, None, site.proxy, warmup=True
                 )
                 if not warm.counters.get("chunks_accepted"):
-                    raise RuntimeError(
-                        f"the warm-up episode was served no chunk; see {site.gateway.log_path}"
-                    )
+                    raise RuntimeError(f"the warm-up episode was served no chunk{_log_tail(site)}")
                 for seed in seeds:
                     results.append(await self._episode_run(seed, max_steps, fault, site.proxy))
             finally:
@@ -218,9 +228,7 @@ class ServedRun:
         await self._until(lambda: runtime.session_id is not None, 60, "a session")
         assert self.site is not None
         if not await self.site.workers_ready(180):  # a killed worker is restarted by the gateway
-            raise RuntimeError(
-                f"the policy workers are not ready; see {self.site.gateway.log_path}"
-            )
+            raise RuntimeError(f"the policy workers are not ready{_log_tail(self.site)}")
         before = dict(runtime.counters)
         late_before = process.connection.late_ticks
         self.world.reset(seed, max_steps)

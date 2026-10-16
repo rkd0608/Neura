@@ -42,6 +42,11 @@ concurrency:
   group: evidence
   cancel-in-progress: false
 
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
 env:
   UV_VERSION: "0.11.32"
   PYTHON_VERSION: "3.13"

@@ -74,12 +74,26 @@ def _hardware() -> dict[str, Any]:
     return info
 
 
+def reference_outcomes(eval_info: dict[str, Any], first_seed: int) -> dict[int, bool]:
+    """Seed -> success in ``lerobot-eval``'s ``eval_info.json``. LeRobot 0.6 lists each task's
+    successes in episode order (``per_task[].metrics.successes``); with ``--eval.batch_size=1
+    --seed=S`` episode i ran with seed S + i. Older releases listed episodes with their seeds."""
+    if "per_episode" in eval_info:
+        return {int(e["seed"]): bool(e["success"]) for e in eval_info["per_episode"]}
+    successes = [
+        bool(success)
+        for task in eval_info.get("per_task", [])
+        for success in task["metrics"]["successes"]
+    ]
+    return {first_seed + i: success for i, success in enumerate(successes)}
+
+
 def reference_agreement(
-    eval_info: dict[str, Any], episodes: list[dict[str, Any]]
+    eval_info: dict[str, Any], episodes: list[dict[str, Any]], first_seed: int = 1000
 ) -> dict[str, Any]:
     """LeRobot's own ``lerobot-eval`` on gym-aloha (``eval_info.json``) against this port's
     ``lerobot-eval`` protocol, seed by seed."""
-    theirs = {int(e["seed"]): bool(e["success"]) for e in eval_info["per_episode"]}
+    theirs = reference_outcomes(eval_info, first_seed)
     ours = {int(e["seed"]): bool(e["success"]) for e in episodes}
     common = sorted(set(theirs) & set(ours))
     agree = [seed for seed in common if theirs[seed] == ours[seed]]
@@ -91,7 +105,9 @@ def reference_agreement(
         "lerobot_eval_success_rate": round(sum(theirs[s] for s in common) / len(common), 4)
         if common
         else None,
-        "lerobot_eval_pc_success_reported": eval_info.get("aggregated", {}).get("pc_success"),
+        "lerobot_eval_pc_success_reported": (
+            eval_info.get("overall") or eval_info.get("aggregated") or {}
+        ).get("pc_success"),
     }
 
 
@@ -278,12 +294,15 @@ def closed_loop(args: argparse.Namespace) -> int:
             }
         if "parity" in ctx.header:
             report["parity"] = ctx.header["parity"]
+        report["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # Kept before the comparison, so a reference it cannot read loses no episode.
+        args.out.write_text(json.dumps(report, indent=1), encoding="utf-8")
         if args.reference is not None and "lerobot-eval" in report["systems"]:
             report["reference"] = reference_agreement(
                 json.loads(args.reference.read_text(encoding="utf-8")),
                 report["systems"]["lerobot-eval"]["episodes"],
+                seeds[0],
             )
-        report["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     args.out.write_text(json.dumps(report, indent=1), encoding="utf-8")
     _table(report["systems"])
     return 0

@@ -193,6 +193,25 @@ def test_the_site_is_given_absolute_paths(
     assert deployment.checkpoint == synthetic
 
 
+def test_lerobot_evals_outcomes_are_read_seed_by_seed() -> None:
+    from neura_robots.evidence.cli import reference_agreement, reference_outcomes
+
+    # LeRobot 0.6's eval_info.json: each task's successes in episode order.
+    current = {
+        "per_task": [{"task_group": "aloha", "metrics": {"successes": [False, True, True]}}],
+        "overall": {"pc_success": 66.7, "n_episodes": 3},
+    }
+    assert reference_outcomes(current, 1000) == {1000: False, 1001: True, 1002: True}
+    earlier = {"per_episode": [{"seed": 7, "success": True}]}
+    assert reference_outcomes(earlier, 1000) == {7: True}
+    ours = [{"seed": 1000, "success": False}, {"seed": 1001, "success": False}]
+    agreement = reference_agreement(current, ours, 1000)
+    assert agreement["episodes_compared"] == 2
+    assert agreement["same_outcome"] == 1
+    assert agreement["different_outcome_seeds"] == [1001]
+    assert agreement["lerobot_eval_pc_success_reported"] == 66.7
+
+
 def test_parity_with_lerobot_alone(synthetic: Path, tmp_path: Path) -> None:
     import argparse
 

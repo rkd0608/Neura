@@ -158,3 +158,36 @@ def test_renders_the_top_camera() -> None:
     assert image.shape == (480, 640, 3)
     assert image.dtype == np.uint8
     assert image.std() > 10  # a scene, not a blank buffer
+
+
+def test_renders_from_any_thread() -> None:
+    """LeRobot's async client renders from its observation thread, after the main thread did:
+    each thread draws with its own context (one context on two threads fails with
+    EGL_BAD_ACCESS), and the images are the same."""
+    import threading
+
+    sim = AlohaSim()
+    sim.reset(1000)
+    try:
+        here = sim.render("top")
+    except Exception as exc:  # no OpenGL on this machine
+        sim.close()
+        pytest.skip(f"no offscreen rendering: {exc}")
+    there: list[np.ndarray] = []
+    errors: list[BaseException] = []
+
+    def other() -> None:
+        try:
+            there.extend(sim.render("top") for _ in range(3))
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=other)
+    thread.start()
+    thread.join()
+    again = sim.render("top")
+    sim.close()
+    assert errors == []
+    assert len(there) == 3
+    for image in [*there, again]:
+        np.testing.assert_array_equal(image, here)

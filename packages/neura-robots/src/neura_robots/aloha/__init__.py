@@ -22,6 +22,7 @@ What it reproduces, from gym-aloha 0.1.5 and dm_control 1.0:
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -114,7 +115,9 @@ class AlohaSim:
         self.n_sub_steps = round(DT / self.model.opt.timestep)
         if abs(self.n_sub_steps * self.model.opt.timestep - DT) > 1e-8:
             raise ValueError("the control period is not a whole number of physics steps")
-        self._renderer: mujoco.Renderer | None = None
+        # One renderer per thread: its OpenGL context can be current on one thread only (an
+        # EGL context used from another fails with EGL_BAD_ACCESS).
+        self._renderers: dict[int, mujoco.Renderer] = {}
         self.reward = 0
         self.max_reward_seen = 0
         self.steps = 0
@@ -201,18 +204,23 @@ class AlohaSim:
     def render(
         self, camera: str = "top", *, data: mujoco.MjData | None = None
     ) -> NDArray[np.uint8]:
-        """The camera's view of the scene, or of ``data`` (a copy of its state). The renderer
-        belongs to the thread that first renders."""
-        if self._renderer is None:
-            self._renderer = mujoco.Renderer(self.model, self.height, self.width)
-        self._renderer.update_scene(self.data if data is None else data, camera=camera)
-        image: NDArray[np.uint8] = self._renderer.render()
+        """The camera's view of the scene, or of ``data`` (a copy of its state), drawn with the
+        calling thread's own renderer."""
+        renderer = self._renderers.get(threading.get_ident())
+        if renderer is None:
+            renderer = mujoco.Renderer(self.model, self.height, self.width)
+            self._renderers[threading.get_ident()] = renderer
+        renderer.update_scene(self.data if data is None else data, camera=camera)
+        image: NDArray[np.uint8] = renderer.render()
         return image
 
     def close(self) -> None:
-        if self._renderer is not None:
-            self._renderer.close()
-            self._renderer = None
+        """Frees the calling thread's renderer; another thread's is freed when it ends (its
+        context cannot be made current here)."""
+        renderer = self._renderers.pop(threading.get_ident(), None)
+        if renderer is not None:
+            renderer.close()
+        self._renderers.clear()
 
     # --- dm_control's semantics ----------------------------------------------------------------
 

@@ -224,8 +224,25 @@ class ServedRun:
         process, runtime = self.process, self.process.runtime
         if runtime.state is RuntimeState.FAULTED:
             process.inbox.submit("reset")
-        await self._until(lambda: runtime.state is RuntimeState.READY, 30, "Ready")
-        await self._until(lambda: runtime.session_id is not None, 60, "a session")
+        try:
+            await self._until(lambda: runtime.state is RuntimeState.READY, 60, "Ready")
+            await self._until(lambda: runtime.session_id is not None, 60, "a session")
+        except TimeoutError:
+            # Not served at all: the gateway's admission refuses the robot a session (after a
+            # high-latency fault its measured round trip leaves no starvation budget, say). An
+            # episode that could not start, with the reason the robot was given.
+            rejection = process.client.last_rejection
+            reason = rejection.value if rejection is not None else f"NO_SESSION ({runtime.state})"
+            self.progress(f"{self.system} seed {seed}: fail (not served: {reason})")
+            return EpisodeResult(
+                system=self.system,
+                seed=seed,
+                success=False,
+                max_reward=0,
+                steps=0,
+                counters={},
+                faults=[reason],
+            )
         assert self.site is not None
         if not await self.site.workers_ready(180):  # a killed worker is restarted by the gateway
             raise RuntimeError(f"the policy workers are not ready{_log_tail(self.site)}")

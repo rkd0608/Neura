@@ -69,6 +69,35 @@ def test_act_runs_batches_deterministically(checkpoint: Path, binding_factory: A
     np.testing.assert_allclose(alone, outputs[1], rtol=1e-4, atol=1e-4)
 
 
+def test_loading_never_fetches_pretrained_backbone_weights(
+    checkpoint: Path, binding_factory: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Published ACT checkpoints name ImageNet backbone weights in their configuration; the
+    checkpoint holds the trained backbone anyway, and a worker has no network."""
+    import json
+    import shutil
+
+    import torch.hub
+    import torchvision.models._api
+
+    published = tmp_path / "published"
+    shutil.copytree(checkpoint, published)
+    config = json.loads((published / "config.json").read_text())
+    config["pretrained_backbone_weights"] = "ResNet18_Weights.IMAGENET1K_V1"
+    (published / "config.json").write_text(json.dumps(config))
+
+    def offline(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the worker tried to download weights")
+
+    monkeypatch.setattr(torch.hub, "load_state_dict_from_url", offline)
+    monkeypatch.setattr(torchvision.models._api, "load_state_dict_from_url", offline)
+    binding = binding_factory(edit=small_cameras)
+    batch = [inputs(binding, 7)]
+    loaded = load_adapter("lerobot-act", binding, checkpoint=published).infer(batch)[0]
+    expected = load_adapter("lerobot-act", binding, checkpoint=checkpoint).infer(batch)[0]
+    np.testing.assert_array_equal(loaded, expected)
+
+
 def test_postprocessor_maps_actions_into_the_robots_ranges(
     checkpoint: Path, binding_factory: Any
 ) -> None:

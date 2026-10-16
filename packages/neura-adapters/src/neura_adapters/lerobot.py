@@ -85,6 +85,11 @@ class LeRobotAdapter:
                 f"the checkpoint is a {config.type!r} policy but the artifact names {name!r}"
             )
         config.device = device
+        # The checkpoint holds every weight, its image backbone's included. Building the policy
+        # must not first fetch pretrained backbone weights (ImageNet's, from the internet) only to
+        # overwrite them: a policy worker has no network (design §12).
+        if getattr(config, "pretrained_backbone_weights", None) is not None:
+            config.pretrained_backbone_weights = None
         self._check_contract(config, binding)
         # Policies that read a history of observations (Diffusion Policy with n_obs_steps > 1)
         # carry state between requests, which Neura does not serve yet (design §12).

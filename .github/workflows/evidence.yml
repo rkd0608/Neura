@@ -51,7 +51,9 @@ jobs:
   reference:
     name: lerobot-eval on gym-aloha
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # gym-aloha renders three 640x480 cameras every step (software OpenGL here): about a minute
+    # or more per episode on a runner.
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0

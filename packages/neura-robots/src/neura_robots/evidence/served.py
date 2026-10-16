@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import statistics
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -278,6 +279,10 @@ class ServedRun:
         counters["max_observation_age_at_acceptance_ms"] = round(
             max(episode.accepted_ages_ms, default=0)
         )
+        if episode.accepted_ages_ms:
+            counters["median_observation_age_at_acceptance_ms"] = round(
+                statistics.median(episode.accepted_ages_ms)
+            )
         result = EpisodeResult(
             system=self.system,
             seed=seed,

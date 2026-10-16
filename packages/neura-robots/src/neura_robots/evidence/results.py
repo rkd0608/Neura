@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import statistics
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -46,6 +48,13 @@ def summarize(results: list[EpisodeResult]) -> dict[str, Any]:
         "success_rate_95ci": [round(low, 4), round(high, 4)],
         "mean_max_reward": round(sum(r.max_reward for r in results) / n, 3) if n else None,
         "faulted_episodes": sum(bool(r.faults) for r in results),
+        # Each fault reason, in how many episodes it was given.
+        "faults": dict(Counter(f for r in results for f in dict.fromkeys(r.faults))),
+        # Each counter's median over the episodes (an episode without it counts 0).
+        "counter_medians": {
+            key: statistics.median(r.counters.get(key, 0) for r in results)
+            for key in sorted({k for r in results for k in r.counters})
+        },
     }
     if inference:
         summary["inference_ms"] = {

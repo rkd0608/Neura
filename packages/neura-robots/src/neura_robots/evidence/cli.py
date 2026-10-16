@@ -267,6 +267,27 @@ def _systems(text: str, allowed: tuple[str, ...]) -> list[str]:
     return systems
 
 
+# The counters a summary line shows (medians over the episodes), when the system records them.
+SHOWN_COUNTERS = (
+    # Neura's robot runtime
+    "chunks_accepted",
+    "actions_trimmed",
+    "median_observation_age_at_acceptance_ms",
+    "max_observation_age_at_acceptance_ms",
+    "late_ticks",
+    # LeRobot's remote inference
+    "actions_executed",
+    "control_ticks",
+    "starved_ticks",
+    "chunks_received",
+    "server_chunk_ms_median",
+    "median_observation_age_at_arrival_ms",
+    "max_observation_age_at_arrival_ms",
+    "late_chunks",
+    "actions_from_late_chunks",
+)
+
+
 def _table(rows: dict[str, Any], prefix: str = "") -> None:
     for system, data in rows.items():
         s = data["summary"]
@@ -276,6 +297,13 @@ def _table(rows: dict[str, Any], prefix: str = "") -> None:
             f"({s['success_rate']:.0%}, 95% CI {low:.0%}-{high:.0%}); "
             f"{s['faulted_episodes']} faulted"
         )
+        indent = prefix + " " * 23
+        if s.get("faults"):
+            print(f"{indent}faults: " + ", ".join(f"{k} x{n}" for k, n in s["faults"].items()))
+        medians = s.get("counter_medians", {})
+        shown = [f"{k} {medians[k]:g}" for k in SHOWN_COUNTERS if k in medians]
+        if shown:
+            print(f"{indent}medians: " + ", ".join(shown))
 
 
 def closed_loop(args: argparse.Namespace) -> int:

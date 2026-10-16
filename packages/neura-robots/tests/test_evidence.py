@@ -162,6 +162,20 @@ def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
         assert run.pairs  # inputs and served actions, for parity
 
 
+def test_a_summary_counts_fault_reasons_and_takes_counter_medians() -> None:
+    from neura_robots.evidence.results import EpisodeResult, summarize
+
+    results = [
+        EpisodeResult("neura", 1000, True, 4, 300, counters={"late_ticks": 2}),
+        EpisodeResult("neura", 1001, False, 1, 400, faults=["STARVATION_GRACE_EXHAUSTED"] * 2),
+        EpisodeResult("neura", 1002, False, 0, 400, counters={"late_ticks": 6}, faults=["X"]),
+    ]
+    summary = summarize(results)
+    assert summary["faulted_episodes"] == 2
+    assert summary["faults"] == {"STARVATION_GRACE_EXHAUSTED": 1, "X": 1}  # episodes, not repeats
+    assert summary["counter_medians"] == {"late_ticks": 2}  # 0, 2 and 6
+
+
 def test_the_async_robots_camera_reads_like_lerobots() -> None:
     from neura_robots.aloha.world import RealTimeWorld
     from neura_robots.evidence.lerobot_async import _Camera

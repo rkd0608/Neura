@@ -295,10 +295,20 @@ class _ProxyThread:
 
     def stop(self) -> None:
         asyncio.run_coroutine_threadsafe(self.proxy.stop(), self.loop).result(timeout=5)
+        asyncio.run_coroutine_threadsafe(self._cancel_the_rest(), self.loop).result(timeout=5)
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.thread.join(timeout=5)
         if not self.thread.is_alive():
             self.loop.close()
+
+    @staticmethod
+    async def _cancel_the_rest() -> None:
+        """The connections' tasks, ended on the loop before it closes (a pump cancelled on a
+        closed loop raises)."""
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # --- episodes ------------------------------------------------------------------------------------
@@ -478,6 +488,9 @@ class AsyncRun:
                 "actions_from_late_chunks": late_executed,
                 "late_chunks": sum(age > STALE_AFTER_S for age in arrivals),
                 "max_observation_age_at_arrival_ms": round(max(arrivals, default=0) * 1000),
+                "median_observation_age_at_arrival_ms": (
+                    round(statistics.median(arrivals) * 1000) if arrivals else 0
+                ),
                 "world_late_steps": self.world.late_steps,
                 "camera_waits": self.camera.waits,
                 "max_frame_age_ms": round(max(self.camera.ages_s, default=0) * 1000),

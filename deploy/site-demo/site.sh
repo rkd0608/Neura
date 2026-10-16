@@ -157,7 +157,9 @@ cmd_forget() {
   read -r -p "Delete this site's enrollment, keys, weights and publisher key? [y/N] " answer
   [[ $answer == [yY]* ]] || exit 0
   "${COMPOSE[@]}" --profile tools down --volumes --remove-orphans
-  rm -f "$ENV_FILE"
+  # The site's own values go; the image and compose files a server was set up with stay.
+  { grep -v -E '^(NEURA_URL|NEURA_OPERATOR_TOKEN|NEURA_OPERATOR_TOKEN_SHA256)=' "$ENV_FILE" || true; } >"$ENV_FILE.tmp"
+  mv "$ENV_FILE.tmp" "$ENV_FILE"
   echo "forgotten; remove the server from the site in the console too"
 }
 

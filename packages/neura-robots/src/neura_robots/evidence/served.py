@@ -234,7 +234,12 @@ class ServedRun:
             # episode that could not start, with the reason the robot was given.
             rejection = process.client.last_rejection
             reason = rejection.value if rejection is not None else f"NO_SESSION ({runtime.state})"
-            self.progress(f"{self.system} seed {seed}: fail (not served: {reason})")
+            detail = process.client.last_rejection_detail
+            self.progress(
+                f"{self.system} seed {seed}: fail (not served: {reason}"
+                + (f": {detail}" if detail else "")
+                + ")"
+            )
             return EpisodeResult(
                 system=self.system,
                 seed=seed,

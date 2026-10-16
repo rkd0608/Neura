@@ -112,7 +112,7 @@ def closed_loop(args: argparse.Namespace) -> int:
                 raise SystemExit("give --checkpoint (a directory or hub:<repo>) or --synthetic")
             _say(f"fetching {args.checkpoint}")
             checkpoint, migrated = checkpoint_path(args.checkpoint, work)
-            source = str(args.checkpoint).removeprefix("hub:")
+            source = args.source or str(args.checkpoint).removeprefix("hub:")
         chunking = Chunking(actions_per_chunk=args.actions_per_chunk, refill_at=args.refill_at)
         deployment = write(
             work / "contracts",
@@ -206,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     loop = sub.add_parser("closed-loop", help="task success, in process and served by Neura")
     loop.add_argument("--checkpoint", help="a LeRobot checkpoint directory, or hub:<repo>")
     loop.add_argument("--synthetic", choices=["tiny", "small", "base"], help="random weights")
+    loop.add_argument("--source", help="where the checkpoint comes from, for the report")
     loop.add_argument("--task", choices=["transfer_cube", "insertion"], default="transfer_cube")
     loop.add_argument("--episodes", type=int, default=50)
     loop.add_argument("--first-seed", type=int, default=1000)

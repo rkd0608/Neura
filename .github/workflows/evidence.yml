@@ -58,9 +58,15 @@ jobs:
         run: |
           uv venv -q -p 3.12 /tmp/ref
           uv pip install -q --python /tmp/ref --torch-backend cpu "lerobot[aloha]==0.6.1"
-      - name: lerobot-eval
+      - name: The checkpoint, migrated to LeRobot's processor format by LeRobot's own tool
         env:
           CHECKPOINT: ${{ inputs.checkpoint }}
+        run: |
+          /tmp/ref/bin/python -m lerobot.processor.migrate_policy_normalization \
+            --pretrained-path "$CHECKPOINT" --output-dir out/reference/checkpoint
+          ls -la out/reference/checkpoint
+      - name: lerobot-eval
+        env:
           TASK: ${{ inputs.task }}
           EPISODES: ${{ inputs.episodes }}
         run: |
@@ -68,7 +74,7 @@ jobs:
             transfer_cube) GYM=AlohaTransferCube-v0 ;;
             insertion) GYM=AlohaInsertion-v0 ;;
           esac
-          /tmp/ref/bin/lerobot-eval --policy.path="$CHECKPOINT" --policy.device=cpu \
+          /tmp/ref/bin/lerobot-eval --policy.path=out/reference/checkpoint --policy.device=cpu \
             --env.type=aloha --env.task="$GYM" \
             --eval.n_episodes="$EPISODES" --eval.batch_size=1 --seed=1000 \
             --output_dir=out/reference
@@ -85,6 +91,7 @@ jobs:
           path: |
             out/reference/eval_info.json
             out/reference/fidelity-*.npz
+            out/reference/checkpoint
 
   evidence:
     name: Neura and the in-process baselines
@@ -122,7 +129,9 @@ jobs:
           EPISODES: ${{ inputs.episodes }}
           SYSTEMS: ${{ inputs.systems }}
         run: |
-          uv run --group models neura-evidence closed-loop --checkpoint "hub:$CHECKPOINT" \
+          # The same migrated files lerobot-eval served, so every system has the same weights.
+          uv run --group models neura-evidence closed-loop --checkpoint out/reference/checkpoint \
+            --source "$CHECKPOINT (migrated by LeRobot's migrate_policy_normalization)" \
             --task "$TASK" --episodes "$EPISODES" --systems "$SYSTEMS" \
             --reference out/reference/eval_info.json --out out/closed-loop.json \
             | tee -a "$GITHUB_STEP_SUMMARY"

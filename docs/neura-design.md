@@ -1214,6 +1214,28 @@ sequenceDiagram
 
 If the operator refuses, the site disconnects, or the robot is not at a task boundary, the operation stays Pending or ends Failed with a reason. The cloud never retries motion on its own.
 
+### 20.10 Hosting the cloud side (pilots)
+
+The cloud side is small: the control plane, the console, the NucleiLabs site and Postgres. GPUs and robots stay on customer servers, so hosting cost does not grow with robots. For the first design partners it runs on Google Cloud as one VM (`deploy/gcp`), which costs about $30–35 a month:
+
+| Piece | Google Cloud | Why |
+| --- | --- | --- |
+| Containers | One Compute Engine VM (e2-small, Debian 12, shielded boot), running `deploy/gcp/compose.yaml` | The whole stack uses about 200 MB |
+| Postgres | Cloud SQL, PostgreSQL 17, shared core, daily backups and point-in-time recovery (14 days), deletion protection | Audit records and signed site state must survive the VM; meets the ≤ 5 min data-loss target of §21.2 |
+| Database connection | The Cloud SQL proxy on the VM, with the VM's service account. The instance accepts only connector clients (`TRUSTED_CLIENT_CERTIFICATE_REQUIRED`) and has no authorized networks | No database password or port reachable from the internet is enough on its own |
+| Secrets | Secret Manager: database password, manifest signing key, agent CA certificate and key. The VM reads them into tmpfs; it can add, but not read, the bootstrap admin token | Created once, never rotated by the deploy script: sites pin the signing key and agent CA at enrollment |
+| Images | Artifact Registry, pinned by digest in each release. Docker Hub images through `mirror.gcr.io`, also by digest | No unpinned or rate-limited pulls on the VM |
+| Sealed weights | A separate persistent disk with daily snapshots (14 days) | The registry (§18.2) is a directory |
+| TLS | Let's Encrypt for `<domain>`, `console.`, `agents.` and `enroll.`; renewed daily by a timer | `<ip>.sslip.io` works with no DNS setup, but its Let's Encrypt rate limits may be shared with other users of the service, so pilots use their own domain |
+
+One public port serves everything. Agents need only outbound 443 (§17.1), so the edge nginx routes port 443 by TLS server name before decrypting: `agents.` and `enroll.` pass through to the control plane, which checks the agent's client certificate itself (mutual TLS ends at the control plane, never at a proxy). The edge terminates TLS for the site and the console. Every hop carries the PROXY protocol, and the control plane trusts forwarded addresses only from the Compose network, so rate limits see the real client.
+
+The VM keeps no configuration of its own. `deploy.sh release` builds the images of the current commit, pushes them, and writes the release (compose file, edge config, digests, domain) into the instance metadata. The VM's `neura-apply` watches the metadata, converges the containers, and reports progress as guest attributes, which `deploy.sh` waits on. No SSH is needed to release. SSH goes only through Identity-Aware Proxy with OS Login. A rebuilt VM converges to the same state from the metadata, Secret Manager and the data disk.
+
+Verified locally: the same compose file and edge config with Postgres in place of the proxy and a test CA in place of Let's Encrypt. Onboarding and a sealed-weights upload go through the console origin; an agent enrolls through `enroll.<domain>:443` and its mutual-TLS stream through `agents.<domain>:443` connects the site. Not verified here: anything that needs the Google Cloud project itself (provisioning, Cloud SQL, Let's Encrypt).
+
+What this does not give: high availability. A VM restart or a release that replaces the control plane interrupts the console and API for seconds to minutes, which falls short of the illustrative 99.9% of §21.2 only if it happens often; robots are unaffected (§13). When a partner's contract needs more, the same images move to a regional managed instance group or Cloud Run behind a TCP proxy load balancer (still passing TLS through for agents), with Cloud SQL high availability.
+
 ---
 
 ## 21. Service levels

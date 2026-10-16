@@ -37,7 +37,7 @@ design and the build plan (§16.1).
 | `bench/reports/` | Benchmark reports, one directory per device |
 | `soak/reports/` | 72-hour soak reports with injected faults, and how to reproduce them |
 | `qualification/reports/` | Hardware qualification reports (the emulated arm until hardware runs) |
-| `deploy/` | Container images and the local Compose stack |
+| `deploy/` | Container images, the local Compose stack, and the Google Cloud deployment (`deploy/gcp`) |
 | `tools/` | Code generators and checks |
 
 ## Getting started
@@ -173,6 +173,21 @@ Release bundles are built and signed with `tools/build_agent_release.py`; the in
 them before installing anything. Later upgrades arrive signed through the control plane, if the
 site operator allows them (`NEURA_AGENT_ALLOWED_OPERATIONS`), and roll back by themselves when the
 new release is not healthy (design §17.7).
+
+## Deploying the cloud side
+
+The control plane, console and NucleiLabs site run on Google Cloud: one VM, Cloud SQL, Secret
+Manager and Artifact Registry, about $30–35 a month (design §20.10). With `gcloud` signed in as a
+project owner, Docker and uv:
+
+```bash
+NEURA_GCP_PROJECT=<project-id> NEURA_DOMAIN=<domain> deploy/gcp/deploy.sh up
+deploy/gcp/deploy.sh admin-token    # the first admin API token, to sign in to the console
+deploy/gcp/deploy.sh release        # later: ship the current commit
+```
+
+Without `NEURA_DOMAIN` the stack is served at `<ip>.sslip.io`. With a domain, point it and its
+`console.`, `agents.` and `enroll.` names at the address `up` prints.
 
 ## Conventions
 

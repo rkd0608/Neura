@@ -54,6 +54,14 @@ messages:
     status.faults.latched: {minimal: true, description: "Whether the fault is latched."}
     status.faults.local_response: {minimal: true, description: "What the robot did locally (hold, stop, ...)."}
     status.faults.occurred_at_unix_us: {minimal: true, description: "When it occurred (site wall clock)."}
+    status.capture.enabled: {minimal: true, description: "Whether the site accepts recorded episodes from robots."}
+    status.capture.episodes: {minimal: false, description: "Number of episodes stored at the site (the episodes themselves never leave it)."}
+    status.capture.bytes: {minimal: false, description: "Disk used by stored episodes."}
+    status.capture.steps: {minimal: false, description: "Control periods recorded across stored episodes."}
+    status.capture.outcomes: {minimal: false, description: "Stored episodes by outcome label (success, failure, unknown)."}
+    status.capture.revisions.revision_id: {minimal: true, description: "A revision with stored episodes."}
+    status.capture.revisions.outcomes: {minimal: false, description: "That revision's episodes by outcome label."}
+    status.capture.datasets: {minimal: false, description: "Dataset snapshots in use at the site."}
     status.offline_authorization_remaining_s: {minimal: true, description: "Offline authorization left."}
     status.contact_nonce: {minimal: true, description: "Random bytes the control plane signs to prove contact."}
     telemetry.schema_version: {minimal: false, description: "Version of the metric catalog below."}

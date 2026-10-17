@@ -1,0 +1,70 @@
+// Robot runtime -> site capture service: recorded episodes (design §28.2).
+//
+// Capture is off the action path. A robot records an episode on its own computer while it runs,
+// spools it to disk, and uploads finished episodes to the site's capture service over a
+// connection of its own, rate-limited, so recording and upload never delay an observation or a
+// chunk. Recordings stay at the site: they are payload (design §18.1).
+syntax = "proto3";
+
+package neura.v1;
+
+service Capture {
+  // Upload one finished episode: a header first, then every file's bytes in order. Idempotent:
+  // an episode the site already holds is acknowledged again without being stored twice.
+  rpc UploadEpisode(stream EpisodeUpload) returns (EpisodeReceipt);
+}
+
+// What to record for this robot's revision. Sent in the robot's Assignment; absent or mode OFF
+// means the robot records nothing.
+message CaptureSettings {
+  CaptureMode mode = 1;
+  // Where to upload: "host:port", or ":port" for the gateway's host.
+  string endpoint = 2;
+  // Record camera frames every Nth control period (1: every period). State and commanded actions
+  // are recorded every period.
+  uint32 image_stride = 3;
+  // Cameras to record by role; empty records every camera the model reads.
+  repeated string cameras = 4;
+  // An episode longer than this is closed and the task continues in a new one.
+  uint32 max_episode_seconds = 5;
+  // Disk the robot may use for episodes not yet uploaded. When full, new episodes are not
+  // recorded (and counted), never the action path slowed.
+  uint64 spool_max_bytes = 6;
+  // Upload bandwidth limit, bytes per second; 0 for none.
+  uint64 upload_bytes_per_second = 7;
+}
+
+enum CaptureMode {
+  CAPTURE_MODE_UNSPECIFIED = 0;
+  CAPTURE_MODE_OFF = 1;
+  // Every episode.
+  CAPTURE_MODE_ALL = 2;
+  // Only episodes that end in a fault, a takeover or a failure label: the ones to learn from.
+  CAPTURE_MODE_FAILURES = 3;
+}
+
+message EpisodeUpload {
+  oneof part {
+    EpisodeHeader header = 1;
+    EpisodeData data = 2;
+  }
+}
+
+message EpisodeHeader {
+  string episode_id = 1;
+  // episode.json, canonical: robot, revision and contract digests, timing, cameras, outcome,
+  // events, and every file's SHA-256 and size.
+  bytes manifest = 2;
+}
+
+message EpisodeData {
+  // A file named in the manifest; parts of one file arrive in order.
+  string file = 1;
+  bytes data = 2;
+}
+
+message EpisodeReceipt {
+  string episode_id = 1;
+  // False when the site already held this episode.
+  bool stored = 2;
+}

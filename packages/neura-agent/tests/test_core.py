@@ -1085,3 +1085,47 @@ async def test_agent_upgrade_commands_respect_the_target_and_the_boundaries(
     allowed.core = allowed.new_core()
     allowed.core.recover()
     assert all(r.command_id != "cmd_up" for r in allowed.reports())
+
+
+@pytest.mark.parametrize(
+    ("allowed", "asked", "recorded"),
+    [
+        ("off", "all", None),  # the site's default: nothing is recorded, whatever is asked
+        ("failures", "all", "failures"),  # the site's operator allows less than asked
+        ("all", "failures", "failures"),
+        ("all", "all", "all"),
+        ("all", "off", None),
+    ],
+)
+async def test_robots_record_no_more_than_the_site_allows(
+    tmp_path: Path, allowed: str, asked: str, recorded: str | None
+) -> None:
+    site = Site(tmp_path, capture_allowed=allowed, capture_listen="127.0.0.1:0")
+    manifest = site.manifest([REV1])
+    manifest["deployments"][0]["capture"] = {"mode": asked, "image_stride": 4, "upload_mbps": 8}
+    assert (await site.core.on_desired_state(site.desired(manifest))).ack.accepted
+    await site.core.on_command(site.prepare(REV1["id"]))
+    await activated(site, REV1["id"])
+    try:
+        config = build_gateway_config(site.core.state, site.settings, site.core.gateway_dir)
+        (deployment,) = config["deployments"]
+        capture = deployment.get("capture")
+        if recorded is None:
+            assert capture is None
+        else:
+            assert capture == {
+                "mode": recorded,
+                "endpoint": ":50052",
+                "image_stride": 4,
+                "cameras": [],
+                "max_episode_seconds": 600,
+                "upload_bytes_per_second": 1_000_000,
+            }
+        # The capture service takes uploads only from robots whose revision records.
+        assert site.core.capture.allowed("robot-0", REV1["id"]) is (recorded is not None)
+        assert (site.core.capture.server is not None) is (recorded is not None)
+        summary = site.core.status_message(None).status.capture
+        assert summary.enabled is (allowed != "off")
+        assert summary.episodes == 0
+    finally:
+        await site.core.capture.stop()

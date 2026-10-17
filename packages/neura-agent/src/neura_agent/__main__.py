@@ -20,6 +20,13 @@
     neura-agent publishers                  list the trusted publisher keys
     neura-agent outbound [--kind KIND] [--limit N] [--summary] [--verify]
                                             what this server sent to Neura (the outbound ledger)
+    neura-agent episodes [--robot R] [--revision REV] [--outcome O] [--end E] [--since T]
+                                            episodes recorded at this site (they never leave it)
+    neura-agent label EPISODE_ID success|failure|unknown --operator NAME [--note TEXT]
+    neura-agent delete-episode EPISODE_ID
+    neura-agent datasets                    dataset snapshots, which retention keeps
+    neura-agent dataset NAME [filters]      snapshot the episodes the filters select
+    neura-agent release-dataset DATASET_ID  let retention delete a snapshot's episodes
 
 Local commands talk to the agent's local API and read the operator credential from
 NEURA_AGENT_OPERATOR_TOKEN.
@@ -35,6 +42,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import uvicorn
@@ -57,6 +65,26 @@ def _local(settings: AgentSettings, method: str, path: str, body: Any = None) ->
     )
     print(json.dumps(response.json(), indent=2))
     return 0 if response.status_code < 400 else 1
+
+
+def _episode_filter(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--robot", action="append", default=[], help="repeat for several")
+    parser.add_argument("--revision", action="append", default=[])
+    parser.add_argument("--outcome", action="append", default=[], help="success, failure, unknown")
+    parser.add_argument("--end", action="append", default=[], help="stopped, takeover, fault, ...")
+    parser.add_argument("--since", default=None, help="ISO 8601, inclusive")
+    parser.add_argument("--until", default=None, help="ISO 8601, exclusive")
+
+
+def _filter_pairs(args: argparse.Namespace) -> list[tuple[str, str]]:
+    pairs = [
+        *(("robot_ids", v) for v in args.robot),
+        *(("revision_ids", v) for v in args.revision),
+        *(("outcomes", v) for v in args.outcome),
+        *(("end_reasons", v) for v in args.end),
+    ]
+    pairs += [(key, value) for key in ("since", "until") if (value := getattr(args, key))]
+    return pairs
 
 
 def _robot_certificate(settings: AgentSettings, robot: str, csr: Path, out: Path | None) -> int:
@@ -186,6 +214,23 @@ def main(argv: list[str] | None = None) -> int:
     ledger.add_argument("--limit", type=int, default=20)
     ledger.add_argument("--summary", action="store_true", help="messages and bytes per kind")
     ledger.add_argument("--verify", action="store_true", help="check the ledger's hash chain")
+    episodes = sub.add_parser("episodes", help="episodes recorded at this site")
+    _episode_filter(episodes)
+    episodes.add_argument("--limit", type=int, default=50)
+    label = sub.add_parser("label", help="label an episode's outcome")
+    label.add_argument("episode_id")
+    label.add_argument("outcome", choices=("success", "failure", "unknown"))
+    label.add_argument("--operator", required=True)
+    label.add_argument("--note", default="")
+    forget = sub.add_parser("delete-episode")
+    forget.add_argument("episode_id")
+    sub.add_parser("datasets", help="dataset snapshots at this site")
+    dataset = sub.add_parser("dataset", help="snapshot the episodes a filter selects")
+    dataset.add_argument("name")
+    _episode_filter(dataset)
+    dataset.add_argument("--limit", type=int, default=None)
+    release = sub.add_parser("release-dataset")
+    release.add_argument("dataset_id")
     args = parser.parse_args(argv)
     settings = AgentSettings()
 
@@ -230,6 +275,36 @@ def main(argv: list[str] | None = None) -> int:
         return _publishers(settings, args)
     if args.command == "outbound":
         return _outbound(settings, args)
+    if args.command == "episodes":
+        query = urlencode(
+            [*_filter_pairs(args), ("limit", str(args.limit)), ("complete_only", "false")]
+        )
+        return _local(settings, "GET", f"/v1/local/episodes?{query}")
+    if args.command == "label":
+        return _local(
+            settings,
+            "POST",
+            f"/v1/local/episodes/{args.episode_id}/label",
+            {"outcome": args.outcome, "operator": args.operator, "note": args.note},
+        )
+    if args.command == "delete-episode":
+        return _local(settings, "DELETE", f"/v1/local/episodes/{args.episode_id}")
+    if args.command == "datasets":
+        return _local(settings, "GET", "/v1/local/datasets")
+    if args.command == "dataset":
+        selection: dict[str, Any] = {}
+        for key, value in _filter_pairs(args):
+            if key in ("since", "until"):
+                selection[key] = value
+            else:
+                selection.setdefault(key, []).append(value)
+        if args.limit is not None:
+            selection["limit"] = args.limit
+        return _local(
+            settings, "POST", "/v1/local/datasets", {"name": args.name, "filter": selection}
+        )
+    if args.command == "release-dataset":
+        return _local(settings, "POST", f"/v1/local/datasets/{args.dataset_id}/release")
 
     logging.basicConfig(
         level=settings.log_level.upper(),

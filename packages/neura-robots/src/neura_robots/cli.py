@@ -91,6 +91,9 @@ class RobotConfig(_Model):
     arm: ArmConfig
     cameras: dict[str, CameraEntry] = Field(default_factory=dict)
     instruction: str | None = None
+    # Where the robot spools recorded episodes when its site records them (design §28.2); unset,
+    # the robot never records, whatever the site asks.
+    capture_dir: Path | None = None
 
     @classmethod
     def load(cls, path: Path) -> RobotConfig:
@@ -120,7 +123,12 @@ class RobotConfig(_Model):
             }
         )
         return config.model_copy(
-            update={"revision": revision, "credentials": credentials, "arm": arm}
+            update={
+                "revision": revision,
+                "credentials": credentials,
+                "arm": arm,
+                "capture_dir": rel(config.capture_dir),
+            }
         )
 
     def so101(self) -> So101Config:
@@ -274,6 +282,7 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
                 inbox=inbox,
                 instruction=config.instruction,
                 say=_say,
+                capture_dir=config.capture_dir,
             )
             current.append(assigned)
             _say(f"{config.robot_id}: waiting for the site to assign a revision")

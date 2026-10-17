@@ -106,6 +106,7 @@ async def manifest_content(session: AsyncSession, site: Site) -> dict[str, Any]:
                 "robot_ids": d.robot_ids,
                 "desired_revision_id": d.desired_revision_id,
                 "rollout": d.rollout,
+                "capture": d.capture or {"mode": "off"},
                 "revisions": by_deployment.get(d.id, []),
             }
             for d in deployments

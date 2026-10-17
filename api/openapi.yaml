@@ -3329,6 +3329,71 @@ components:
           items:
             $ref: '#/components/schemas/ProjectId'
           description: Projects an API token is restricted to; null when unrestricted.
+    CaptureCounts:
+      type: object
+      readOnly: true
+      description: Episodes the site holds for this deployment's revisions, as the site reports them. The
+        episodes themselves never leave the site (design §18.1, §28.2).
+      required:
+      - episodes
+      - outcomes
+      properties:
+        episodes:
+          type: integer
+          minimum: 0
+        outcomes:
+          type: object
+          description: Episodes by outcome label (success, failure, unknown).
+          additionalProperties:
+            type: integer
+            minimum: 0
+      additionalProperties: false
+    CaptureSettings:
+      type: object
+      description: What a deployment's robots record while they run (design §28.2). Recording happens on
+        each robot and finished episodes are stored at the site, which never sends them to Neura; the
+        site's operator may allow less than a deployment asks (failures only, or nothing).
+      properties:
+        mode:
+          description: 'off: nothing (the default). failures: only episodes that end in a fault, an operator
+            takeover or a failure label. all: every episode.'
+          enum:
+          - 'off'
+          - failures
+          - all
+          default: 'off'
+        image_stride:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 1
+          description: Record camera frames every Nth control period; state and commanded actions are recorded
+            every period.
+        cameras:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            minLength: 1
+            maxLength: 63
+          description: Cameras to record by role; empty records every camera the model reads.
+        max_episode_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          default: 600
+          description: A longer task continues in a new episode.
+        spool_max_gib:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 10000
+          description: Disk each robot may use for episodes not yet uploaded (robot default 2 GiB).
+        upload_mbps:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100000
+          description: Upload bandwidth limit per robot, megabits per second (default none).
+      additionalProperties: false
     Deployment:
       type: object
       required:
@@ -3376,6 +3441,8 @@ components:
               - number
               - 'null'
               minimum: 0
+            capture:
+              $ref: '#/components/schemas/CaptureCounts'
       additionalProperties: false
     DeploymentCreate:
       type: object
@@ -3450,6 +3517,8 @@ components:
             canary_robot_id:
               $ref: '#/components/schemas/RobotId'
           additionalProperties: false
+        capture:
+          $ref: '#/components/schemas/CaptureSettings'
         labels:
           $ref: '#/components/schemas/Labels'
       additionalProperties: false
@@ -3474,6 +3543,8 @@ components:
               oneOf:
               - $ref: '#/components/schemas/RevisionId'
               - type: 'null'
+            capture:
+              $ref: '#/components/schemas/CaptureSettings'
           additionalProperties: false
       additionalProperties: false
     Digest:
@@ -4702,6 +4773,42 @@ components:
               oneOf:
               - $ref: '#/components/schemas/Timestamp'
               - type: 'null'
+            capture:
+              oneOf:
+              - $ref: '#/components/schemas/SiteCaptureStatus'
+              - type: 'null'
+      additionalProperties: false
+    SiteCaptureStatus:
+      type: object
+      readOnly: true
+      description: The site's episode store, as its agent reports it (counts only).
+      required:
+      - enabled
+      - episodes
+      - bytes
+      - outcomes
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the site's operator allows robots to record.
+        episodes:
+          type: integer
+          minimum: 0
+        bytes:
+          type: integer
+          minimum: 0
+        steps:
+          type: integer
+          minimum: 0
+        outcomes:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        datasets:
+          type: integer
+          minimum: 0
+          description: Dataset snapshots in use, which keep their episodes against retention.
       additionalProperties: false
     SiteCreate:
       type: object

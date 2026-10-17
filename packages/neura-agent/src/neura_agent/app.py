@@ -7,6 +7,7 @@ credential. Robots do not use this API: they reach only the gateway, with their 
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
@@ -14,7 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -31,6 +32,7 @@ from neura_agent.runner import AgentRuntime
 from neura_agent.settings import AgentSettings
 from neura_contracts import REASON_CODES, ReasonCode
 from neura_contracts.outbound_schema import SCHEMA_VERSION
+from neura_server.capture.store import EpisodeFilter, StoreError
 
 SERVICE_NAME = "neura-agent"
 
@@ -51,6 +53,19 @@ class Decision(BaseModel):
 class CertificateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     csr: str = Field(min_length=1, max_length=16_000)
+
+
+class Label(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: Literal["success", "failure", "unknown"]
+    operator: str = Field(min_length=1, max_length=200)
+    note: str = Field(default="", max_length=500)
+
+
+class DatasetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    filter: dict[str, Any] = Field(default_factory=dict)
 
 
 class LocalError(Exception):
@@ -275,5 +290,112 @@ def create_app(
             "summary": gate.ledger.summary(),
             "items": gate.ledger.entries(limit=limit, kind=kind),
         }
+
+    # --- recorded episodes (design §28.2): they stay here -----------------------------------
+
+    def store() -> Any:
+        return core().capture.store
+
+    def store_error(exc: StoreError) -> LocalError:
+        code = ReasonCode(exc.code)
+        unknown = code in (ReasonCode.CAPTURE_EPISODE_UNKNOWN, ReasonCode.CAPTURE_DATASET_UNKNOWN)
+        conflict = code in (
+            ReasonCode.CAPTURE_EPISODE_IN_DATASET,
+            ReasonCode.CAPTURE_DATASET_RELEASED,
+        )
+        return LocalError(code, 404 if unknown else 409 if conflict else 422, str(exc))
+
+    def episode_filter(request: Request) -> EpisodeFilter:
+        params = request.query_params
+        query: dict[str, Any] = {
+            key: params.getlist(key)
+            for key in ("robot_ids", "revision_ids", "artifact_digests", "outcomes", "end_reasons")
+            if params.getlist(key)
+        }
+        for key in ("since", "until"):
+            if key in params:
+                query[key] = params[key]
+        query["complete_only"] = params.get("complete_only", "false") == "true"
+        query["limit"] = int(params.get("limit", "100"))
+        try:
+            return EpisodeFilter.from_json(query)
+        except (StoreError, ValueError) as exc:
+            raise LocalError(ReasonCode.CAPTURE_FILTER_INVALID, 422, str(exc)) from exc
+
+    @app.get("/v1/local/episodes")
+    async def episodes(request: Request) -> dict[str, Any]:
+        operator(request)
+        query = episode_filter(request)
+        offset = int(request.query_params.get("offset", "0"))
+        items = await asyncio.to_thread(store().find, query, offset=offset)
+        summary = await asyncio.to_thread(store().summary)
+        return {"items": items, "summary": summary}
+
+    @app.get("/v1/local/episodes/{episode_id}")
+    async def episode(episode_id: str, request: Request) -> dict[str, Any]:
+        operator(request)
+        try:
+            record: dict[str, Any] = await asyncio.to_thread(store().get, episode_id)
+        except StoreError as exc:
+            raise store_error(exc) from exc
+        return record
+
+    @app.post("/v1/local/episodes/{episode_id}/label")
+    async def label(episode_id: str, body: Label, request: Request) -> dict[str, Any]:
+        operator(request)
+        c = core()
+        try:
+            record: dict[str, Any] = await asyncio.to_thread(
+                c.capture.store.label, episode_id, body.outcome, note=body.note
+            )
+        except StoreError as exc:
+            raise store_error(exc) from exc
+        c.audit.write(
+            "episode_labeled", episode=episode_id, outcome=body.outcome, operator=body.operator
+        )
+        return record
+
+    @app.delete("/v1/local/episodes/{episode_id}")
+    async def delete_episode(episode_id: str, request: Request) -> dict[str, str]:
+        operator(request)
+        c = core()
+        try:
+            await asyncio.to_thread(c.capture.store.delete, episode_id)
+        except StoreError as exc:
+            raise store_error(exc) from exc
+        c.audit.write("episode_deleted", episode=episode_id)
+        return {"status": "deleted"}
+
+    @app.get("/v1/local/datasets")
+    async def datasets(request: Request) -> dict[str, Any]:
+        operator(request)
+        return {"items": await asyncio.to_thread(store().datasets)}
+
+    @app.post("/v1/local/datasets")
+    async def create_dataset(body: DatasetRequest, request: Request) -> dict[str, Any]:
+        operator(request)
+        c = core()
+        try:
+            query = EpisodeFilter.from_json(body.filter)
+            record: dict[str, Any] = await asyncio.to_thread(
+                c.capture.store.create_dataset, body.name, query
+            )
+        except StoreError as exc:
+            raise store_error(exc) from exc
+        c.audit.write("dataset_created", dataset=record["dataset_id"], episodes=record["episodes"])
+        return record
+
+    @app.post("/v1/local/datasets/{dataset_id}/release")
+    async def release_dataset(dataset_id: str, request: Request) -> dict[str, Any]:
+        operator(request)
+        c = core()
+        try:
+            record: dict[str, Any] = await asyncio.to_thread(
+                c.capture.store.release_dataset, dataset_id
+            )
+        except StoreError as exc:
+            raise store_error(exc) from exc
+        c.audit.write("dataset_released", dataset=dataset_id)
+        return record
 
     return app

@@ -300,6 +300,43 @@ async def report_site_heartbeat(
         await _emit(session, site.project_id, site)
 
 
+async def report_capture(session: AsyncSession, site_id: str, summary: dict[str, Any]) -> None:
+    """The site's episode store, counts only (design §28.2): on the site, and per deployment
+    over its revisions. Versions change, and events go out, only when a count changed."""
+    site = await session.get(Site, site_id, with_for_update=True)
+    if site is None:
+        return
+    capture = {
+        key: summary[key]
+        for key in ("enabled", "episodes", "bytes", "steps", "outcomes", "datasets")
+    }
+    if site.observed.get("capture") != capture:
+        site.observed = {**site.observed, "capture": capture}
+        _touch(site)
+        await _emit(session, site.project_id, site)
+    by_revision: dict[str, dict[str, int]] = summary.get("revisions", {})
+    deployments = (
+        await session.scalars(
+            select(Deployment).where(Deployment.site_id == site_id).with_for_update()
+        )
+    ).all()
+    for deployment in deployments:
+        revision_ids = (
+            await session.scalars(
+                select(Revision.id).where(Revision.deployment_id == deployment.id)
+            )
+        ).all()
+        outcomes: dict[str, int] = {}
+        for revision_id in revision_ids:
+            for outcome, count in by_revision.get(revision_id, {}).items():
+                outcomes[outcome] = outcomes.get(outcome, 0) + count
+        counts = {"episodes": sum(outcomes.values()), "outcomes": outcomes}
+        if deployment.observed.get("capture", {"episodes": 0, "outcomes": {}}) != counts:
+            deployment.observed = {**deployment.observed, "capture": counts}
+            _touch(deployment)
+            await _emit(session, deployment.project_id, deployment)
+
+
 async def report_server(session: AsyncSession, server_id: str, observed: dict[str, Any]) -> None:
     server = await session.get(Server, server_id, with_for_update=True)
     if server is None:

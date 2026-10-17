@@ -115,6 +115,20 @@ class Rollout(Strict):
         return self
 
 
+class CaptureSettings(Strict):
+    """What the deployment's robots record (design §28.2). Episodes stay at the site; its
+    operator may allow less than a deployment asks."""
+
+    mode: Literal["off", "failures", "all"] = "off"
+    image_stride: int = Field(default=1, ge=1, le=100)
+    cameras: list[Annotated[str, StringConstraints(min_length=1, max_length=63)]] = Field(
+        default_factory=list, max_length=16
+    )
+    max_episode_seconds: int = Field(default=600, ge=1, le=86_400)
+    spool_max_gib: float | None = Field(default=None, gt=0, le=10_000)
+    upload_mbps: float | None = Field(default=None, gt=0, le=100_000)
+
+
 class DeploymentSpec(Strict):
     name: Name
     display_name: DisplayName
@@ -122,6 +136,7 @@ class DeploymentSpec(Strict):
     robot_ids: list[RobotId] = Field(min_length=1)
     desired_revision_id: RevisionId | None = None
     rollout: Rollout
+    capture: CaptureSettings = Field(default_factory=CaptureSettings)
     labels: Labels = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -238,5 +253,7 @@ MUTABLE_FIELDS: dict[str, frozenset[str]] = {
     "site": frozenset({"display_name", "labels", "offline_authorization_hours"}),
     "server": frozenset({"display_name", "labels", "allocated_gpu_indexes"}),
     "robot": frozenset({"display_name", "labels", "robot_profile_id"}),
-    "deployment": frozenset({"display_name", "labels", "robot_ids", "desired_revision_id"}),
+    "deployment": frozenset(
+        {"display_name", "labels", "robot_ids", "desired_revision_id", "capture"}
+    ),
 }

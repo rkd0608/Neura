@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "api"]
+Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "capture", "evaluation", "training", "api"]
 Severity = Literal["info", "warning", "error", "fatal"]
 
 
@@ -100,6 +100,18 @@ class ReasonCode(StrEnum):
     AGENT_ACTIVATION_SUPERSEDED = "AGENT_ACTIVATION_SUPERSEDED"
     AGENT_BOUNDARY_DENIED = "AGENT_BOUNDARY_DENIED"
     AGENT_OPERATION_INTERRUPTED = "AGENT_OPERATION_INTERRUPTED"
+    CAPTURE_NOT_ENABLED = "CAPTURE_NOT_ENABLED"
+    CAPTURE_EPISODE_INVALID = "CAPTURE_EPISODE_INVALID"
+    CAPTURE_ROBOT_MISMATCH = "CAPTURE_ROBOT_MISMATCH"
+    CAPTURE_EPISODE_TOO_LARGE = "CAPTURE_EPISODE_TOO_LARGE"
+    CAPTURE_EPISODE_UNKNOWN = "CAPTURE_EPISODE_UNKNOWN"
+    CAPTURE_EPISODE_IN_DATASET = "CAPTURE_EPISODE_IN_DATASET"
+    CAPTURE_LABEL_INVALID = "CAPTURE_LABEL_INVALID"
+    CAPTURE_FILTER_INVALID = "CAPTURE_FILTER_INVALID"
+    CAPTURE_DATASET_EMPTY = "CAPTURE_DATASET_EMPTY"
+    CAPTURE_DATASET_UNKNOWN = "CAPTURE_DATASET_UNKNOWN"
+    CAPTURE_DATASET_RELEASED = "CAPTURE_DATASET_RELEASED"
+    CAPTURE_SPOOL_FULL = "CAPTURE_SPOOL_FULL"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
     API_FORBIDDEN = "API_FORBIDDEN"
     API_NOT_FOUND = "API_NOT_FOUND"
@@ -721,6 +733,90 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="warning",
         retryable=True,
         message='The site agent restarted while the operation was running; run it again.',
+    ),
+    ReasonCode.CAPTURE_NOT_ENABLED: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_NOT_ENABLED,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message="Episode capture is not enabled for this robot's revision at this site.",
+    ),
+    ReasonCode.CAPTURE_EPISODE_INVALID: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_EPISODE_INVALID,
+        area="capture",
+        severity="error",
+        retryable=False,
+        message='The uploaded episode is not a complete, intact neura-episode/1 episode.',
+    ),
+    ReasonCode.CAPTURE_ROBOT_MISMATCH: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_ROBOT_MISMATCH,
+        area="capture",
+        severity="error",
+        retryable=False,
+        message='A robot uploaded an episode another robot recorded.',
+    ),
+    ReasonCode.CAPTURE_EPISODE_TOO_LARGE: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_EPISODE_TOO_LARGE,
+        area="capture",
+        severity="error",
+        retryable=False,
+        message='The episode is larger than the site accepts.',
+    ),
+    ReasonCode.CAPTURE_EPISODE_UNKNOWN: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_EPISODE_UNKNOWN,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='No episode with this identifier is stored at this site.',
+    ),
+    ReasonCode.CAPTURE_EPISODE_IN_DATASET: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_EPISODE_IN_DATASET,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='The episode belongs to a dataset in use; release the dataset first.',
+    ),
+    ReasonCode.CAPTURE_LABEL_INVALID: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_LABEL_INVALID,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='An outcome label is success, failure or unknown.',
+    ),
+    ReasonCode.CAPTURE_FILTER_INVALID: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_FILTER_INVALID,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='The episode filter is not valid.',
+    ),
+    ReasonCode.CAPTURE_DATASET_EMPTY: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_DATASET_EMPTY,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message="No stored episode matches the dataset's filter.",
+    ),
+    ReasonCode.CAPTURE_DATASET_UNKNOWN: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_DATASET_UNKNOWN,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='No dataset with this identifier exists at this site.',
+    ),
+    ReasonCode.CAPTURE_DATASET_RELEASED: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_DATASET_RELEASED,
+        area="capture",
+        severity="warning",
+        retryable=False,
+        message='The dataset was released; its episodes may be gone.',
+    ),
+    ReasonCode.CAPTURE_SPOOL_FULL: ReasonCodeInfo(
+        code=ReasonCode.CAPTURE_SPOOL_FULL,
+        area="capture",
+        severity="warning",
+        retryable=True,
+        message="The robot's episode spool is full; new episodes are not recorded until uploads free space.",
     ),
     ReasonCode.API_UNAUTHENTICATED: ReasonCodeInfo(
         code=ReasonCode.API_UNAUTHENTICATED,

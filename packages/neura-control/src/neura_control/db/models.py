@@ -218,6 +218,8 @@ class Deployment(Resource, Base):
     robot_ids: Mapped[list[Any]] = mapped_column(nullable=False)
     desired_revision_id: Mapped[str | None] = mapped_column(String(40))
     rollout: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    # What the deployment's robots record (design §28.2); {"mode": "off"} records nothing.
+    capture: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
 

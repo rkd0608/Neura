@@ -29,7 +29,7 @@ from fastapi import FastAPI, Response
 from numpy.typing import NDArray
 from prometheus_client import CONTENT_TYPE_LATEST
 
-from neura.v1 import dataplane_pb2, dataplane_pb2_grpc
+from neura.v1 import capture_pb2, dataplane_pb2, dataplane_pb2_grpc
 from neura_adapters import MockPolicy, ModelInputs, PolicyBackend, PolicyError
 from neura_server.admission import AdmissionController
 from neura_server.backends import Backend, InProcessBackend, WorkerBackend, WorkerSpec
@@ -420,7 +420,25 @@ class GatewayServer:
             "robot_profile": as_json(item.robot_profile),
             "execution_profile": as_json(item.execution_profile),
         }
-        return dataplane_pb2.Assignment(revision_id=revision_id, documents=documents)
+        assignment = dataplane_pb2.Assignment(revision_id=revision_id, documents=documents)
+        if item.capture is not None:
+            capture = item.capture
+            assignment.capture.CopyFrom(
+                capture_pb2.CaptureSettings(
+                    mode=(
+                        capture_pb2.CAPTURE_MODE_ALL
+                        if capture.mode == "all"
+                        else capture_pb2.CAPTURE_MODE_FAILURES
+                    ),
+                    endpoint=capture.endpoint,
+                    image_stride=capture.image_stride,
+                    cameras=capture.cameras,
+                    max_episode_seconds=capture.max_episode_seconds,
+                    spool_max_bytes=capture.spool_max_bytes,
+                    upload_bytes_per_second=capture.upload_bytes_per_second,
+                )
+            )
+        return assignment
 
     def backends(self) -> dict[str, Backend]:
         """Each batch group's backend, by group key."""

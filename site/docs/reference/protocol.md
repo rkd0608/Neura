@@ -12,6 +12,65 @@ generated: true
 
 Neura's wire protocol, package `neura.v1`: the robot runtime and the site gateway (`dataplane.proto`), the site agent and the control plane (`site.proto`), the gateway and its policy workers (`worker.proto`), and shared types (`common.proto`). Sources: [`proto/neura/v1`](https://github.com/rkd0608/neura/tree/main/proto/neura/v1).
 
+## `neura/v1/capture.proto`
+
+### Service `Capture`
+
+| RPC | Request | Response | Description |
+| --- | --- | --- | --- |
+| `UploadEpisode` | `stream EpisodeUpload` | `EpisodeReceipt` | Upload one finished episode: a header first, then every file's bytes in order. Idempotent: an episode the site already holds is acknowledged again without being stored twice. |
+
+### Enum `CaptureMode`
+
+| Value | Number | Description |
+| --- | --- | --- |
+| `CAPTURE_MODE_UNSPECIFIED` | 0 |  |
+| `CAPTURE_MODE_OFF` | 1 |  |
+| `CAPTURE_MODE_ALL` | 2 | Every episode. |
+| `CAPTURE_MODE_FAILURES` | 3 | Only episodes that end in a fault, a takeover or a failure label: the ones to learn from. |
+
+### Message `CaptureSettings`
+
+What to record for this robot's revision. Sent in the robot's Assignment; absent or mode OFF means the robot records nothing.
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `mode` | `CaptureMode` | 1 |  |
+| `endpoint` | `string` | 2 | Where to upload: "host:port", or ":port" for the gateway's host. |
+| `image_stride` | `uint32` | 3 | Record camera frames every Nth control period (1: every period). State and commanded actions are recorded every period. |
+| `cameras` | `repeated string` | 4 | Cameras to record by role; empty records every camera the model reads. |
+| `max_episode_seconds` | `uint32` | 5 | An episode longer than this is closed and the task continues in a new one. |
+| `spool_max_bytes` | `uint64` | 6 | Disk the robot may use for episodes not yet uploaded. When full, new episodes are not recorded (and counted), never the action path slowed. |
+| `upload_bytes_per_second` | `uint64` | 7 | Upload bandwidth limit, bytes per second; 0 for none. |
+
+### Message `EpisodeUpload`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `header` | `EpisodeHeader` | 1 | (one of `part`) |
+| `data` | `EpisodeData` | 2 | (one of `part`) |
+
+### Message `EpisodeHeader`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `episode_id` | `string` | 1 |  |
+| `manifest` | `bytes` | 2 | episode.json, canonical: robot, revision and contract digests, timing, cameras, outcome, events, and every file's SHA-256 and size. |
+
+### Message `EpisodeData`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `file` | `string` | 1 | A file named in the manifest; parts of one file arrive in order. |
+| `data` | `bytes` | 2 |  |
+
+### Message `EpisodeReceipt`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `episode_id` | `string` | 1 |  |
+| `stored` | `bool` | 2 | False when the site already held this episode. |
+
 ## `neura/v1/common.proto`
 
 ### Enum `ProtocolVersion`
@@ -130,6 +189,7 @@ No fields.
 | --- | --- | --- | --- |
 | `revision_id` | `string` | 1 | Empty when no deployment includes this robot. |
 | `documents` | `repeated DocumentsEntry` | 2 | Contract documents by role (model_artifact, robot_profile, execution_profile), as JSON. |
+| `capture` | `CaptureSettings` | 3 | What to record while running this revision, if the deployment captures episodes. |
 
 ### Message `OpenSessionRequest`
 
@@ -520,6 +580,26 @@ Asks the site to activate a prepared revision. Activation still requires local a
 | `faults` | `repeated FaultReport` | 4 |  |
 | `offline_authorization_remaining_s` | `uint64` | 5 | Seconds of offline authorization left, from the agent's last successful contact. |
 | `contact_nonce` | `bytes` | 6 | Fresh random bytes; the control plane answers with a ContactProof over them. |
+| `capture` | `CaptureSummary` | 7 | Episodes the site holds (design §28.2): counts and sizes only. Episodes never leave the site. |
+
+### Message `CaptureSummary`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `enabled` | `bool` | 1 | Whether this site accepts episodes from robots at all (its operator's boundary). |
+| `episodes` | `uint64` | 2 |  |
+| `bytes` | `uint64` | 3 |  |
+| `steps` | `uint64` | 4 | Control periods recorded, over every episode. |
+| `outcomes` | `repeated OutcomesEntry` | 5 | Episodes by outcome label: success, failure, unknown. |
+| `revisions` | `repeated RevisionCapture` | 6 |  |
+| `datasets` | `uint64` | 7 | Dataset snapshots in use (holding their episodes against retention). |
+
+### Message `RevisionCapture`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `revision_id` | `string` | 1 |  |
+| `outcomes` | `repeated OutcomesEntry` | 2 |  |
 
 ### Message `RobotSessionStatus`
 

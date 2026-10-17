@@ -137,6 +137,21 @@ class AgentSettings(BaseSettings):
     upgrade_wait_s: float = Field(default=3600.0, gt=0)
     upgrade_health_timeout_s: float = Field(default=300.0, gt=0)
 
+    # --- recorded episodes (design §28.2: they stay at the site) ---
+    # The site operator's boundary on recording: what a deployment may ask robots to record.
+    # off (the default): nothing, whatever deployments ask; failures: only episodes that end in
+    # a fault, a takeover or a failure; all: every episode.
+    capture_allowed: Literal["off", "failures", "all"] = "off"
+    # The capture service robots upload finished episodes to, and the address they are told to
+    # use (":port" for the host they reach the gateway on).
+    capture_listen: str = "0.0.0.0:50052"
+    capture_endpoint: str = ":50052"
+    # Where episodes are kept (default <state_dir>/capture), and the most they may use; beyond
+    # either limit the oldest episodes no dataset holds are deleted.
+    capture_dir: Path | None = None
+    capture_max_gib: float = Field(default=200.0, gt=0)
+    capture_max_age_days: int | None = Field(default=None, ge=1)
+
     # --- what leaves the site (design §18.2) ---
     # standard: every field of the published outbound schema (catalog/outbound.yaml). minimal:
     # only health, versions, identifiers, states and reason codes; metrics stay at the site.

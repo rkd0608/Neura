@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package neura.v1;
 
+import "neura/v1/capture.proto";
 import "neura/v1/common.proto";
 
 service RobotGateway {
@@ -29,6 +30,8 @@ message Assignment {
   string revision_id = 1;
   // Contract documents by role (model_artifact, robot_profile, execution_profile), as JSON.
   map<string, bytes> documents = 2;
+  // What to record while running this revision, if the deployment captures episodes.
+  CaptureSettings capture = 3;
 }
 
 message OpenSessionRequest {

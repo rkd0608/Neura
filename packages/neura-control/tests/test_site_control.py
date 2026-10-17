@@ -465,6 +465,117 @@ def test_site_is_shown_disconnected_when_its_reports_go_stale(harness: Harness) 
     assert (result["after"]["connected"], result["after"]["phase"]) == (False, "Offline")
 
 
+def test_capture_settings_reach_the_site_and_only_counts_come_back(harness: Harness) -> None:
+    """A deployment's capture settings go to the site in its signed manifest; the site reports
+    how many episodes it holds, by outcome and revision, and never the episodes (design §28.2)."""
+    enrolled, key = harness.enrolled()
+    c = harness.client
+    harness.add_robot("robot-0")
+    robot = c.get(f"/v1/projects/{harness.project}/robots").json()["items"][0]["metadata"]["id"]
+    created = c.post(
+        f"/v1/projects/{harness.project}/deployments",
+        {
+            "spec": {
+                "name": "cell",
+                "display_name": "Cell",
+                "site_id": harness.site,
+                "robot_ids": [robot],
+                "rollout": {"strategy": "all_at_task_boundary"},
+                "capture": {"mode": "failures", "image_stride": 5},
+            }
+        },
+    )
+    assert created.status_code == 201, created.text
+    deployment = created.json()
+    assert deployment["spec"]["capture"] == {
+        "mode": "failures",
+        "image_stride": 5,
+        "cameras": [],
+        "max_episode_seconds": 600,
+    }
+    assert deployment["status"]["capture"] == {"episodes": 0, "outcomes": {}}
+    path = f"/v1/deployments/{deployment['metadata']['id']}"
+    patched = c.patch(
+        path,
+        {"spec": {"capture": {"mode": "all", "upload_mbps": 50}}},
+        version=deployment["metadata"]["version"],
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["spec"]["capture"]["mode"] == "all"
+    assert patched.json()["spec"]["capture"]["upload_mbps"] == 50
+    refused = c.patch(path, {"spec": {"capture": {"mode": "always"}}}, version=None)
+    assert refused.status_code in (412, 422, 428)
+    artifact = c.post(
+        f"/v1/projects/{harness.project}/model-artifacts",
+        {"document": contract("act-so101.artifact.yaml")},
+    ).json()["metadata"]["id"]
+    profile = c.post(
+        f"/v1/projects/{harness.project}/execution-profiles",
+        {"document": contract("act-so101-30hz.profile.yaml")},
+    ).json()["metadata"]["id"]
+    revision = c.post(
+        f"{path}/revisions",
+        {
+            "spec": {
+                "model_artifact_id": artifact,
+                "execution_profile_id": profile,
+                "robot_profile_id": harness.robot_profile,
+            }
+        },
+    )
+    assert revision.status_code == 201, revision.text
+    revision_id = revision.json()["metadata"]["id"]
+
+    status = site_pb2.AgentMessage(
+        status=site_pb2.SiteStatus(
+            offline_authorization_remaining_s=7200,
+            contact_nonce=bytes(16),  # answered once the status is applied
+            capture=site_pb2.CaptureSummary(
+                enabled=True,
+                episodes=7,
+                bytes=1 << 30,
+                steps=21_000,
+                outcomes={"success": 4, "failure": 2, "unknown": 1},
+                revisions=[
+                    site_pb2.RevisionCapture(
+                        revision_id=revision_id, outcomes={"success": 4, "failure": 1}
+                    ),
+                    site_pb2.RevisionCapture(revision_id="rev_elsewhere", outcomes={"unknown": 1}),
+                ],
+                datasets=1,
+            ),
+        )
+    )
+    received = asyncio.run(
+        connect(
+            harness.endpoint,
+            connection_token(key, enrolled.server_id),
+            [hello(harness.site), status],
+            until=lambda r: {"desired_state", "contact"} <= set(kinds(r)),
+        )
+    )
+    desired = next(m.desired_state for m in received if m.WhichOneof("body") == "desired_state")
+    (sent,) = json.loads(desired.manifest)["deployments"]
+    assert sent["capture"] == {
+        "mode": "all",
+        "image_stride": 5,
+        "max_episode_seconds": 600,
+        "cameras": [],
+        "upload_mbps": 50.0,
+    }
+    site = c.get(f"/v1/sites/{harness.site}").json()["status"]
+    assert site["capture"] == {
+        "enabled": True,
+        "episodes": 7,
+        "bytes": 1 << 30,
+        "steps": 21_000,
+        "outcomes": {"success": 4, "failure": 2, "unknown": 1},
+        "datasets": 1,
+    }
+    counts = c.get(path).json()["status"]["capture"]
+    assert counts == {"episodes": 5, "outcomes": {"success": 4, "failure": 1}}
+
+
 # --- transport security -------------------------------------------------------------------------
 
 

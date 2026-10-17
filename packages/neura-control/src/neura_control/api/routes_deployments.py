@@ -150,6 +150,7 @@ async def create_deployment(
             robot_ids=list(body.spec.robot_ids),
             desired_revision_id=None,
             rollout=body.spec.rollout.model_dump(exclude_none=True),
+            capture=body.spec.capture.model_dump(exclude_none=True),
             labels=body.spec.labels,
             observed={
                 "phase": "Pending",
@@ -202,6 +203,10 @@ async def update_deployment(
         row.display_name, row.labels = spec.display_name, spec.labels
         row.robot_ids = list(spec.robot_ids)
         row.desired_revision_id = spec.desired_revision_id
+        capture = spec.capture.model_dump(exclude_none=True)
+        if capture != row.capture:
+            row.capture = capture
+            await ctx.record(session, project, "deployment.set_capture", row.id)
         touch(row)
         await ctx.record(
             session,

@@ -218,6 +218,31 @@ class CurrentPrincipal(TypedDict):
     project_ids: NotRequired[list[ProjectId] | None]
 
 
+class CaptureCounts(TypedDict):
+    """
+    Episodes the site holds for this deployment's revisions, as the site reports them. The
+    episodes themselves never leave the site (design §18.1, §28.2).
+    """
+
+    episodes: int
+    outcomes: dict[str, int]
+
+
+class CaptureSettings(TypedDict):
+    """
+    What a deployment's robots record while they run (design §28.2). Recording happens on
+    each robot and finished episodes are stored at the site, which never sends them to Neura;
+    the site's operator may allow less than a deployment asks (failures only, or nothing).
+    """
+
+    mode: NotRequired[Literal["off", "failures", "all"]]
+    image_stride: NotRequired[int]
+    cameras: NotRequired[list[str]]
+    max_episode_seconds: NotRequired[int]
+    spool_max_gib: NotRequired[float]
+    upload_mbps: NotRequired[float]
+
+
 class DeploymentStatus(TypedDict):
     """
     Desired, prepared and active revisions are reported separately; a successful request
@@ -231,6 +256,7 @@ class DeploymentStatus(TypedDict):
     active_revision_ids: NotRequired[dict[str, RevisionId | None]]
     observed_at: NotRequired[Timestamp | None]
     data_age_seconds: NotRequired[float | None]
+    capture: NotRequired[CaptureCounts]
 
 
 class Deployment(TypedDict):
@@ -268,6 +294,7 @@ class DeploymentSpec(TypedDict):
     robot_ids: list[RobotId]
     desired_revision_id: NotRequired[RevisionId | None]
     rollout: DeploymentSpecRollout
+    capture: NotRequired[CaptureSettings]
     labels: NotRequired[Labels]
 
 
@@ -276,6 +303,7 @@ class DeploymentUpdateSpec(TypedDict):
     labels: NotRequired[Labels]
     robot_ids: NotRequired[list[RobotId]]
     desired_revision_id: NotRequired[RevisionId | None]
+    capture: NotRequired[CaptureSettings]
 
 
 class DeploymentUpdate(TypedDict):
@@ -859,12 +887,24 @@ class SiteStatus(TypedDict):
     agent_version: NotRequired[str | None]
     connected: NotRequired[bool]
     offline_authorization_expires_at: NotRequired[Timestamp | None]
+    capture: NotRequired[SiteCaptureStatus | None]
 
 
 class Site(TypedDict):
     metadata: Metadata
     spec: SiteSpec
     status: SiteStatus
+
+
+class SiteCaptureStatus(TypedDict):
+    """The site's episode store, as its agent reports it (counts only)."""
+
+    enabled: bool
+    episodes: int
+    bytes: int
+    steps: NotRequired[int]
+    outcomes: dict[str, int]
+    datasets: NotRequired[int]
 
 
 class SiteCreate(TypedDict):

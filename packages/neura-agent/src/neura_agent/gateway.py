@@ -35,6 +35,37 @@ def revision_documents(manifest: dict[str, Any], revision_id: str) -> dict[str, 
     return None
 
 
+def revision_capture(
+    manifest: dict[str, Any], revision_id: str, settings: AgentSettings
+) -> dict[str, Any] | None:
+    """What the robots running this revision record: the deployment's capture settings, within
+    the site's boundary (design §28.2). None records nothing."""
+    if settings.capture_allowed == "off":
+        return None
+    for deployment in manifest.get("deployments", []):
+        if not any(r["id"] == revision_id for r in deployment.get("revisions", [])):
+            continue
+        capture = deployment.get("capture") or {}
+        mode = capture.get("mode", "off")
+        if mode == "off":
+            return None
+        if settings.capture_allowed == "failures":
+            mode = "failures"  # the site records no more than its operator allows
+        config: dict[str, Any] = {
+            "mode": mode,
+            "endpoint": settings.capture_endpoint,
+            "image_stride": int(capture.get("image_stride", 1)),
+            "cameras": list(capture.get("cameras", [])),
+            "max_episode_seconds": int(capture.get("max_episode_seconds", 600)),
+        }
+        if capture.get("spool_max_gib") is not None:
+            config["spool_max_bytes"] = int(float(capture["spool_max_gib"]) * 1024**3)
+        if capture.get("upload_mbps") is not None:
+            config["upload_bytes_per_second"] = int(float(capture["upload_mbps"]) * 125_000)
+        return config
+    return None
+
+
 def build_gateway_config(
     state: AgentState,
     settings: AgentSettings,
@@ -91,6 +122,9 @@ def build_gateway_config(
             for key in ("checkpoint", "profile", "adapter"):
                 if placement.get(key) is not None:
                     deployment[key] = placement[key]
+        capture = revision_capture(manifest, revision_id, settings)
+        if capture is not None:
+            deployment["capture"] = capture
         deployments.append(deployment)
     served = {d["revision_id"] for d in deployments}
     assignments = {

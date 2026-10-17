@@ -236,6 +236,27 @@ message SiteStatus {
   uint64 offline_authorization_remaining_s = 5;
   // Fresh random bytes; the control plane answers with a ContactProof over them.
   bytes contact_nonce = 6;
+  // Episodes the site holds (design §28.2): counts and sizes only. Episodes never leave the site.
+  CaptureSummary capture = 7;
+}
+
+message CaptureSummary {
+  // Whether this site accepts episodes from robots at all (its operator's boundary).
+  bool enabled = 1;
+  uint64 episodes = 2;
+  uint64 bytes = 3;
+  // Control periods recorded, over every episode.
+  uint64 steps = 4;
+  // Episodes by outcome label: success, failure, unknown.
+  map<string, uint64> outcomes = 5;
+  repeated RevisionCapture revisions = 6;
+  // Dataset snapshots in use (holding their episodes against retention).
+  uint64 datasets = 7;
+}
+
+message RevisionCapture {
+  string revision_id = 1;
+  map<string, uint64> outcomes = 2;
 }
 
 message RobotSessionStatus {

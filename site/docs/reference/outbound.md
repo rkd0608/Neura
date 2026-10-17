@@ -54,6 +54,14 @@ Schema version 1.
 | `status.faults.latched` | yes | Whether the fault is latched. |
 | `status.faults.local_response` | yes | What the robot did locally (hold, stop, ...). |
 | `status.faults.occurred_at_unix_us` | yes | When it occurred (site wall clock). |
+| `status.capture.enabled` | yes | Whether the site accepts recorded episodes from robots. |
+| `status.capture.episodes` | no | Number of episodes stored at the site (the episodes themselves never leave it). |
+| `status.capture.bytes` | no | Disk used by stored episodes. |
+| `status.capture.steps` | no | Control periods recorded across stored episodes. |
+| `status.capture.outcomes` | no | Stored episodes by outcome label (success, failure, unknown). |
+| `status.capture.revisions.revision_id` | yes | A revision with stored episodes. |
+| `status.capture.revisions.outcomes` | no | That revision's episodes by outcome label. |
+| `status.capture.datasets` | no | Dataset snapshots in use at the site. |
 | `status.offline_authorization_remaining_s` | yes | Offline authorization left. |
 | `status.contact_nonce` | yes | Random bytes the control plane signs to prove contact. |
 | `telemetry.schema_version` | no | Version of the metric catalog below. |

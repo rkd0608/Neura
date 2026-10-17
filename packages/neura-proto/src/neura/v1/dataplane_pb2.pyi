@@ -1,4 +1,5 @@
 # GENERATED FILE: do not edit. Source: proto/neura/v1/dataplane.proto. Regenerate with `make gen`.
+from neura.v1 import capture_pb2 as _capture_pb2
 from neura.v1 import common_pb2 as _common_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
@@ -13,7 +14,7 @@ class GetAssignmentRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class Assignment(_message.Message):
-    __slots__ = ("revision_id", "documents")
+    __slots__ = ("revision_id", "documents", "capture")
     class DocumentsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -23,9 +24,11 @@ class Assignment(_message.Message):
         def __init__(self, key: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
     REVISION_ID_FIELD_NUMBER: _ClassVar[int]
     DOCUMENTS_FIELD_NUMBER: _ClassVar[int]
+    CAPTURE_FIELD_NUMBER: _ClassVar[int]
     revision_id: str
     documents: _containers.ScalarMap[str, bytes]
-    def __init__(self, revision_id: _Optional[str] = ..., documents: _Optional[_Mapping[str, bytes]] = ...) -> None: ...
+    capture: _capture_pb2.CaptureSettings
+    def __init__(self, revision_id: _Optional[str] = ..., documents: _Optional[_Mapping[str, bytes]] = ..., capture: _Optional[_Union[_capture_pb2.CaptureSettings, _Mapping]] = ...) -> None: ...
 
 class OpenSessionRequest(_message.Message):
     __slots__ = ("protocol_version", "robot_id", "revision_id", "artifact_digest", "execution_profile_digest", "robot_profile_digest")

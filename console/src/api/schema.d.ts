@@ -1026,6 +1026,39 @@ export interface components {
       /** @description Projects an API token is restricted to; null when unrestricted. */
       project_ids?: components["schemas"]["ProjectId"][] | null;
     };
+    /** @description Episodes the site holds for this deployment's revisions, as the site reports them. The episodes themselves never leave the site (design §18.1, §28.2). */
+    CaptureCounts: {
+      episodes: number;
+      /** @description Episodes by outcome label (success, failure, unknown). */
+      outcomes: {
+        [key: string]: number;
+      };
+    };
+    /** @description What a deployment's robots record while they run (design §28.2). Recording happens on each robot and finished episodes are stored at the site, which never sends them to Neura; the site's operator may allow less than a deployment asks (failures only, or nothing). */
+    CaptureSettings: {
+      /**
+       * @description off: nothing (the default). failures: only episodes that end in a fault, an operator takeover or a failure label. all: every episode.
+       * @default off
+       * @enum {unknown}
+       */
+      mode: "off" | "failures" | "all";
+      /**
+       * @description Record camera frames every Nth control period; state and commanded actions are recorded every period.
+       * @default 1
+       */
+      image_stride: number;
+      /** @description Cameras to record by role; empty records every camera the model reads. */
+      cameras?: string[];
+      /**
+       * @description A longer task continues in a new episode.
+       * @default 600
+       */
+      max_episode_seconds: number;
+      /** @description Disk each robot may use for episodes not yet uploaded (robot default 2 GiB). */
+      spool_max_gib?: number;
+      /** @description Upload bandwidth limit per robot, megabits per second (default none). */
+      upload_mbps?: number;
+    };
     Deployment: {
       metadata: components["schemas"]["Metadata"];
       spec: components["schemas"]["DeploymentSpec"];
@@ -1041,6 +1074,7 @@ export interface components {
         };
         observed_at?: components["schemas"]["Timestamp"] | null;
         data_age_seconds?: number | null;
+        capture?: components["schemas"]["CaptureCounts"];
       };
     };
     DeploymentCreate: {
@@ -1075,6 +1109,7 @@ export interface components {
         strategy: "all_at_task_boundary" | "single_robot_canary";
         canary_robot_id?: components["schemas"]["RobotId"];
       };
+      capture?: components["schemas"]["CaptureSettings"];
       labels?: components["schemas"]["Labels"];
     };
     /** @description JSON Merge Patch (RFC 7396) of the mutable spec fields. */
@@ -1084,6 +1119,7 @@ export interface components {
         labels?: components["schemas"]["Labels"];
         robot_ids?: components["schemas"]["RobotId"][];
         desired_revision_id?: components["schemas"]["RevisionId"] | null;
+        capture?: components["schemas"]["CaptureSettings"];
       };
     };
     Digest: string;
@@ -1589,7 +1625,21 @@ export interface components {
         agent_version?: string | null;
         connected?: boolean;
         offline_authorization_expires_at?: components["schemas"]["Timestamp"] | null;
+        capture?: components["schemas"]["SiteCaptureStatus"] | null;
       } & components["schemas"]["ObservedStatus"];
+    };
+    /** @description The site's episode store, as its agent reports it (counts only). */
+    SiteCaptureStatus: {
+      /** @description Whether the site's operator allows robots to record. */
+      enabled: boolean;
+      episodes: number;
+      bytes: number;
+      steps?: number;
+      outcomes: {
+        [key: string]: number;
+      };
+      /** @description Dataset snapshots in use, which keep their episodes against retention. */
+      datasets?: number;
     };
     SiteCreate: {
       spec: components["schemas"]["SiteSpec"];

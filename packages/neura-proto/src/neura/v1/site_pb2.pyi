@@ -283,20 +283,62 @@ class Acknowledgement(_message.Message):
     def __init__(self, desired_state_generation: _Optional[int] = ..., command_id: _Optional[str] = ..., accepted: _Optional[bool] = ..., reason: _Optional[_Union[_common_pb2.Reason, _Mapping]] = ...) -> None: ...
 
 class SiteStatus(_message.Message):
-    __slots__ = ("agent_time_us", "components", "sessions", "faults", "offline_authorization_remaining_s", "contact_nonce")
+    __slots__ = ("agent_time_us", "components", "sessions", "faults", "offline_authorization_remaining_s", "contact_nonce", "capture")
     AGENT_TIME_US_FIELD_NUMBER: _ClassVar[int]
     COMPONENTS_FIELD_NUMBER: _ClassVar[int]
     SESSIONS_FIELD_NUMBER: _ClassVar[int]
     FAULTS_FIELD_NUMBER: _ClassVar[int]
     OFFLINE_AUTHORIZATION_REMAINING_S_FIELD_NUMBER: _ClassVar[int]
     CONTACT_NONCE_FIELD_NUMBER: _ClassVar[int]
+    CAPTURE_FIELD_NUMBER: _ClassVar[int]
     agent_time_us: int
     components: _containers.RepeatedCompositeFieldContainer[ComponentStatus]
     sessions: _containers.RepeatedCompositeFieldContainer[RobotSessionStatus]
     faults: _containers.RepeatedCompositeFieldContainer[FaultReport]
     offline_authorization_remaining_s: int
     contact_nonce: bytes
-    def __init__(self, agent_time_us: _Optional[int] = ..., components: _Optional[_Iterable[_Union[ComponentStatus, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[RobotSessionStatus, _Mapping]]] = ..., faults: _Optional[_Iterable[_Union[FaultReport, _Mapping]]] = ..., offline_authorization_remaining_s: _Optional[int] = ..., contact_nonce: _Optional[bytes] = ...) -> None: ...
+    capture: CaptureSummary
+    def __init__(self, agent_time_us: _Optional[int] = ..., components: _Optional[_Iterable[_Union[ComponentStatus, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[RobotSessionStatus, _Mapping]]] = ..., faults: _Optional[_Iterable[_Union[FaultReport, _Mapping]]] = ..., offline_authorization_remaining_s: _Optional[int] = ..., contact_nonce: _Optional[bytes] = ..., capture: _Optional[_Union[CaptureSummary, _Mapping]] = ...) -> None: ...
+
+class CaptureSummary(_message.Message):
+    __slots__ = ("enabled", "episodes", "bytes", "steps", "outcomes", "revisions", "datasets")
+    class OutcomesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    EPISODES_FIELD_NUMBER: _ClassVar[int]
+    BYTES_FIELD_NUMBER: _ClassVar[int]
+    STEPS_FIELD_NUMBER: _ClassVar[int]
+    OUTCOMES_FIELD_NUMBER: _ClassVar[int]
+    REVISIONS_FIELD_NUMBER: _ClassVar[int]
+    DATASETS_FIELD_NUMBER: _ClassVar[int]
+    enabled: bool
+    episodes: int
+    bytes: int
+    steps: int
+    outcomes: _containers.ScalarMap[str, int]
+    revisions: _containers.RepeatedCompositeFieldContainer[RevisionCapture]
+    datasets: int
+    def __init__(self, enabled: _Optional[bool] = ..., episodes: _Optional[int] = ..., bytes: _Optional[int] = ..., steps: _Optional[int] = ..., outcomes: _Optional[_Mapping[str, int]] = ..., revisions: _Optional[_Iterable[_Union[RevisionCapture, _Mapping]]] = ..., datasets: _Optional[int] = ...) -> None: ...
+
+class RevisionCapture(_message.Message):
+    __slots__ = ("revision_id", "outcomes")
+    class OutcomesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+    REVISION_ID_FIELD_NUMBER: _ClassVar[int]
+    OUTCOMES_FIELD_NUMBER: _ClassVar[int]
+    revision_id: str
+    outcomes: _containers.ScalarMap[str, int]
+    def __init__(self, revision_id: _Optional[str] = ..., outcomes: _Optional[_Mapping[str, int]] = ...) -> None: ...
 
 class RobotSessionStatus(_message.Message):
     __slots__ = ("session_id", "robot_name", "revision_id", "lease_generation", "task_epoch", "state", "reason", "metrics")

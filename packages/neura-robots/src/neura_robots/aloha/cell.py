@@ -55,6 +55,7 @@ from neura_robots.aloha import AlohaSim, Task
 from neura_robots.aloha.arm import AlohaSimArm
 from neura_robots.aloha.world import RealTimeWorld
 from neura_robots.process import AssignedArm, OperatorInbox
+from neura_runtime.capture import Outcome as EpisodeOutcome
 from neura_runtime.grpc_client import RobotCredentials
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
 
@@ -172,6 +173,7 @@ class CellRobot:
         reset_after_s: float | None = None,
         say: Say = print,
         view_fps: float = 10.0,
+        capture_dir: Path | None = None,
     ) -> None:
         self.name = name
         self.world = RealTimeWorld(AlohaSim(task))
@@ -185,6 +187,7 @@ class CellRobot:
             credentials=credentials,
             inbox=self.inbox,
             say=self._say,
+            capture_dir=capture_dir,
         )
         self.max_steps = max_steps
         self.next_seed = first_seed
@@ -317,6 +320,12 @@ class CellRobot:
         return str(fault.reason.value) + (f": {fault.detail}" if fault.detail else "")
 
     def _end(self, task: _Task, result: str, detail: str = "") -> None:
+        # The simulator knows whether the task succeeded: it labels the recorded episode, as a
+        # task sensor would on a real cell (a fault or a takeover is labeled by the robot).
+        capture = task.process.capture
+        if capture is not None and result in ("success", "timeout"):
+            label = EpisodeOutcome.SUCCESS if result == "success" else EpisodeOutcome.FAILURE
+            capture.label(label, note=f"seed {task.seed}: {result}")
         self.outcomes.append(Outcome(task.seed, result, self.world.steps, task.revision, detail))
         self.task = None
         self._say(f"task {task.seed}: {result}" + (f" ({detail})" if detail else ""))
@@ -449,8 +458,10 @@ class Cell:
         site: SiteApi | None,
         say: Say = print,
         view_fps: float = 10.0,
+        capture_dir: Path | None = None,
     ) -> None:
         self.cert_dir = cert_dir
+        self.capture_dir = capture_dir
         self.gateway = gateway
         self.tls_server_name = tls_server_name
         self.task: Task = task
@@ -495,6 +506,7 @@ class Cell:
                 reset_after_s=self.reset_after_s,
                 say=self.say,
                 view_fps=self.view_fps,
+                capture_dir=self.capture_dir / name if self.capture_dir else None,
             )
             robot.camera.start()
             thread = threading.Thread(target=robot.run, args=(self.stop,), name=f"robot-{name}")
@@ -709,6 +721,13 @@ def main(argv: list[str] | None = None) -> int:
         default=env("NEURA_CELL_OPERATOR", "site operator (cell page)"),
         help="who approves activations from the page, for the site's audit log",
     )
+    parser.add_argument(
+        "--capture-dir",
+        type=Path,
+        default=Path(capture) if (capture := env("NEURA_CELL_CAPTURE_DIR")) else None,
+        help="where the robots spool recorded episodes when the site records them (default: "
+        "they never record)",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=env("NEURA_LOG_LEVEL", "warning").upper())
 
@@ -734,6 +753,7 @@ def main(argv: list[str] | None = None) -> int:
         site=site,
         say=say,
         view_fps=args.view_fps,
+        capture_dir=args.capture_dir,
     )
     server = serve_page(cell, args.listen, args.allow_host)
     say(f"the cell's page: http://{args.listen.replace('0.0.0.0', '127.0.0.1')}/")  # noqa: S104

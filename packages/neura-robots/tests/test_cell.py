@@ -55,6 +55,16 @@ class FakeProcess:
             last_rejection_detail="",
         )
         self.connection = SimpleNamespace(late_ticks=0)
+        self.capture: Any = None  # the robot records nothing unless the site asks
+
+
+class FakeCapture:
+    def __init__(self) -> None:
+        self.labels: list[tuple[str, str]] = []
+
+    def label(self, outcome: Any, source: Any = None, note: str = "") -> str:
+        self.labels.append((outcome.value, note))
+        return "ep_1"
 
 
 def _robot(**kwargs: Any) -> CellRobot:
@@ -108,6 +118,7 @@ def test_tasks_run_back_to_back_with_a_pause_between() -> None:
     assert _commands(robot) == ["stop"]
     (outcome,) = robot.outcomes
     assert (outcome.seed, outcome.result, outcome.revision) == (1000, "timeout", "rev_1")
+    assert process.capture is None  # not recording: nothing to label
 
     process.runtime.state = RuntimeState.READY
     robot.step(0.5)  # still pausing between tasks
@@ -219,3 +230,18 @@ def test_the_page_serves_status_and_frames_and_takes_actions_only_from_itself(
         server.server_close()
         robot.close()
         robot.world.close()
+
+
+def test_the_simulator_labels_recorded_episodes() -> None:
+    robot = _robot()
+    process = FakeProcess()
+    process.capture = FakeCapture()
+    robot.assigned.process = process  # type: ignore[assignment]
+    robot.step(0.0)
+    process.runtime.state = RuntimeState.RUNNING
+    robot.step(0.1)
+    for _ in range(20):
+        robot.world.sim.advance()
+    robot.step(0.2)  # the task's time ran out: a failure
+    assert process.capture.labels == [("failure", "seed 1000: timeout")]
+    robot.world.close()

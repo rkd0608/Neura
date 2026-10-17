@@ -21,7 +21,19 @@ CATALOG = ROOT / "catalog" / "reason_codes.yaml"
 OUTPUT = ROOT / "packages" / "neura-contracts" / "src" / "neura_contracts" / "reason_codes.py"
 TS_OUTPUT = ROOT / "console" / "src" / "generated" / "reasonCodes.ts"
 
-AREAS = {"contracts", "gateway", "scheduler", "worker", "runtime", "agent", "api"}
+AREA_ORDER = (
+    "contracts",
+    "gateway",
+    "scheduler",
+    "worker",
+    "runtime",
+    "agent",
+    "capture",
+    "evaluation",
+    "training",
+    "api",
+)
+AREAS = set(AREA_ORDER)
 SEVERITIES = {"info", "warning", "error", "fatal"}
 CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 ALLOWED_KEYS = {"code", "area", "severity", "retryable", "message", "http_status"}
@@ -87,7 +99,7 @@ def render(entries: list[dict[str, Any]]) -> str:
         "from enum import StrEnum",
         "from typing import Literal",
         "",
-        'Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "api"]',
+        "Area = Literal[" + ", ".join(f'"{a}"' for a in AREA_ORDER) + "]",
         'Severity = Literal["info", "warning", "error", "fatal"]',
         "",
         "",

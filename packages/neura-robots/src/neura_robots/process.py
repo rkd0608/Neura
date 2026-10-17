@@ -14,6 +14,9 @@ thread that owns the servo bus:
                       torque back on, revalidate the actuator, bus, calibration and contract,
                       then reset
   instruction TEXT    the language instruction, for language-conditioned models
+  outcome success|failure [NOTE]
+                      label the current (or just finished) episode, when the site records
+                      episodes (design §28.2)
   status              one JSON line
   quit                end the task, close the session and exit (the arm holds, by default)
 
@@ -30,6 +33,7 @@ import logging
 import time
 from collections import deque
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -38,7 +42,13 @@ from neura_contracts import ContractError, FaultResponse, RobotProfile
 from neura_robots.arm import Arm
 from neura_robots.so101 import ArmError
 from neura_runtime.binding import ExecutionBinding
-from neura_runtime.grpc_client import GatewayConnection, RobotCredentials, fetch_assignment
+from neura_runtime.capture import CaptureConfig, Outcome, OutcomeSource, RobotCapture
+from neura_runtime.grpc_client import (
+    GatewayConnection,
+    RobotCredentials,
+    fetch_assignment,
+    monotonic_us,
+)
 from neura_runtime.runtime import ACTIVE_STATES, RobotRuntime, RuntimeState, TransitionError
 from neura_runtime.session import SessionClient, SessionConfig
 from neura_sim.grpc_robots import binding_from_documents, watch_robot
@@ -87,6 +97,8 @@ class ArmProcess:
         say: Say = print,
         sample_every: int = 1,
         on_quit: Callable[[], None] | None = None,
+        capture: CaptureConfig | None = None,
+        capture_dir: Path | None = None,
     ) -> None:
         self.arm = arm
         self.robot_id = robot_id
@@ -109,6 +121,48 @@ class ArmProcess:
         self._monitor: InvariantMonitor | None = None
         self._watched: Any = None
         self.tick_hooks: list[Callable[[int], None]] = []
+        self.capture: RobotCapture | None = None
+        self.capture_config: CaptureConfig | None = None
+        self._capture_dir = capture_dir
+        self._credentials = (
+            credentials
+            if isinstance(credentials, RobotCredentials)
+            else RobotCredentials(token=credentials)
+        )
+        self._target = target
+        self.configure_capture(capture)
+
+    # --- episode capture (design §28.2) -------------------------------------------------------
+
+    def configure_capture(self, config: CaptureConfig | None) -> None:
+        """Record as the site asks: start, change or stop. Call at a task boundary."""
+        if config == self.capture_config:
+            return
+        self.close_capture()
+        self.capture_config = config
+        if config is None or self._capture_dir is None:
+            return
+        self.capture = RobotCapture(
+            self.runtime,
+            config,
+            directory=self._capture_dir,
+            robot_id=self.robot_id,
+            revision_id=self.revision_id,
+            sensors=self.arm,
+            gateway_target=self._target,
+            credentials=self._credentials,
+            state_source=self._latest_state,
+        )
+        self.say(f"{self.robot_id}: recording {config.mode} episodes")
+
+    def close_capture(self) -> None:
+        if self.capture is not None:
+            self.capture.close(monotonic_us())
+            self.capture = None
+
+    def _latest_state(self, now_us: int) -> dict[str, float] | None:
+        """The joints as the control loop last read them: recording adds no bus reads."""
+        return dict(self.arm.telemetry[-1].measured) if self.arm.telemetry else None
 
     def watch(self, monitor: InvariantMonitor) -> None:
         self._monitor = monitor
@@ -144,6 +198,8 @@ class ArmProcess:
             )
         for hook in self.tick_hooks:
             hook(now_us)
+        if self.capture is not None:
+            self.capture.tick(now_us)
         if runtime.state is not self._last_state:
             self._last_state = runtime.state
             self.say(self._describe())
@@ -194,6 +250,14 @@ class ArmProcess:
             if word == "instruction":
                 runtime.set_instruction(rest)
                 return "instruction set"
+            if word == "outcome":
+                label, _, note = rest.partition(" ")
+                if self.capture is None:
+                    return "outcome: this robot is not recording episodes"
+                if label not in ("success", "failure"):
+                    return "outcome: success or failure"
+                episode = self.capture.label(Outcome(label), OutcomeSource.OPERATOR, note)
+                return f"labeled {episode}: {label}" if episode else "outcome: no episode yet"
             if word == "status":
                 return json.dumps(self.status())
             if word == "quit":
@@ -205,7 +269,10 @@ class ArmProcess:
                 return "quitting"
         except (TransitionError, ValueError) as exc:
             return f"{word}: {exc}"
-        return f"unknown command {word!r} (arm, stop, takeover, reset, instruction, status, quit)"
+        return (
+            f"unknown command {word!r} "
+            "(arm, stop, takeover, reset, instruction, outcome, status, quit)"
+        )
 
     def reset(self, now_us: int) -> str:
         """The explicit local reset of a latched fault, after revalidation (design §7)."""
@@ -241,6 +308,19 @@ class ArmProcess:
             "positions": {k: round(v, 2) for k, v in positions.items()},
             "arm": dict(self.arm.counters),
             **({"violations": self.violations} if self._monitor is not None else {}),
+            **(
+                {
+                    "capture": {
+                        "mode": self.capture.config.mode,
+                        "episode": self.capture.recorder.episode_id,
+                        **self.capture.recorder.counters,
+                        **{f"spool_{k}": v for k, v in self.capture.spool.counters.items()},
+                        **{f"upload_{k}": v for k, v in self.capture.uploader.counters.items()},
+                    }
+                }
+                if self.capture is not None
+                else {}
+            ),
         }
 
 
@@ -261,8 +341,12 @@ class AssignedArm:
         instruction: str | None = None,
         say: Say = print,
         poll_seconds: float = 2.0,
+        capture_dir: Path | None = None,
     ) -> None:
-        self.open_arm = open_arm  # connects the arm for the first revision's robot profile
+        self.open_arm = open_arm
+        # Where this robot spools recorded episodes; None: it never records, whatever the
+        # site asks.
+        self.capture_dir = capture_dir  # connects the arm for the first revision's robot profile
         self.arm: Arm | None = None
         self.robot_id = robot_id
         self.gateway = gateway
@@ -294,6 +378,16 @@ class AssignedArm:
                 assignment = None
             wanted = assignment.revision_id if assignment is not None else ""
             current = self.process.revision_id if self.process is not None else None
+            capture = (
+                CaptureConfig.from_proto(assignment.capture) if assignment is not None else None
+            )
+            if (
+                self.process is not None
+                and wanted == current
+                and self.process.at_task_boundary
+                and capture != self.process.capture_config
+            ):
+                self.process.configure_capture(capture)  # the deployment's capture changed
             if wanted and wanted != current and wanted != self.refused:
                 if self.process is not None and not self.process.at_task_boundary:
                     if self.refused != f"waiting:{wanted}":
@@ -317,6 +411,8 @@ class AssignedArm:
                     if task is not None:
                         process_stop.set()
                         await task
+                    if self.process is not None:
+                        self.process.close_capture()
                     self.process = ArmProcess(
                         self.arm,
                         binding,
@@ -328,6 +424,8 @@ class AssignedArm:
                         instruction=self.instruction,
                         say=self.say,
                         on_quit=stop.set,
+                        capture=capture,
+                        capture_dir=self.capture_dir,
                     )
                     self.refused = None
                     self.pending = None
@@ -339,3 +437,5 @@ class AssignedArm:
         if task is not None:
             process_stop.set()
             await task
+        if self.process is not None:
+            self.process.close_capture()

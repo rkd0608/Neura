@@ -132,6 +132,8 @@ class AgentRuntime:
                 await task
         self._tasks.clear()
         await self.gateway.stop()
+        if self.core is not None:
+            await self.core.capture.stop()
 
     async def _main(self) -> None:
         identity = self.identities.load()
@@ -166,6 +168,7 @@ class AgentRuntime:
             self.connection.run(self._stop),
             self._periodic(self.settings.status_interval_s, self._report_status),
             self._periodic(1.0, self._watch),
+            self._periodic(600.0, self.core.capture.retention),
         )
 
     async def _periodic(self, interval: float, work: Callable[[], object]) -> None:

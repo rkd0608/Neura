@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from neura.v1 import common_pb2, site_pb2
 from neura_agent import placement, site_pki, trust
 from neura_agent.artifacts import ArtifactError, ArtifactStore, load_keys
+from neura_agent.capture import SiteCapture
 from neura_agent.gateway import (
     GatewayRunner,
     build_gateway_config,
@@ -119,6 +120,8 @@ class AgentCore:
         self.gateway_dir = settings.state_dir / "gateway"
         self.pki = SitePki(settings.state_dir / "pki", identity.site_id)
         self.gateway_config_path: Path = self.gateway_dir / "site.yaml"
+        self.capture = SiteCapture(settings)
+        self._capture_summary: tuple[float, site_pb2.CaptureSummary] | None = None
         self.state: AgentState = self.store.load()
         self.outbox: asyncio.Queue[site_pb2.AgentMessage] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
         self._manifest_key = Ed25519PublicKey.from_public_bytes(
@@ -380,6 +383,7 @@ class AgentCore:
             return
         config = self.gateway_config()
         changed = write_gateway_config(config, self.gateway_config_path)
+        await self.capture.configure(config)
         if self.gateway_suspended:
             return
         if not self.gateway.running:
@@ -949,8 +953,16 @@ class AgentCore:
                 faults=faults,
                 offline_authorization_remaining_s=int(remaining or 0),
                 contact_nonce=self.contact_nonce(),
+                capture=self.capture_summary(),
             )
         )
+
+    def capture_summary(self, max_age_s: float = 30.0) -> site_pb2.CaptureSummary:
+        """The episode store's counts, refreshed at most every ``max_age_s``."""
+        now = self._monotonic()
+        if self._capture_summary is None or now - self._capture_summary[0] > max_age_s:
+            self._capture_summary = (now, self.capture.summary_message())
+        return self._capture_summary[1]
 
     def telemetry_message(
         self, gateway_status: dict[str, Any] | None, sequence: int

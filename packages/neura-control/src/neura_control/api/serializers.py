@@ -73,6 +73,7 @@ def site(row: models.Site) -> dict[str, Any]:
         agent_version=row.observed.get("agent_version"),
         connected=connected,
         offline_authorization_expires_at=row.observed.get("offline_authorization_expires_at"),
+        capture=row.observed.get("capture"),
     )
     return {
         "metadata": metadata(row, project_id=row.project_id),
@@ -156,6 +157,7 @@ def deployment(row: models.Deployment) -> dict[str, Any]:
             "robot_ids": row.robot_ids,
             "desired_revision_id": row.desired_revision_id,
             "rollout": rollout,
+            "capture": capture_settings(row.capture),
             "labels": row.labels,
         },
         "status": {
@@ -168,8 +170,14 @@ def deployment(row: models.Deployment) -> dict[str, Any]:
             ),
             "observed_at": observed_at,
             "data_age_seconds": _age(observed_at, utcnow()),
+            "capture": observed.get("capture", {"episodes": 0, "outcomes": {}}),
         },
     }
+
+
+def capture_settings(stored: dict[str, Any]) -> dict[str, Any]:
+    """A deployment's capture settings with every default spelled out."""
+    return {"mode": "off", "image_stride": 1, "cameras": [], "max_episode_seconds": 600, **stored}
 
 
 def revision(row: models.Revision) -> dict[str, Any]:

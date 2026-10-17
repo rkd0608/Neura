@@ -8,12 +8,15 @@ Every timestamp it handles comes from the robot's own clock.
 
 from __future__ import annotations
 
+import logging
 from collections import Counter, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Protocol
 
 import numpy as np
+from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
 from neura_contracts import (
@@ -28,6 +31,8 @@ from neura_runtime import tensors
 from neura_runtime.action_queue import ActionQueue, MergeKind, MergeSettings
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.interfaces import Controller, SensorSnapshot, SensorSource
+
+log = logging.getLogger("neura.runtime")
 
 
 class RuntimeState(StrEnum):
@@ -78,6 +83,35 @@ class FaultRecord:
     response: FaultResponse | None
     response_confirmed: bool
     detail: str | None
+
+
+class RuntimeObserver(Protocol):
+    """Sees what the runtime does, never decides it (episode capture, design §28.2). Called on
+    the control loop, so an observer must only take note and return; an observer that raises is
+    detached and counted, and the runtime carries on."""
+
+    def on_command(
+        self, now_us: int, task_epoch: int, index: int, action: NDArray[np.float64]
+    ) -> None:
+        """The controller accepted this command (robot order and units)."""
+
+    def on_chunk(
+        self,
+        now_us: int,
+        task_epoch: int,
+        sequence: int,
+        start_index: int,
+        accepted: bool,
+        reason: ReasonCode | None,
+        trimmed: int,
+    ) -> None:
+        """A chunk answered a request: merged (with ``trimmed`` late actions dropped) or refused."""
+
+    def on_epoch(self, previous: int, current: int, cause: ReasonCode | None) -> None:
+        """The task epoch advanced."""
+
+    def on_fault(self, fault: FaultRecord) -> None:
+        """A fault latched."""
 
 
 @dataclass(slots=True)
@@ -144,6 +178,8 @@ class RobotRuntime:
         self.dispatched = 0
         # Called with (task_epoch, action_index) after each command the controller accepted.
         self.dispatch_listener: Callable[[int, int], None] | None = None
+        self.observers: list[RuntimeObserver] = []
+        self._trimmed = 0
 
     # --- configuration ------------------------------------------------------------------------
 
@@ -169,6 +205,10 @@ class RobotRuntime:
     @property
     def lease_generation(self) -> int | None:
         return self._lease_generation
+
+    @property
+    def instruction(self) -> str:
+        return self._instruction
 
     def attach_session(self, session_id: str, lease_generation: int) -> None:
         self._session_id = session_id
@@ -277,6 +317,8 @@ class RobotRuntime:
                 self.dispatched += 1
                 if self.dispatch_listener is not None:
                     self.dispatch_listener(self.task_epoch, index)
+                if self.observers:
+                    self._notify("on_command", now_us, self.task_epoch, index, action)
 
         if self.state is RuntimeState.WAITING:
             assert self._waiting_since is not None
@@ -401,6 +443,23 @@ class RobotRuntime:
 
     def on_chunk(self, chunk: dataplane_pb2.ActionChunk, now_us: int) -> bool:
         """Validate and merge an action chunk (design §5.2). Returns True if accepted."""
+        self._trimmed = 0
+        accepted = self._accept(chunk, now_us)
+        if self.observers:
+            env = chunk.envelope
+            self._notify(
+                "on_chunk",
+                now_us,
+                env.task_epoch,
+                env.sequence,
+                chunk.start_index,
+                accepted,
+                None if accepted else self.last_reason,
+                self._trimmed,
+            )
+        return accepted
+
+    def _accept(self, chunk: dataplane_pb2.ActionChunk, now_us: int) -> bool:
         env = chunk.envelope
         if env.session_id != self._session_id or env.lease_generation != self._lease_generation:
             return self._drop(ReasonCode.LEASE_GENERATION_STALE)
@@ -458,6 +517,7 @@ class RobotRuntime:
             return self._drop(result.reason)
         self.counters["chunks_accepted"] += 1
         self.counters["actions_trimmed"] += result.trimmed
+        self._trimmed = result.trimmed
         if self.state in (RuntimeState.ARMED, RuntimeState.WAITING):
             self.state = RuntimeState.RUNNING
             self._waiting_since = None
@@ -483,6 +543,16 @@ class RobotRuntime:
 
     # --- internals ----------------------------------------------------------------------------
 
+    def _notify(self, event: str, *args: object) -> None:
+        for observer in list(self.observers):
+            try:
+                getattr(observer, event)(*args)
+            except Exception:
+                # Observation must never stop the robot: drop the observer, not the tick.
+                log.exception("runtime observer %r failed; detached", observer)
+                self.observers.remove(observer)
+                self.counters["observer_failures"] += 1
+
     def _drop(self, reason: ReasonCode) -> bool:
         self._note(reason)
         return False
@@ -499,6 +569,8 @@ class RobotRuntime:
         self._sequence = 0
         if self._session_id is not None:
             self.outbox.append(AnnounceEpoch(previous, self.task_epoch, cause))
+        if self.observers:
+            self._notify("on_epoch", previous, self.task_epoch, cause)
 
     def _preferred_stop(self) -> FaultResponse | None:
         for response in (
@@ -540,6 +612,8 @@ class RobotRuntime:
         if response is not None and reason is not ReasonCode.ACTUATOR_LOCK_LOST:
             confirmed = self._controller.apply_response(response)
         self.fault = FaultRecord(reason, now_us, response, confirmed, detail)
+        if self.observers:
+            self._notify("on_fault", self.fault)
 
     def snapshot(self) -> RuntimeSnapshot:
         return RuntimeSnapshot(

@@ -76,6 +76,22 @@ class RobotCredentials:
             options = [*options, ("grpc.ssl_target_name_override", self.server_name)]
         return grpc.aio.secure_channel(target, credentials, options=options)
 
+    def sync_channel(
+        self, target: str, options: list[tuple[str, Any]] | None = None
+    ) -> grpc.Channel:
+        """A blocking channel, for work off the control loop (episode upload)."""
+        options = list(options or [])
+        if not self.tls:
+            return grpc.insecure_channel(target, options=options)
+        credentials = grpc.ssl_channel_credentials(
+            root_certificates=self.ca_pem,
+            private_key=self.key_pem,
+            certificate_chain=self.certificate_pem,
+        )
+        if self.server_name:
+            options = [*options, ("grpc.ssl_target_name_override", self.server_name)]
+        return grpc.secure_channel(target, credentials, options=options)
+
     def metadata(self) -> tuple[tuple[str, str], ...]:
         return (("authorization", f"Bearer {self.token}"),) if self.token else ()
 

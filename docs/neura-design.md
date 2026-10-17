@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm · October 17, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm; M9 (capture) implemented, M10–M12 (evaluate, improve, the loop) in progress (§28) · October 17, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -30,7 +30,7 @@ This document turns the blueprint into decisions an implementation can follow. E
 4. **Measured, not assumed, benefit.** Every serving optimization ships with a benchmark against a defined dedicated baseline (§10), including the cases where it loses.
 5. **Boring infrastructure where possible.** Use protobuf, gRPC, OCI images, OpenTelemetry, Prometheus, PostgreSQL. Invent only robotics execution semantics.
 
-Non-goals for Neura: training, evaluation-as-a-product, simulators, teleoperation, safety certification, cross-customer GPU sharing.
+Non-goals for Neura: simulators, teleoperation, safety certification, cross-customer GPU sharing. (Training and evaluation were non-goals until October 17, 2026: §28.)
 
 ---
 
@@ -689,6 +689,10 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M6. Models and GPU sharing** (built; first GPU report: L4, §9.5) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
 | **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
 | **M8. Physical validation** (built; hardware run pending) | SO-101-class arms connected through the same platform: the SO-101 integration over LeRobot, a servo bus emulator, `neura-arm`, and `neura-qualify` (hardware fault suite, open-loop parity, closed-loop non-inferiority); implementation notes in §7.1 | Fault suite and parity pass on hardware. Built and passing on the emulated arm (`qualification/reports/`); the hardware report is produced by `neura-qualify` with the arm |
+| **M9. Capture** ✅ | Episode recording on the robot off the action path, the site's capture service and episode store, labels, dataset snapshots, retention, LeRobot export, deployment capture settings within the site's boundary (§28.2) | A recorded task reaches the site's store, verified and labeled, while the arm is served as usual (emulated SO-101); episodes never leave the site |
+| **M10. Evaluate** (planned) | Closed-loop simulation suites, replay on captured episodes, shadow serving, release gates (§28.3) | A candidate's evidence is computed at the site and required before activation |
+| **M11. Improve** (planned) | Fine-tuning jobs at the site, signed artifacts with lineage (§28.4) | A captured dataset fine-tunes a model at the site into a new, signed, traceable artifact |
+| **M12. The loop** (planned) | API, console and the end-to-end run (§28.5) | Capture, fine-tune, evaluate and activate, end to end, on the simulated cell |
 
 Engineering standards for every milestone: typed code, tests written with the code, CI gates that cannot be bypassed, architecture decisions recorded in this document, and no component on the action path depending on the cloud.
 
@@ -1079,7 +1083,7 @@ An external penetration test is scheduled before the first customer pilot. This 
 
 | Class | Examples | Default location | Leaves the site? |
 | --- | --- | --- | --- |
-| Payload | Camera images, robot state, actions, language instructions | Site memory only; optional recordings in the customer's store | **Never**, unless the customer opts in per deployment |
+| Payload | Camera images, robot state, actions, language instructions | Site memory; recorded episodes (§28.2) in the site's episode store, when the deployment records and the site allows it | **Never**: recordings stay at the site; only their counts are reported |
 | Model | Weights, normalization statistics, adapter code | Customer registry or site cache | Only if the customer chooses Neura's registry, then encrypted with a customer-managed key |
 | Operational metadata | Digests, ids, state transitions, reason codes, timings | Site store | Yes, under a published schema (§18.2) |
 | Aggregate metrics | Latency percentiles, deadline misses, utilization | Site; exportable | Yes, or only to the customer's own Prometheus/OTel |
@@ -1093,7 +1097,7 @@ An external penetration test is scheduled before the first customer pilot. This 
 - **No standing remote access.** Support uses break-glass sessions that the customer approves, are time-boxed and are fully audited. No permanent remote shell.
 - **Tenancy.** Each customer's site is dedicated. The control plane isolates organizations at the data layer; a dedicated or self-hosted control plane is offered for customers who require it.
 - **Supply chain.** Signed images, SBOMs and an open robot runtime (§14), so customers can inspect what runs on their robots and servers.
-- **No training on customer data.** Stated in the contract, and also structurally true, because payloads do not reach Neura by default.
+- **No training on customer data by Neura.** Stated in the contract, and also structurally true, because payloads do not reach Neura by default. The improvement loop (§28) trains the customer's models on the customer's episodes, at the customer's site, for the customer: episodes are recorded and stored there and never sent to Neura.
 
 ### 18.3 Compliance path (not yet claimed)
 
@@ -1683,6 +1687,149 @@ Until the first release, the site shows a single "next" version with a site-wide
   - the quickstart's blocks marked `quickstart` run in one shell and must succeed;
   - the build fails on any broken link, anchor or image.
 - **Hosting.** The `Docs site` workflow publishes `main` to GitHub Pages. Every pull request uploads the built site as a downloadable preview. The URL and base path are repository variables until a domain is chosen.
+
+---
+
+## 28. The improvement loop: capture, evaluate, improve
+
+### 28.1 Decision and scope
+
+Decision (October 17, 2026): Neura grows from running policies into improving them, in this order:
+capture what deployed robots do, evaluate candidate models against the one running, and fine-tune
+on captured episodes. This reverses two non-goals of §1 (training, evaluation as a product). The
+reasons:
+- **The wedge stays.** Running policies safely at the site (§1–§17) is what customers adopt first.
+- **The data is where Neura already sits.** Every observation and chunk passes through the robot
+  runtime and the gateway, so the runtime layer is the one place that can record what deployed
+  robots saw and did, including failures and takeovers.
+- **The loop is the product.** Captured failures, a fine-tune that addresses them, evidence that
+  it is no worse, and a staged rollout through the existing release flow (§13): only a vendor on
+  the action path can sell that end to end.
+
+What does not change:
+- **Payloads stay at the site** (§18.1). Episodes are payload: they are recorded, stored and
+  trained on at the site, on the customer's servers. The cloud sees counts and identifiers through
+  the published allowlist (§18.2).
+- **The action path comes first.** Recording, upload, evaluation and training never share a thread,
+  a queue or an event loop with serving. Where they compete for a resource (disk, GPU, network),
+  they lose: dropped and counted, never waited for.
+- **The site's operator sets the boundary** (§17.4). The cloud can ask a deployment to record; the
+  site records no more than its operator allows, and by default nothing.
+
+Training at the site is the default. A cloud training backend is possible later, opt-in per
+customer, behind the same job interface, and never the default.
+
+### 28.2 Capture (M9, built)
+
+**What an episode is.** One task: from arming until the task stops, the operator takes over, a
+fault latches or the task epoch advances. A task longer than its deployment's limit continues in a
+new episode (`part` 1, 2, ...). Format `neura-episode/1` (`neura_runtime.capture.episode`), one
+directory per episode:
+
+| File | Content |
+| --- | --- |
+| `episode.json` | Robot, revision and the three contract digests; timing; cameras; why it ended; its outcome; chunk and fault events; every file's SHA-256 and size. Written last |
+| `steps.npz` | Per control period: time, action index, the commanded action and the robot's state (robot order and units), and which camera frame was recorded then |
+| `camera-<role>.frames` | That camera's frames, raw HxWx3 in the camera's color order, each zlib-compressed (level 1, cheap enough for a robot computer) |
+
+Robot units and order throughout: mapping to a model's units happens at export, through the same
+execution-profile mappings serving uses.
+
+**On the robot** (`neura_runtime.capture`):
+- **Recorder.** The runtime has observers (`RuntimeObserver`: command, chunk, epoch, fault), called
+  on the control loop. An observer that raises is detached and counted; the robot carries on.
+  `EpisodeRecorder` only takes note:
+  - the commanded action and the state the control loop last read, every period (no extra bus
+    read on an SO-101);
+  - camera frames every `image_stride` periods.
+- **Spool.** A writer thread behind a queue bounded in bytes (64 MiB). When the queue is full, the
+  frame or step is dropped and counted, and the episode is marked incomplete; recording never
+  waits. When the spool directory is full (2 GiB by default), new tasks go unrecorded and are
+  counted. Layout `recording/` → `ready/` → `uploading/`, moved by atomic renames. A crash leaves
+  a partial recording, which is discarded, and an interrupted upload, which is retried.
+- **Uploader.** A thread of its own, with a gRPC connection of its own, so it never shares the
+  gateway stream. It uploads one episode at a time, oldest first, under an optional bandwidth
+  limit, and deletes an episode only after the site acknowledges it; retries back off.
+- **Outcomes.** An integration labels an episode (a task sensor, the simulator's reward), or the
+  operator does (`outcome success|failure NOTE`). Without a label, a fault or takeover is a
+  failure (`source: rule`) and anything else is `unknown`. A closed episode waits five seconds for
+  its label before upload; after upload, labels are set at the site.
+- **Failures mode** uploads only failures (fault, takeover, or a failure label) and deletes the
+  rest on the robot.
+
+**What to record** comes with each robot's `Assignment` (`CaptureSettings`): mode, endpoint, image
+stride, cameras, maximum episode length, spool size and upload bandwidth. It flows from the
+deployment's `capture` spec (API), through the signed manifest, to the agent. The agent clamps it
+to the site's boundary (`NEURA_AGENT_CAPTURE_ALLOWED`: `off` by default, then `failures` or `all`)
+and passes it to the gateway's configuration. A robot records only if it has a spool directory
+(`capture_dir` in `neura-arm`'s configuration, `--capture-dir` for the ALOHA cell). A change takes
+effect at the robot's next task boundary.
+
+**At the site** (`neura_server.capture`, hosted by the agent, not the gateway):
+- **Capture service** (`Capture.UploadEpisode`, its own port, 50052 by default). Robots
+  authenticate as they do to the gateway (site-CA certificates, or development tokens). A robot
+  may upload only its own episodes, only for a revision that records, and only within a size
+  limit. Each file is checked against the manifest's size as it arrives and against its digest
+  before the episode is stored. An episode already held is acknowledged again, not stored twice.
+- **Episode store.** Read-only episode directories and a SQLite index (WAL). It keeps labels with
+  source and note, and dataset snapshots: immutable lists of episodes chosen by a filter (robot,
+  revision, artifact, outcome, end reason, time). Each snapshot is named by a digest over its
+  episodes' manifests and labels, so a training run names exactly what it used. Retention by size
+  (200 GiB by default) and age deletes the oldest episodes first, never one a dataset in use holds.
+- **Operator access.** The local API and CLI list, label and delete episodes, and create and
+  release datasets (`neura-agent episodes | label | delete-episode | datasets | dataset |
+  release-dataset`). Each change is audited.
+- **What leaves the site.** `SiteStatus.capture`: whether recording is allowed, episode and step
+  counts, bytes, outcomes per revision and datasets in use. These are allowlisted in
+  `catalog/outbound.yaml` (counts are withheld in minimal mode), recorded in the outbound ledger
+  like everything else, and shown in the API as `Site.status.capture` and
+  `Deployment.status.capture`.
+
+**Export for training** (`neura_server.capture.export`) writes episodes as a LeRobot dataset
+(v3.0, LeRobot 0.6.1's `LeRobotDataset`). It uses the model's state inputs, camera inputs and
+actions, in the model's order and units. Frames recorded every few periods are held between
+recordings. Episodes that cannot train the model are left out with the reason: incomplete, another
+control period, other commands or cameras, no instruction for a language model. The dataset loads
+offline.
+
+**Evidence.**
+- Unit tests:
+  - the recorder follows the task;
+  - a full writer queue drops frames, never commands;
+  - a full spool records nothing;
+  - a failing observer is detached;
+  - uploads are kept until acknowledged;
+  - failures mode.
+- Store tests: same-robot rule, damaged files, out-of-order and oversized parts, labels, datasets
+  pinning against retention, age retention, restart mid-upload.
+- gRPC tests: authenticated, refused when the revision does not record, refused across robots.
+- Export test: a real LeRobot dataset, read back in model units.
+- **End to end on the emulated SO-101** (`packages/neura-robots/tests/test_capture_arm.py`): the
+  site's assignment turns recording on, the operator arms, labels the task and stops it. The
+  verified episode reaches the site's store with its label, its steps and its frames, while the
+  arm is served as usual.
+
+Not built yet: recording the operator's corrective motions during a takeover (it needs the
+customer's teleoperation to feed Neura its commands), video encoding on the robot, and an episode
+viewer (§28.5).
+
+### 28.3 Evaluate (M10, planned)
+
+Closed-loop suites in simulation (seeds, Wilson intervals, a paired non-inferiority verdict against
+the running model), replay on captured episodes, and shadow serving (a candidate sees live
+observations; its actions never reach a robot). Results attach to the candidate's revision as
+evidence, and a deployment can require them before activation.
+
+### 28.4 Improve (M11, planned)
+
+Fine-tuning jobs at the site: a dataset snapshot, a base artifact and a recipe produce a new
+checkpoint. The checkpoint is signed at the site as a new artifact with structured lineage (base
+artifact, dataset digest, recipe, code), then evaluated (§28.3) and rolled out through §13.
+
+### 28.5 The loop (M12, planned)
+
+API resources and console screens for episodes, datasets, evaluations and training jobs; the
+end-to-end run on the simulated ALOHA cell: capture, fine-tune, evaluate, stage, activate.
 
 ---
 

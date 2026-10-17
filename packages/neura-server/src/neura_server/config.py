@@ -59,6 +59,20 @@ class TlsConfig(_Model):
 Device = Annotated[str, StringConstraints(pattern=r"^(cpu|cuda:[0-9]{1,3})$")]
 
 
+class CaptureConfig(_Model):
+    """Episode capture for a deployment's robots (design §28.2): sent to each robot in its
+    assignment. Recording happens on the robot; finished episodes upload to ``endpoint``."""
+
+    mode: Literal["all", "failures"]
+    # "host:port", or ":port" for the gateway's host (the site agent's capture service).
+    endpoint: Annotated[str, StringConstraints(min_length=2, max_length=255)]
+    image_stride: int = Field(default=1, ge=1, le=100)
+    cameras: list[str] = Field(default_factory=list)
+    max_episode_seconds: int = Field(default=600, ge=1, le=86_400)
+    spool_max_bytes: int = Field(default=2 * 1024**3, ge=0)
+    upload_bytes_per_second: int = Field(default=0, ge=0)
+
+
 class DeploymentConfig(_Model):
     revision_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
     artifact: Path
@@ -77,6 +91,8 @@ class DeploymentConfig(_Model):
     # Latency profile measured on that device (`neura-worker profile` output). None: the
     # serving section's configured profile.
     profile: Path | None = None
+    # What this revision's robots record; None records nothing.
+    capture: CaptureConfig | None = None
 
 
 class ProfilePointConfig(_Model):

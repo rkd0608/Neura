@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 99 codes.
+Catalog version 1, 111 codes.
 
 ## Contracts
 
@@ -128,6 +128,23 @@ Catalog version 1, 99 codes.
 | `AGENT_ACTIVATION_SUPERSEDED` | info | no |  | A newer activation for the same robots was approved before every robot switched. |
 | `AGENT_BOUNDARY_DENIED` | error | no |  | The instruction is outside the boundaries configured on this server. |
 | `AGENT_OPERATION_INTERRUPTED` | warning | yes |  | The site agent restarted while the operation was running; run it again. |
+
+## Capture
+
+| Code | Severity | Retryable | HTTP | Meaning |
+| --- | --- | --- | --- | --- |
+| `CAPTURE_NOT_ENABLED` | warning | no |  | Episode capture is not enabled for this robot's revision at this site. |
+| `CAPTURE_EPISODE_INVALID` | error | no |  | The uploaded episode is not a complete, intact neura-episode/1 episode. |
+| `CAPTURE_ROBOT_MISMATCH` | error | no |  | A robot uploaded an episode another robot recorded. |
+| `CAPTURE_EPISODE_TOO_LARGE` | error | no |  | The episode is larger than the site accepts. |
+| `CAPTURE_EPISODE_UNKNOWN` | warning | no |  | No episode with this identifier is stored at this site. |
+| `CAPTURE_EPISODE_IN_DATASET` | warning | no |  | The episode belongs to a dataset in use; release the dataset first. |
+| `CAPTURE_LABEL_INVALID` | warning | no |  | An outcome label is success, failure or unknown. |
+| `CAPTURE_FILTER_INVALID` | warning | no |  | The episode filter is not valid. |
+| `CAPTURE_DATASET_EMPTY` | warning | no |  | No stored episode matches the dataset's filter. |
+| `CAPTURE_DATASET_UNKNOWN` | warning | no |  | No dataset with this identifier exists at this site. |
+| `CAPTURE_DATASET_RELEASED` | warning | no |  | The dataset was released; its episodes may be gone. |
+| `CAPTURE_SPOOL_FULL` | warning | yes |  | The robot's episode spool is full; new episodes are not recorded until uploads free space. |
 
 ## Api
 

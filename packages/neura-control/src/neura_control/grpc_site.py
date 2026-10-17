@@ -572,6 +572,25 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             site_id,
             offline_authorization_remaining_s=int(status.offline_authorization_remaining_s),
         )
+        if status.HasField("capture"):
+            capture = status.capture
+            await site_reports.report_capture(
+                session,
+                site_id,
+                {
+                    "enabled": capture.enabled,
+                    "episodes": int(capture.episodes),
+                    "bytes": int(capture.bytes),
+                    "steps": int(capture.steps),
+                    "outcomes": {k[:16]: int(v) for k, v in list(capture.outcomes.items())[:8]},
+                    "datasets": int(capture.datasets),
+                    "revisions": {
+                        r.revision_id: {k[:16]: int(v) for k, v in list(r.outcomes.items())[:8]}
+                        for r in capture.revisions[:1000]
+                        if r.revision_id.startswith("rev_")
+                    },
+                },
+            )
         robots = {
             r.name: r
             for r in (await session.scalars(select(Robot).where(Robot.site_id == site_id))).all()

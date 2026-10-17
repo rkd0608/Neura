@@ -70,8 +70,10 @@ there, connected to the gateway, waiting for a revision.
    and measures it, then reports how many robots this machine can serve at this profile.
 
    A recent laptop serves two or more: on a CPU, a forward pass takes 100 to 150 ms. A slower
-   machine may serve fewer; a 4-core cloud VM takes about 550 ms and serves one. An activation
-   for more robots than that fails at once with `ADMISSION_CAPACITY_EXCEEDED`. Then either:
+   machine may serve fewer; a 4-core cloud VM takes about 550 ms and serves one, or none when
+   its passes are slower (at 65 actions left a robot asks every 700 ms, and admission keeps a
+   fifth of the CPU in reserve). An activation for more robots than that fails at once with
+   `ADMISSION_CAPACITY_EXCEEDED`. Then either:
    - remove a robot from the deployment;
    - or give each request more time: `./site.sh publish <url> --refill-at 65`, then add a
      revision with the new execution profile.

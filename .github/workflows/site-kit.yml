@@ -13,7 +13,8 @@ on:
         default: 3
       # A runner's 4 shared vCPUs take about 550 ms per forward pass of the published ACT (a
       # recent laptop, about 100-150 ms): one robot, with the next chunk requested at 65 actions
-      # left (a 1.3 s budget, 35 actions a chunk).
+      # left (a 1.3 s budget, 35 actions a chunk). A slower runner (630 ms) serves none: a robot
+      # asking every 700 ms keeps it busier than admission's 80% ceiling.
       robots:
         description: "Robots at the site"
         type: number

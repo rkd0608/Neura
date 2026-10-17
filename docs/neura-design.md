@@ -347,13 +347,15 @@ FIFO and round robin ship as baseline schedulers selectable by config, so every 
 
 A session is admitted to a group only if the profiled latency at the resulting concurrency still satisfies every admitted session's refill inequality (§8), with configured reserve capacity and memory headroom. Admission is where overload is refused. There are no growing queues.
 
-The implemented check (M2) models the worst case: every session requests at once, one non-preemptible batch is already running, and sessions are served in deadline order in batches of at most `max_batch`. For each session it requires:
+The implemented check (M2) models the worst case: every session requests at once, one non-preemptible batch of the other sessions is already running, and sessions are served in deadline order in batches of at most `max_batch`. For each session it requires:
 
 1. wait before dispatch + uplink ≤ the profile's maximum observation age at dispatch;
 2. completion + link ≤ the maximum observation age at acceptance;
 3. completion + link ≤ the starvation budget;
 
 plus average utilization ≤ `1 − reserve` and memory headroom.
+
+*Evidence fix:* the batch already running holds only the other sessions' requests, at most `max_batch` of them. A robot has at most one request outstanding (§9.2), so its own previous request is never in flight when it asks again. The check used to size that batch from every session, the robot's own included. With one robot on a CPU, whose pass is slower than the 100 ms dispatch limit, it imagined the robot waiting behind itself and refused it: a robot that reconnected after a stall was refused although it had just been served (§10.1). Capacities of more than `max_batch` robots do not change; only those that ended at or below one batch can rise.
 
 *M6 update:* the scheduler's batching window (§9.2) serves robots that ask together in one batch, so synchronized arrivals cost one batch's latency rather than a queue of single batches. The CPU benchmark (§12.1) also found that robots desynchronize on their own when a pass is slower than a control period.
 
@@ -483,7 +485,7 @@ LeRobot's remote inference reported no fault in any scenario: it has no way to. 
     - Admission assumes a batch is already running when a request arrives. With one robot, that batch can only be the robot's own previous request, which is never in flight at the same time.
     - By then the gateway had measured this CPU's inference time, and that one imagined batch put the predicted wait past the profile's 100 ms dispatch budget.
     - The same robot had been served one episode earlier, its observations 120 ms old on arrival. So episodes alternated: served, then refused on reconnecting, then served again.
-    - A proposed fix counts only the other robots' requests in that batch (§9.3); it waits on a decision, because it raises recorded capacity figures.
+    - The fix counts only the other robots' requests in that batch (§9.3, *Evidence fix*).
   - When the stall ended, LeRobot executed the chunk it had been waiting for, computed from an observation 3.3 s old: 16 actions with the scaled tolerance, 90 as shipped.
 - **Model process killed.**
   - Neura faulted in every episode (`STARVATION_GRACE_EXHAUSTED`), 1 s after its queue ran out, the arm held.
@@ -1348,7 +1350,7 @@ Everything else is done in the console: sites, robots, deployments, revisions, p
 **Development settings.**
 - The agent issues the simulated robots their certificates (`dev_robot_certificate_dir`).
 - The policy workers run as processes in the agent's container (`worker_sandbox=process`).
-- The execution profile is tuned for CPU serving: an observation may be 600 ms old when it reaches the model, and the next chunk is requested with 50 actions left, a one-second budget. On the GPU profile (100 ms, 30 actions), admission control refuses a second robot on a laptop's CPU, by design: the predicted completion exceeds the robot's starvation budget.
+- The execution profile is tuned for CPU serving: an observation may be 600 ms old when it reaches the model, and the next chunk is requested with 50 actions left, a one-second budget. On the GPU profile (100 ms, 30 actions), admission control refuses a second robot on a laptop's CPU, by design: its observation would wait behind the first robot's pass, longer than 100 ms.
 
 **Verified.**
 - **In this repository's sandbox**, against a local control plane with a random-weights checkpoint of the published one's shape: the published flow, enrollment, signature trust, weight import, prepare, approval from the page, tasks on two robots, and switching revisions mid-task.

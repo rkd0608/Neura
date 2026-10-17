@@ -203,6 +203,50 @@ def test_removal_frees_capacity_and_estimate_matches() -> None:
     assert admission.try_admit(_demand(99, budget_ms=100)).admitted
 
 
+def _fresh_demand(session_id: str) -> SessionDemand:
+    # The CPU profile's limits shape: an observation at most 100 ms old when it reaches the model.
+    return SessionDemand(session_id, 600 * MS, 1_000 * MS, 2 * MS, 100 * MS, 1_500 * MS)
+
+
+def _slow_profile() -> LatencyProfile:
+    # A pass slower than the dispatch-freshness limit, as on a CPU.
+    return LatencyProfile(
+        [ProfilePoint(1, 140 * MS, 150 * MS), ProfilePoint(4, 200 * MS, 220 * MS)]
+    )
+
+
+def test_a_lone_robot_never_waits_behind_its_own_request() -> None:
+    # A robot has at most one request outstanding, so with no other robot nothing is running
+    # when it asks, however slow a pass is.
+    admission = AdmissionController(_slow_profile(), max_batch=4, batch_window_us=2 * MS)
+    decision = admission.try_admit(_fresh_demand("s0"))
+    assert decision.admitted, decision.detail
+    assert decision.worst_case_completion_us == (2 + 150 + 2) * MS  # window, pass, link
+
+
+def test_robots_still_wait_behind_each_others_batch() -> None:
+    admission = AdmissionController(_slow_profile(), max_batch=4, batch_window_us=2 * MS)
+    assert admission.try_admit(_fresh_demand("s0")).admitted
+    decision = admission.try_admit(_fresh_demand("s1"))
+    assert not decision.admitted
+    assert decision.limit == "dispatch_freshness"
+    # Behind the other robot's 150 ms pass and the window, plus half the link.
+    assert decision.detail.startswith("2 sessions: observation age at dispatch 153000 us")
+
+
+def test_a_robot_reconnecting_after_a_stall_gets_the_same_verdict() -> None:
+    # The stall outlasted the lease, so the gateway dropped the session and the robot opened a
+    # new one. By then the profile had learned this host's slower passes.
+    profile = _profile()
+    admission = AdmissionController(profile, max_batch=4, batch_window_us=2 * MS)
+    assert admission.try_admit(_fresh_demand("s0")).admitted
+    for _ in range(20):
+        profile.observe(1, 230 * MS)
+    admission.remove("s0")
+    decision = admission.try_admit(_fresh_demand("s1"))
+    assert decision.admitted, decision.detail
+
+
 def test_demand_from_binding(make_binding: Any) -> None:
     binding = make_binding()
     demand = SessionDemand.from_binding("s", binding, rtt_p99_us=3_000)

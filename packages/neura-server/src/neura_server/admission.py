@@ -1,10 +1,10 @@
 """Admission control: refuse a session the admitted load could not serve in time (design §9.3).
 
 The check is deliberately conservative and explainable. For the burst case (every session asks at
-the same moment) it assumes one non-preemptible batch is already running, serves sessions in
-deadline order in batches of at most ``max_batch``, and requires each session's predicted
-completion plus its link allowance to fit inside its starvation budget. It also bounds average
-utilization below ``1 - reserve_fraction`` and checks GPU memory headroom.
+the same moment) it assumes one non-preemptible batch of the other sessions is already running,
+serves sessions in deadline order in batches of at most ``max_batch``, and requires each session's
+predicted completion plus its link allowance to fit inside its starvation budget. It also bounds
+average utilization below ``1 - reserve_fraction`` and checks GPU memory headroom.
 """
 
 from __future__ import annotations
@@ -116,8 +116,10 @@ class AdmissionController:
                     "memory",
                 )
 
-        # One batch already running, and the scheduler's batching window before the next.
-        blocking = self._profile.p99_us(typical_batch) + self._window
+        # One batch of the other sessions already running (a session has at most one request
+        # outstanding, so never its own), and the scheduler's batching window before the next.
+        others = min(n - 1, self._max_batch)
+        blocking = (self._profile.p99_us(others) if others else 0) + self._window
         ordered = sorted(demands, key=lambda d: d.budget_us - d.link_us)
         elapsed = blocking
         worst = 0

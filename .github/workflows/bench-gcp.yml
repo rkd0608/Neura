@@ -23,6 +23,10 @@ on:
         description: "Skip the CPU run of SmolVLA first"
         type: boolean
         default: false
+      request_quota:
+        description: "Only ask Google for the GPU quota a run needs, and say where the request is"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,7 +47,7 @@ env:
 jobs:
   smoke:
     name: SmolVLA through the suite on a CPU
-    if: ${{ !inputs.skip_smoke }}
+    if: ${{ !inputs.skip_smoke && !inputs.request_quota }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -78,12 +82,17 @@ jobs:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           NEURA_BENCH_SPOT: ${{ inputs.spot }}
           NEURA_BENCH_HOURS: ${{ inputs.hours }}
+          REQUEST_QUOTA: ${{ inputs.request_quota }}
         run: |
           if [ -z "$GCP_SA_KEY" ]; then
             echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"
             exit 1
           fi
-          deploy/gcp/bench.sh run | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$REQUEST_QUOTA" = true ]; then
+            deploy/gcp/bench.sh quota-request | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            deploy/gcp/bench.sh run | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -91,7 +100,7 @@ jobs:
           path: bench-report
           if-no-files-found: ignore
       - name: Commit the report to bench-reports
-        if: success()
+        if: success() && !inputs.request_quota
         run: |
           label=$(python3 - <<'EOF'
           import json, re

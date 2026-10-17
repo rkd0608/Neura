@@ -4,6 +4,9 @@
 # happens. The report lands in bench-report/ (README.md and results.json).
 #
 #   deploy/gcp/bench.sh quota     can this project run an L4? (and how to ask for one)
+#   deploy/gcp/bench.sh quota-request
+#                                 ask Google for the GPUs-in-all-regions quota a run needs, 1
+#                                 (free; Google decides, in minutes to days), and say where it is
 #   deploy/gcp/bench.sh run       quota, a bucket for the source and report, the VM in the first
 #                                 zone with an L4 free, the benchmark, the report, the VM deleted
 #   deploy/gcp/bench.sh status    the benchmark's VMs and their progress
@@ -25,7 +28,7 @@
 set -euo pipefail
 
 case "${1:-}" in
-quota | run | status | delete) ;;
+quota | quota-request | run | status | delete) ;;
 *)
     sed -n '2,/^set -euo/{/^set -euo/!p}' "$0"
     exit 2
@@ -120,6 +123,42 @@ EOF
         return 3
     fi
     echo "${usable[@]}"
+}
+
+# Asks for GPUS_ALL_REGIONS = 1 through the Cloud Quotas API (new projects have 0, which no
+# regional L4 quota overrides), then prints what Google has decided so far. Asking again only
+# reads the request back.
+request_quota() {
+    step "asking for 1 GPU in all regions (GPUS_ALL_REGIONS)"
+    g services enable cloudquotas.googleapis.com
+    local api=https://cloudquotas.googleapis.com/v1/projects/$PROJECT/locations/global/quotaPreferences
+    local id=neura-bench-gpus-all-regions answer token status
+    answer=$(mktemp)
+    CLEANUP+=("$answer")
+    token=$(gcloud auth print-access-token)
+    status=$(curl -sS -o "$answer" -w '%{http_code}' -X POST "$api?quotaPreferenceId=$id" \
+        -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+        -d '{"service": "compute.googleapis.com", "quotaId": "GPUS-ALL-REGIONS-per-project",
+             "quotaConfig": {"preferredValue": "1"},
+             "justification": "One NVIDIA L4 Spot VM for a few hours, deleted after: a GPU inference benchmark."}')
+    if [[ $status == 409 ]]; then
+        echo "    asked before; reading the request back" >&2
+        status=$(curl -sS -o "$answer" -w '%{http_code}' "$api/$id" -H "Authorization: Bearer $token")
+    fi
+    if [[ $status != 200 ]]; then
+        echo "the Cloud Quotas API answered $status:" >&2
+        cat "$answer" >&2
+        return 1
+    fi
+    python3 - "$answer" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+c = p.get("quotaConfig", {})
+print(f"    asked for {c.get('preferredValue')}; granted so far {c.get('grantedValue', 'nothing')}")
+print(f"    still being decided: {'yes' if p.get('reconciling') else 'no'}")
+if c.get("stateDetail"):
+    print(f"    Google says: {c['stateDetail']}")
+PY
 }
 
 # The newest Deep Learning VM image family with NVIDIA's 580 driver (CUDA 13, which the locked
@@ -292,6 +331,7 @@ case "$1" in
 quota)
     usable_zones >/dev/null && echo "this project can run an L4 ($(metric))"
     ;;
+quota-request) request_quota ;;
 run) run ;;
 status)
     vms

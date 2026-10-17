@@ -82,7 +82,9 @@ def _run(arguments: list[str], cwd: str, env: dict[str, str], sink: TextIO, seco
 
 
 @app.function(gpu="L4", cpu=4.0, memory=32 * 1024, timeout=int(HOURS * 3600), retries=0)
-def bench(size: str, smoke: bool = True, hours: float = HOURS) -> dict[str, bytes]:
+def bench(
+    size: str, smoke: bool = True, hours: float = HOURS, commit: str = ""
+) -> dict[str, bytes]:
     """Run the suite on this container's L4. Returns the report's files, the log and the run's
     exit code."""
     deadline = time.monotonic() + hours * 3600 - MARGIN_S
@@ -92,6 +94,7 @@ def bench(size: str, smoke: bool = True, hours: float = HOURS) -> dict[str, byte
     work = Path(tempfile.mkdtemp(prefix="neura-bench-"))
     out, log = work / "report", work / "bench.log"
     env = {**os.environ, "HF_HOME": str(work / "hf"), "MUJOCO_GL": "egl", "UV_PYTHON": PYTHON}
+    env["NEURA_GIT_COMMIT"] = commit  # the image holds the checkout without its history
     with log.open("w") as sink:
         if smoke:
             print("--> every stage small, on the GPU", flush=True)
@@ -112,7 +115,12 @@ def bench(size: str, smoke: bool = True, hours: float = HOURS) -> dict[str, byte
 
 @app.local_entrypoint()
 def main(size: str = "base", out: str = "bench-report", smoke: bool = True) -> None:
-    files = bench.remote(size, smoke, HOURS)
+    git = shutil.which("git")
+    commit = ""
+    if git:
+        head = [git, "-C", str(ROOT), "rev-parse", "--short", "HEAD"]
+        commit = subprocess.run(head, capture_output=True, text=True, check=False).stdout.strip()  # noqa: S603
+    files = bench.remote(size, smoke, HOURS, commit)
     code = int(files.pop("exit", b"1"))
     dest = Path(out)
     dest.mkdir(parents=True, exist_ok=True)

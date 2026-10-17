@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU benchmark report awaiting the GPU runner; M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm · October 15, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its first GPU report in (an L4, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm · October 17, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -389,6 +389,25 @@ GPU sharing is Neura's primary bet (§25), and the biggest technical threat to i
 | Different full fine-tunes of the same architecture | Co-location: several workers on one GPU, time-multiplexed, limited by memory and contention | Moderate; mostly fills idle GPU time between requests |
 | Different architectures | Co-location only | Lowest; sometimes negative |
 
+**Step 0 on an NVIDIA L4** (October 17, 2026; `bench/reports/nvidia-l4/`, GPU benchmark (Modal) run 39013279255). Synthetic checkpoints with LeRobot's real architectures at base size, 640 x 480 cameras, bf16, through real worker processes. The simulator matched the real-time runs: ACT at 16 robots missed nothing in either; SmolVLA and π0 at 4 robots missed 624 in 1,000 real against 627 simulated.
+
+| Case | One GPU per robot | One process per robot, shared GPU | Neura |
+| --- | --- | --- | --- |
+| ACT, same weights, phased | 1 | 96 (memory-bound at 128) | 32 (deadline + fairness) |
+| ACT, same weights, synchronized | 1 | 96 | 24 |
+| ACT, per-robot LoRA adapters | 1 | 96 | 24 (multi-adapter batching) |
+| ACT, four full fine-tunes | 1 | 96 | 96 (co-located groups); 64 with a background job |
+| ACT and Diffusion Policy | 0 | 1 | 1 |
+| SmolVLA, π0 | 0 | 0 | 0 |
+
+What it shows:
+
+1. **Sharing pays, by an order of magnitude.** One L4 serves 24 to 96 ACT robots at the SLO instead of 1, about 0.03 GPU-hours per robot-hour.
+2. **Batching is not why.** ACT's pass is overhead-bound on the L4: 36 ms for one observation, 20 ms each in a batch of 16, and four passes side by side cost only 10% more than one. A Neura worker runs one pass at a time, so it tops out near 32 robots. Separate processes overlap their passes, and so do Neura's co-located groups: four fine-tune workers served 96. The next lever is several workers (or CUDA streams) per batch group, batching within each.
+3. **The one-process-per-robot figure is an upper bound.** Contention was measured up to four processes and extrapolated linearly beyond; real-time validation ran four. Without MPS, many CUDA contexts time-slice, so 96 is likely optimistic. Measuring contention at 16 to 64 processes is the next measurement.
+4. **The VLA profile cannot be met on an L4, shared or not.** A SmolVLA or π0 pass takes 0.38 to 0.40 s for one observation (0.82 and 1.75 s for 16), past the profile's 150 ms acceptance limit, so even a dedicated L4 fails at one robot. Measuring VLA sharing needs a profile qualified for such passes (a later acceptance limit and more actions left at refill, as real-time chunking allows) or a faster GPU. Memory is where Neura should win for π0: 8.5 GB a process fits two per L4 one process each, against one shared 9 GB worker.
+5. **Admission is about six times too cautious on a GPU.** It estimates 4 ACT robots (acceptance freshness), against 24 measured with synchronized arrivals and 16 validated in real time. Its worst case has every robot ask at the same instant behind a full batch of the others, forever; real robots drift apart. A capacity estimate that low would make the console undersell the GPU.
+
 Product consequences:
 
 - Capacity estimates (§23) always state which case applies.
@@ -624,7 +643,7 @@ Generated files (protobuf bindings, reason-code module, JSON Schemas, example bi
 
 | Step | Delivers | Exit criterion |
 | --- | --- | --- |
-| 0 | **Sharing economics benchmark** (runs alongside steps 1–3; needs one GPU, no robot): SmolVLA and π0-class models with synthetic observations; latency and memory vs batch size; robots per GPU at illustrative timing envelopes (§8); the four sharing cases in §9.5; dedicated baseline (§10) | A report stating robots per GPU shared vs dedicated for each case, and the GPU cost per robot-hour. This is the first evidence for or against the primary bet (§25) |
+| 0 ✅ (L4, §9.5) | **Sharing economics benchmark** (runs alongside steps 1–3; needs one GPU, no robot): SmolVLA and π0-class models with synthetic observations; latency and memory vs batch size; robots per GPU at illustrative timing envelopes (§8); the four sharing cases in §9.5; dedicated baseline (§10) | A report stating robots per GPU shared vs dedicated for each case, and the GPU cost per robot-hour. This is the first evidence for or against the primary bet (§25) |
 | 1 | Schema, contracts, compatibility checks | Contract test suite passes, including rejection cases |
 | 2 | Robot runtime: cursor, merge modes, fences, state machine | Property-based tests prove the invariants in §5–§7 under random interleavings |
 | 3 | Simulated harness: virtual robots, simulated network with delay/loss/partition, mock worker with profiled latency | Full fault suite runs in CI without a GPU |
@@ -650,7 +669,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M3. Control plane** ✅ | FastAPI service on Postgres: organizations, projects, sites, robots, artifacts, profiles, deployments, revisions, operations, events stream, audit, RBAC, OIDC login, API tokens (§20). Alembic migrations; transactional idempotency keys; `If-Match` concurrency; audit and change events in the same transaction as each change; site-report service that alone writes observed state (used by the agent in M4); `GET /v1/me`; bootstrap CLI and development bootstrap | Every response in the test suite is validated against the OpenAPI spec; every spec operation is implemented; idempotency (including concurrent retries), concurrency, roles, OIDC and audit tests pass; the dev stack onboards a customer through the API |
 | **M4. Site agent** ✅ | Enrollment with one-time tokens and on-host keys, preflight, outbound stream (TLS), signed manifest reconciliation, contract verification at the site, local boundaries, at-most-once commands, local approval, task-boundary revision switches, signed contact proofs for offline authorization, supervised data plane, local site API and CLI (§17, §19.5); implementation notes in §17.6 | A clean machine enrolls from one command and runs a deployment pushed from the control plane; keeps operating through a control-plane outage and reconnects by itself (`make smoke` runs the whole pilot on the Compose stack) |
 | **M5. Web console** ✅ | Onboarding, connect a server, robots, models, compatibility, capacity, releases and rollback, live sessions, faults, audit, settings (§19); members API with invitations; sign-in configuration in `/v1/meta`; site-computed capacity estimates; generated Python SDK; implementation notes in §19.7 | The full onboarding-to-deployment journey works in the browser against the real backend, with end-to-end browser tests (`make console-e2e`, in CI) |
-| **M6. Models and GPU sharing** (built; GPU run pending) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
+| **M6. Models and GPU sharing** (built; first GPU report: L4, §9.5) | ACT, SmolVLA and π0-class adapters (§12), batching, multi-adapter batching and co-location (§9.5), profiler and capacity estimates, benchmark harness (§10); policy worker processes, the site's artifact store, measured profiles at prepare; implementation notes in §12.1 | Benchmark reports for each sharing case vs the dedicated baseline, reproducible from one command on the GPU runner. Built and run on a CPU development host (`bench/reports/`); the GPU report is produced by `make bench` on the GPU runner |
 | **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
 | **M8. Physical validation** (built; hardware run pending) | SO-101-class arms connected through the same platform: the SO-101 integration over LeRobot, a servo bus emulator, `neura-arm`, and `neura-qualify` (hardware fault suite, open-loop parity, closed-loop non-inferiority); implementation notes in §7.1 | Fault suite and parity pass on hardware. Built and passing on the emulated arm (`qualification/reports/`); the hardware report is produced by `neura-qualify` with the arm |
 
@@ -1534,7 +1553,7 @@ Taken deliberately. Evidence is gathered while building; the build does not wait
 
 | Bet | What would show it is wrong |
 | --- | --- |
-| Sharing GPUs across robots saves meaningful money on real workloads | Step 0 (§16) shows little or no robots-per-GPU gain for SmolVLA- and π0-class models at realistic timing, in all four cases of §9.5 |
+| Sharing GPUs across robots saves meaningful money on real workloads | Step 0 (§16) shows little or no robots-per-GPU gain for SmolVLA- and π0-class models at realistic timing, in all four cases of §9.5. *First evidence (§9.5, L4):* 24 to 96 ACT robots per GPU instead of 1, but from overlapping passes more than from batching, so plain co-location captures much of it. The VLA cases are unmeasured: their profile cannot be met on an L4 even with a GPU per robot |
 | Target customers (smaller suppliers and integrators) feel the infrastructure pain | Discovery conversations consistently describe it as solved or minor |
 | They will let a vendor onto the action path, on their own servers | Prospects refuse remote execution of their policy under any terms |
 | Neura's releases and fault handling beat what they built in-house | Pilot measures (§22) show no improvement |

@@ -76,11 +76,12 @@ def _version(package: str) -> str | None:
 
 
 def environment(device: str) -> dict[str, Any]:
-    commit = None
+    # A checkout without its history (a container image) names its commit in the environment.
+    commit = os.environ.get("NEURA_GIT_COMMIT") or None
     with contextlib.suppress(OSError):
         git = ["git", "rev-parse", "--short", "HEAD"]
         out = subprocess.run(git, capture_output=True, text=True, check=False)  # noqa: S603
-        commit = out.stdout.strip() or None
+        commit = out.stdout.strip() or commit
     return {
         "device": device,
         "device_name": device_name(device),

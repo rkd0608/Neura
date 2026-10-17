@@ -123,6 +123,10 @@ class LatencyMeasurement:
     samples: dict[int, int]
     # The smallest batch size that did not fit in the device's memory, if one was tried.
     out_of_memory_at: int | None = None
+    # Where the worker's whole device memory was read: "process" (the driver's accounting of
+    # the process), "device" (the device's use with the worker alone on it, less its use before
+    # the worker started), or None (a CPU, or a driver that reported neither).
+    overhead_source: str | None = None
 
     @property
     def largest_batch(self) -> int:
@@ -131,6 +135,7 @@ class LatencyMeasurement:
     def to_json(self) -> dict[str, Any]:
         return {
             "process_overhead_mib": self.model.process_overhead_mib,
+            "process_overhead_source": self.overhead_source,
             "out_of_memory_at": self.out_of_memory_at,
             "points": [
                 {
@@ -162,6 +167,8 @@ async def latency(
     samples = {}
     out_of_memory_at = None
     footprint: int | None = None
+    source: str | None = None
+    baseline = device_used_mib(device)
     async with workers([files], device, max_batch=max(batch_sizes), warmup=(1,)) as (backend,):
         for size in sorted(set(batch_sizes)):
             batch = [sample] * size
@@ -176,10 +183,23 @@ async def latency(
                 break
             points.append(_point(size, timings, backend.peak_memory_mib))
             samples[size] = len(timings)
-            footprint = process_memory_mib(backend.status().get("pid"))
+            footprint, source = _footprint(backend.status().get("pid"), device, baseline)
     overhead = max(0, footprint - points[-1].memory_mib) if footprint is not None else 0
     model = LatencyModel(tuple(points), process_overhead_mib=overhead)
-    return LatencyMeasurement(model, samples, out_of_memory_at)
+    return LatencyMeasurement(model, samples, out_of_memory_at, source)
+
+
+def _footprint(pid: int | None, device: str, baseline: int | None) -> tuple[int | None, str | None]:
+    """A worker's whole device memory, and where it was read: the driver's accounting of the
+    process or, where the driver cannot match the process (a container with its own process
+    IDs reports none), the device's use less its use before the worker started."""
+    own = process_memory_mib(pid)
+    if own is not None:
+        return own, "process"
+    used = device_used_mib(device)
+    if used is not None and baseline is not None:
+        return max(0, used - baseline), "device"
+    return None, None
 
 
 def _nvidia_smi(*args: str) -> str | None:
@@ -208,15 +228,25 @@ def process_memory_mib(pid: int | None) -> int | None:
     return None
 
 
-def device_memory_mib(device: str) -> int | None:
-    """The device's memory, from the NVIDIA driver (no CUDA context in this process), or None
-    for a CPU."""
+def _gpu_mib(device: str, field: str) -> int | None:
     if not device.startswith("cuda"):
         return None
     index = device.partition(":")[2] or "0"
-    out = _nvidia_smi("--query-gpu=memory.total", "--format=csv,noheader,nounits", "-i", index)
+    out = _nvidia_smi(f"--query-gpu={field}", "--format=csv,noheader,nounits", "-i", index)
     text = (out or "").strip()
     return int(text) if text.isdigit() else None
+
+
+def device_memory_mib(device: str) -> int | None:
+    """The device's memory, from the NVIDIA driver (no CUDA context in this process), or None
+    for a CPU."""
+    return _gpu_mib(device, "memory.total")
+
+
+def device_used_mib(device: str) -> int | None:
+    """The device's memory in use by every process on it, from the NVIDIA driver, or None for a
+    CPU."""
+    return _gpu_mib(device, "memory.used")
 
 
 @dataclass(frozen=True, slots=True)

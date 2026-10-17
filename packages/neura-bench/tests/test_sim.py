@@ -228,8 +228,22 @@ def test_cases_of_models_that_were_not_measured_are_left_out(tmp_path: Path) -> 
     assert builder.config.slo.max_memory_mib == 24_000
 
 
+@pytest.mark.parametrize(
+    ("own", "device_use", "source"),
+    [
+        # The driver accounts the worker 350 MiB at a batch of 2, whose peak allocation is 200.
+        ({4242: 350}, [150, 150, 150], "process"),
+        # A container whose process IDs the driver cannot match: the device's use goes from 150
+        # MiB before the worker starts to 500 with it alone on the device.
+        ({}, [150, 400, 500], "device"),
+    ],
+)
 async def test_latency_stops_at_the_first_batch_that_does_not_fit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    own: dict[int, int],
+    device_use: list[int],
+    source: str,
 ) -> None:
     import contextlib
 
@@ -252,8 +266,9 @@ async def test_latency_stops_at_the_first_batch_that_does_not_fit(
         yield [Backend()]
 
     monkeypatch.setattr(measure, "workers", workers)
-    # The driver accounts the worker 350 MiB at a batch of 2, whose peak allocation is 200.
-    monkeypatch.setattr(measure, "process_memory_mib", lambda pid: 350 if pid == 4242 else None)
+    monkeypatch.setattr(measure, "process_memory_mib", own.get)
+    readings = iter(device_use)
+    monkeypatch.setattr(measure, "device_used_mib", lambda device: next(readings))
     files = write_files(tmp_path, contracts())
     measured = await measure.latency(
         files, "cuda:0", batch_sizes=(1, 2, 4, 8), seconds=0.0, minimum=2
@@ -262,6 +277,7 @@ async def test_latency_stops_at_the_first_batch_that_does_not_fit(
     assert measured.out_of_memory_at == 4
     assert measured.largest_batch == 2
     assert measured.model.process_overhead_mib == 150
+    assert measured.overhead_source == measured.to_json()["process_overhead_source"] == source
 
 
 def test_robots_of_a_language_conditioned_model_arm_with_an_instruction(tmp_path: Path) -> None:

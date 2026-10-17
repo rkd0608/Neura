@@ -57,3 +57,14 @@ def test_a_vla_run_states_its_timing_and_each_models_contention() -> None:
     assert "chunks of 50 actions, the next requested at 30 left" in markdown
     assert "1500 ms when the robot accepts its chunk" in markdown
     assert "Co-location of SmolVLA workers (simulated with this, not ACT's)" in markdown
+
+
+def test_a_gpu_run_without_the_workers_memory_says_what_it_counted() -> None:
+    data = json.loads(FIXTURE.read_text())
+    data["environment"]["device"] = "cuda:0"
+    note = "The driver reported no device memory for the worker processes of ACT"
+    assert note in report.markdown(data)
+    for latency in data["measurements"]["latency"].values():
+        latency["process_overhead_source"] = "device"
+    assert note not in report.markdown(data)
+    assert note not in report.markdown(json.loads(FIXTURE.read_text()))  # a CPU has no driver

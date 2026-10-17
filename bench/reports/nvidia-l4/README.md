@@ -71,6 +71,8 @@ Forward-pass latency through a worker process, pi0:
 | 8 | 916.72 | 940.57 | 8482 | 20 |
 | 16 | 1753.39 | 1788.65 | 9084 | 20 |
 
+The driver reported no device memory for the worker processes of ACT, Diffusion Policy, SmolVLA, pi0, so each process counts here at its peak allocation alone, without its CUDA context and caches: the memory limit of one process per robot is optimistic.
+
 Co-location: k workers on the device, each running batches of one back to back. Alone: p50 35.819 ms. A background job (matrix multiplications) slows a lone worker by 1.118x.
 
 | Workers | Slowdown | p50 (ms) | p99 (ms) |

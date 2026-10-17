@@ -206,6 +206,7 @@ def markdown(data: dict[str, Any]) -> str:
 
     out += ["## Measurements on the device", ""]
     measured = data["measurements"]
+    unaccounted: list[str] = []
     for model, latency in measured["latency"].items():
         points = latency["points"]
         name = MODEL_NAMES.get(model, model)
@@ -231,9 +232,19 @@ def markdown(data: dict[str, Any]) -> str:
                 f"a worker process holds {latency['process_overhead_mib']} MiB beyond its peak "
                 "allocation (CUDA context, workspaces, cache)"
             )
+        elif not cpu and latency.get("process_overhead_source") is None:
+            unaccounted.append(name)
         if notes:
             out += ["", f"{name}: " + "; ".join(notes) + "."]
         out.append("")
+    if unaccounted:
+        out += [
+            f"The driver reported no device memory for the worker processes of "
+            f"{', '.join(unaccounted)}, so each process counts here at its peak allocation alone, "
+            "without its CUDA context and caches: the memory limit of one process per robot is "
+            "optimistic.",
+            "",
+        ]
     contention = measured["contention"]
     out += [
         "Co-location: k workers on the device, each running batches of one back to back. "

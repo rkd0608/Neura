@@ -25,8 +25,9 @@ from pathlib import Path
 
 import modal
 
-ROOT = Path(__file__).resolve().parents[2]
 SRC = "/src"
+# The checkout, here; in the container this file is /root/bench.py and the checkout is at SRC.
+ROOT = Path(__file__).resolve().parents[2] if modal.is_local() else Path(SRC)
 HOURS = float(os.environ.get("NEURA_BENCH_HOURS", "3"))
 UV_VERSION = "0.11.32"
 PYTHON = "3.13"

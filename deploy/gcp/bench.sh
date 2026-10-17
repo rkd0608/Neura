@@ -6,7 +6,9 @@
 #   deploy/gcp/bench.sh quota     can this project run an L4? (and how to ask for one)
 #   deploy/gcp/bench.sh quota-request
 #                                 ask Google for the GPUs-in-all-regions quota a run needs, 1
-#                                 (free; Google decides, in minutes to days), and say where it is
+#                                 (free; Google decides, in minutes to days), and say where it is;
+#                                 Google needs a contact: NEURA_BENCH_QUOTA_EMAIL, a Google account
+#                                 that can change the project's quotas
 #   deploy/gcp/bench.sh run       quota, a bucket for the source and report, the VM in the first
 #                                 zone with an L4 free, the benchmark, the report, the VM deleted
 #   deploy/gcp/bench.sh status    the benchmark's VMs and their progress
@@ -118,7 +120,9 @@ to a couple of days):
   console.cloud.google.com → IAM & Admin → Quotas & System Limits, project $PROJECT
   - "GPUs (all regions)" (GPUS_ALL_REGIONS): 1
   - "$(metric)" in us-central1 (or another region above): 1
-Then run this again. A billing account in free trial cannot use GPUs.
+or: NEURA_BENCH_QUOTA_EMAIL=<your Google account> $0 quota-request (in Actions: GPU benchmark,
+with request_quota and quota_email). Then run this again. A billing account in free trial cannot
+use GPUs.
 EOF
         return 3
     fi
@@ -130,17 +134,26 @@ EOF
 # reads the request back.
 request_quota() {
     step "asking for 1 GPU in all regions (GPUS_ALL_REGIONS)"
+    [[ -n ${NEURA_BENCH_QUOTA_EMAIL:-} ]] || {
+        echo "Google needs a contact for the request: set NEURA_BENCH_QUOTA_EMAIL to a Google account that can change project $PROJECT's quotas (or ask in the console: IAM & Admin → Quotas & System Limits → \"GPUs (all regions)\" → 1)" >&2
+        return 2
+    }
     g services enable cloudquotas.googleapis.com
     local api=https://cloudquotas.googleapis.com/v1/projects/$PROJECT/locations/global/quotaPreferences
-    local id=neura-bench-gpus-all-regions answer token status
+    local id=neura-bench-gpus-all-regions answer token status body
+    body=$(EMAIL=${NEURA_BENCH_QUOTA_EMAIL:-} python3 -c 'import json, os
+print(json.dumps({
+    "service": "compute.googleapis.com",
+    "quotaId": "GPUS-ALL-REGIONS-per-project",
+    "quotaConfig": {"preferredValue": "1"},
+    "contactEmail": os.environ["EMAIL"],
+    "justification": "One NVIDIA L4 Spot VM for a few hours, deleted after: a GPU inference benchmark.",
+}))')
     answer=$(mktemp)
     CLEANUP+=("$answer")
     token=$(gcloud auth print-access-token)
     status=$(curl -sS -o "$answer" -w '%{http_code}' -X POST "$api?quotaPreferenceId=$id" \
-        -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
-        -d '{"service": "compute.googleapis.com", "quotaId": "GPUS-ALL-REGIONS-per-project",
-             "quotaConfig": {"preferredValue": "1"},
-             "justification": "One NVIDIA L4 Spot VM for a few hours, deleted after: a GPU inference benchmark."}')
+        -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$body")
     if [[ $status == 409 ]]; then
         echo "    asked before; reading the request back" >&2
         status=$(curl -sS -o "$answer" -w '%{http_code}' "$api/$id" -H "Authorization: Bearer $token")

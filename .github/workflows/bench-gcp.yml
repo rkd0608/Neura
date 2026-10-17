@@ -27,6 +27,10 @@ on:
         description: "Only ask Google for the GPU quota a run needs, and say where the request is"
         type: boolean
         default: false
+      quota_email:
+        description: "For the quota request: Google's contact, an account that can change the project's quotas"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -83,6 +87,7 @@ jobs:
           NEURA_BENCH_SPOT: ${{ inputs.spot }}
           NEURA_BENCH_HOURS: ${{ inputs.hours }}
           REQUEST_QUOTA: ${{ inputs.request_quota }}
+          NEURA_BENCH_QUOTA_EMAIL: ${{ inputs.quota_email }}
         run: |
           if [ -z "$GCP_SA_KEY" ]; then
             echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"

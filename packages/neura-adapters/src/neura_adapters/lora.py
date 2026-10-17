@@ -171,7 +171,8 @@ class MultiLora:
             for name, layer in self.adapters[index].items():
                 weight = modules[name].weight
                 originals[name] = weight.detach().clone()
-                weight += layer.scale * (layer.b @ layer.a).to(weight.dtype)
+                # The adapter's matrices may live elsewhere (loaded on the CPU, the model on a GPU).
+                weight += layer.scale * (layer.b.to(weight) @ layer.a.to(weight))
         try:
             yield
         finally:

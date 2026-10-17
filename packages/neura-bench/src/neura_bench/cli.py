@@ -1,6 +1,6 @@
 """``neura-bench``: the GPU-sharing benchmark (design §9.5, §10).
 
-neura-bench run [--preset gpu|cpu|smoke|smoke-vla] [--device cuda:0] [--out DIR]
+neura-bench run [--preset gpu|cpu|smoke|smoke-vla|smoke-gpu] [--device cuda:0] [--out DIR]
     build the models (ACT, Diffusion Policy, and on a GPU SmolVLA and pi0), measure on the
     device, simulate every sharing case against the dedicated baselines, validate in real time,
     and write results.json and README.md (default: bench/reports/<device>/). On a rented L4:
@@ -38,7 +38,8 @@ async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
         builder = suite.Builder(config, models, measured)
         calibration = await suite.calibrate(builder)
         cells = await asyncio.to_thread(suite.sweep, builder)
-        validation = await suite.validate(builder)
+        validation_failed: dict[str, str] = {}
+        validation = await suite.validate(builder, failures=validation_failed)
         estimate = suite.admission_estimate(config, models, measured)
         estimates_vla = suite.admission_estimates_vla(config, models, measured)
     # The builder's config: its SLO includes the device's memory.
@@ -76,6 +77,7 @@ async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
             }
             for v in validation
         ],
+        "validation_failed": validation_failed,
         "elapsed_s": round(time.monotonic() - started, 1),
     }
     directory = out or ROOT / "bench" / "reports" / report.label(config.device)

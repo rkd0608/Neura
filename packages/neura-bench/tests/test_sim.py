@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from neura_bench import suite
+from neura_bench import realtime, suite
 from neura_bench.deployments import contracts, write_files
 from neura_bench.metrics import Result, Slo
 from neura_bench.sim import (
@@ -274,3 +275,28 @@ def test_robots_of_a_language_conditioned_model_arm_with_an_instruction(tmp_path
     )
     assert result.requests > 0  # armed and served
     assert result.faults_per_robot_hour == 0
+
+
+def test_a_failed_real_time_run_is_recorded_and_the_others_go_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fails(_: object) -> None:
+        raise RuntimeError("the worker could not start")
+
+    monkeypatch.setattr(realtime, "run", fails)
+    builder = SimpleNamespace(
+        config=suite.PRESETS["smoke"],
+        measured=SimpleNamespace(vlas={}),
+        max_batch=lambda case: 4,
+        realtime=lambda plan, workload: None,
+    )
+    failures: dict[str, str] = {}
+    out = asyncio.run(suite.validate(builder, progress=lambda _: None, failures=failures))  # type: ignore[arg-type]
+    assert out == []
+    planned = suite.validation_plan(suite.PRESETS["smoke"])
+    assert len(failures) == len(planned)
+    assert failures["same_weights/phased/dedicated_gpu N=1"] == (
+        "RuntimeError: the worker could not start"
+    )
+    with pytest.raises(RuntimeError):  # without a record to keep, a failure still stops the run
+        asyncio.run(suite.validate(builder, progress=lambda _: None))  # type: ignore[arg-type]

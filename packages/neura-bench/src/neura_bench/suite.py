@@ -147,6 +147,15 @@ PRESETS = {
 # The VLA path end to end on a CPU, before a GPU run: a two-layer SmolVLA (pi0 has one size, too
 # large for a CI runner's memory).
 PRESETS["smoke-vla"] = replace(PRESETS["smoke"], vlas=("smolvla",), vla_realtime_robots=2)
+# Every stage on the GPU, at the GPU run's precision, in minutes: the code paths a CPU never takes
+# (tensors on two devices, bf16), and pi0 at its one size, before the hour-long run.
+PRESETS["smoke-gpu"] = replace(
+    PRESETS["smoke"],
+    device="cuda:0",
+    precision="bf16",
+    vlas=("smolvla", "pi0"),
+    vla_realtime_robots=2,
+)
 
 
 # --- models ---------------------------------------------------------------------------------
@@ -634,9 +643,13 @@ def validation_plan(
 
 
 async def validate(
-    builder: Builder, progress: Callable[[str], None] = log.info
+    builder: Builder,
+    progress: Callable[[str], None] = log.info,
+    failures: dict[str, str] | None = None,
 ) -> list[Validation]:
-    """Real-time runs of the main configurations, each next to its simulation."""
+    """Real-time runs of the main configurations, each next to its simulation. A run that
+    fails is recorded in ``failures`` (what it was, and why) and the others go on: the last
+    stage of an hour's run does not cost its measurements."""
     out = []
     for case, workload, configuration, robots in validation_plan(
         builder.config, list(builder.measured.vlas)
@@ -644,7 +657,16 @@ async def validate(
         p = plan(case, configuration, robots, builder.config, max_batch=builder.max_batch(case))
         if configuration == DEDICATED:
             p = replace(p, devices="one")  # one robot alone on the device is the baseline
-        real = await realtime.run(builder.realtime(p, workload))
+        try:
+            real = await realtime.run(builder.realtime(p, workload))
+        except Exception as exc:
+            name = f"{case}/{workload}/{configuration} N={robots}"
+            log.exception("real-time run %s failed", name)
+            if failures is None:
+                raise
+            failures[name] = f"{type(exc).__name__}: {exc}"
+            progress(f"real {name}: failed: {failures[name]}")
+            continue
         simulated = simulate(
             builder.simulation(
                 p,

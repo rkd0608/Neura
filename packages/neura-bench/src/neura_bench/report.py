@@ -408,6 +408,14 @@ def markdown(data: dict[str, Any]) -> str:
         ],
         rows,
     )
+    failed_runs = data.get("validation_failed") or {}
+    if failed_runs:
+        out += [
+            "",
+            "Real-time runs that failed (the others went on): "
+            + "; ".join(f"{name} ({why})" for name, why in failed_runs.items())
+            + ".",
+        ]
     out += [
         "",
         "## Method and limits",

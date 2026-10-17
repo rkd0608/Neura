@@ -3,9 +3,11 @@
     uv run --no-project --with modal==1.6.1 modal run deploy/modal/bench.py [--size base]
         [--out bench-report]
 
-Modal builds an image from this checkout with the models group's locked versions, runs
-`neura-bench run --preset gpu` on an L4 once, and hands the report back to bench-report/
-(README.md, results.json and bench.log). The container ends with the run, and Modal stops it
+Modal builds an image from this checkout with the models group's locked versions and, on an
+L4, runs every stage of the suite small first (`--preset smoke-gpu`, a few minutes: the code
+paths a CPU never takes, and pi0), then `neura-bench run --preset gpu` once, and hands the report
+back to bench-report/ (README.md, results.json and bench.log). A failed first stage ends the run
+before the long one. The container ends with the run, and Modal stops it
 when the run outlasts NEURA_BENCH_HOURS (default 3) or this command is stopped. Needs a Modal
 token: `modal token new`, or MODAL_TOKEN_ID and MODAL_TOKEN_SECRET.
 
@@ -22,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TextIO
 
 import modal
 
@@ -49,8 +52,26 @@ image = (
 app = modal.App("neura-bench", image=image)
 
 
+def _run(arguments: list[str], cwd: str, env: dict[str, str], sink: TextIO) -> int:
+    """``neura-bench run`` with these arguments; its output to the log and, through Modal, to
+    whoever ran this."""
+    command = [shutil.which("uv") or "uv", "run", "--frozen", "--group", "models", "neura-bench"]
+    with subprocess.Popen(  # noqa: S603 - fixed arguments but the size
+        [*command, "run", *arguments],
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    ) as process:
+        for line in process.stdout or ():
+            sink.write(line)
+            print(line, end="", flush=True)
+    return process.returncode
+
+
 @app.function(gpu="L4", cpu=4.0, memory=32 * 1024, timeout=int(HOURS * 3600), retries=0)
-def bench(size: str) -> dict[str, bytes]:
+def bench(size: str, smoke: bool = True) -> dict[str, bytes]:
     """Run the suite on this container's L4. Returns the report's files and the log."""
     smi = shutil.which("nvidia-smi")
     if smi:
@@ -58,29 +79,24 @@ def bench(size: str) -> dict[str, bytes]:
     work = Path(tempfile.mkdtemp(prefix="neura-bench-"))
     out, log = work / "report", work / "bench.log"
     env = {**os.environ, "HF_HOME": str(work / "hf"), "MUJOCO_GL": "egl", "UV_PYTHON": PYTHON}
-    command = [
-        shutil.which("uv") or "uv", "run", "--frozen", "--group", "models", "neura-bench", "run",
-        "--preset", "gpu", "--device", "cuda:0", "--size", size, "--out", str(out),
-    ]  # fmt: skip
-    # The output goes to the log and, through Modal, to whoever ran this.
-    with (
-        log.open("w") as sink,
-        subprocess.Popen(  # noqa: S603 - fixed arguments but the size
-            command, cwd=SRC, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-        ) as process,
-    ):
-        for line in process.stdout or ():
-            sink.write(line)
-            print(line, end="", flush=True)
+    with log.open("w") as sink:
+        if smoke:
+            print("--> every stage small, on the GPU", flush=True)
+            if _run(["--preset", "smoke-gpu", "--out", str(work / "smoke")], SRC, env, sink):
+                print("--> the small run failed: no long run", flush=True)
+                return {"bench.log": log.read_bytes()}
+        print("--> the benchmark", flush=True)
+        arguments = ["--preset", "gpu", "--device", "cuda:0", "--size", size, "--out", str(out)]
+        code = _run(arguments, SRC, env, sink)
     files = {"bench.log": log.read_bytes()}
-    if process.returncode == 0:
+    if code == 0:
         files.update({name: (out / name).read_bytes() for name in REPORT})
     return files
 
 
 @app.local_entrypoint()
-def main(size: str = "base", out: str = "bench-report") -> None:
-    files = bench.remote(size)
+def main(size: str = "base", out: str = "bench-report", smoke: bool = True) -> None:
+    files = bench.remote(size, smoke)
     dest = Path(out)
     dest.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():

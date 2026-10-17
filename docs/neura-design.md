@@ -493,6 +493,18 @@ LeRobot's remote inference reported no fault in any scenario: it has no way to. 
 
 From this run on, each Neura episode that never got a chunk says why (`no chunk accepted: REQUEST_EXPIRED x29`, say), and each summary gives the median count of every reason code the robot was given.
 
+**Re-run after the admission fix** (Evidence run 39008312777, 10 seeds per cell). No robot was refused a session in any scenario. Before the fix, 3 were refused after the 400 ms delay and 3 after the stall. Every Neura fault was now its starvation grace running out, the arm held:
+
+| Scenario | Neura | LeRobot async, scaled | LeRobot async |
+| --- | --- | --- | --- |
+| No fault | 5/10 | 1/10 | 0/10 |
+| 100 ms each way | 0/10, 1 faulted | 0/10 | 0/10 |
+| 400 ms each way | 0/10, 10 faulted | 0/10 | 0/10 |
+| Network stalled 3 s | 0/10, 6 faulted | 0/10 | 0/10 |
+| Model process killed | 0/10, 10 faulted | 0/10 | 0/10 |
+
+This runner was slower again: LeRobot's server took about 730 ms a chunk (410 to 490 in the run above), and Neura's chunks were about 500 ms old when the robot accepted them (342). Every system succeeded less, LeRobot most. As before, LeRobot faulted nowhere, and it executed actions from chunks older than 1.5 s after the stall and the 400 ms delay (medians of 23 to 85 actions an episode).
+
 **Not modeled.** The simulator's software renderer shares the CPU with LeRobot's server while the client reads frames. A real camera costs the server nothing. With the camera frozen (no drawing at all), a full-size model executes about 376 actions per 400 steps on the development host, against about 340. On a real deployment the server runs on its own machine, and the network carries about 45 MB/s while the queue is low.
 
 ---

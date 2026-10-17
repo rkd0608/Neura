@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from neura_bench import realtime, suite
-from neura_bench.deployments import contracts, write_files
+from neura_bench.deployments import VlaTiming, contracts, write_files
 from neura_bench.metrics import Result, Slo
 from neura_bench.sim import (
     MS,
@@ -146,7 +146,10 @@ def test_per_robot_baselines_get_a_batch_group_each_at_any_count(tmp_path: Path)
     files = write_files(tmp_path, contracts())
     models = suite.Models(files, [], files, tmp_path)
     measured = SimpleNamespace(
-        contention=SimpleNamespace(contention=Contention()), vlas={}, device_memory_mib=None
+        contention=SimpleNamespace(contention=Contention()),
+        vla_contention={},
+        vlas={},
+        device_memory_mib=None,
     )
     builder = suite.Builder(suite.PRESETS["smoke"], models, measured)  # type: ignore[arg-type]
     builder.latency = lambda kind: FAST  # type: ignore[method-assign]
@@ -212,6 +215,7 @@ def test_cases_of_models_that_were_not_measured_are_left_out(tmp_path: Path) -> 
     models = suite.Models(files, [], files, tmp_path)
     measured = SimpleNamespace(
         contention=SimpleNamespace(contention=Contention()),
+        vla_contention={},
         vlas={"smolvla": SimpleNamespace(largest_batch=4)},
         device_memory_mib=24_000,
     )
@@ -300,3 +304,54 @@ def test_a_failed_real_time_run_is_recorded_and_the_others_go_on(
     )
     with pytest.raises(RuntimeError):  # without a record to keep, a failure still stops the run
         asyncio.run(suite.validate(builder, progress=lambda _: None))  # type: ignore[arg-type]
+
+
+def test_a_vla_timing_makes_a_profile_a_slow_pass_can_meet(tmp_path: Path) -> None:
+    timing = VlaTiming()
+    files = write_files(tmp_path, contracts(model="pi0", vla_timing=timing))
+    spec = files.binding.profile.spec
+    assert spec.chunk.actions_per_chunk == 50
+    assert spec.chunk.refill_threshold_actions == 30
+    assert spec.freshness.max_observation_age_at_dispatch_us == 600_000
+    assert spec.freshness.max_observation_age_at_acceptance_us == 1_500_000
+    assert spec.freshness.request_timeout_us == 1_500_000  # a request outlives a 0.4 s pass
+    act = write_files(tmp_path / "act", contracts(model="act", vla_timing=timing))
+    assert act.binding.profile.spec.freshness.max_observation_age_at_acceptance_us == 150_000
+
+
+async def test_contention_refuses_more_workers_than_it_was_given(tmp_path: Path) -> None:
+    from neura_bench import measure
+
+    files = write_files(tmp_path, contracts())
+    with pytest.raises(ValueError, match="4 workers asked for, 2 deployments given"):
+        await measure.contention([files, files], "cpu", seconds=0.0, counts=(1, 4))
+
+
+def test_the_vla_preset_runs_only_its_cases_with_each_models_contention(tmp_path: Path) -> None:
+    config = suite.PRESETS["vla"]
+    files = write_files(tmp_path, contracts())
+    models = suite.Models(files, [], files, tmp_path)
+    act = Contention(((1, 1.0), (24, 6.0)))
+    pi0 = Contention(((1, 1.0), (2, 1.9)))
+    measured = SimpleNamespace(
+        contention=SimpleNamespace(contention=act),
+        vla_contention={"pi0": SimpleNamespace(contention=pi0)},
+        vlas={
+            "smolvla": SimpleNamespace(largest_batch=16),
+            "pi0": SimpleNamespace(largest_batch=8),
+        },
+        device_memory_mib=23_000,
+    )
+    builder = suite.Builder(config, models, measured)  # type: ignore[arg-type]
+    assert set(builder.cases()) == {suite.SAME_WEIGHTS, *suite.VLA_CASES.values()}
+    assert builder.contention({"pi0"}) is pi0
+    assert builder.contention({"smolvla"}) is act  # not measured: ACT's
+    assert builder.contention({"act", "pi0"}) is act
+    plan = suite.validation_plan(config, ["smolvla", "pi0"])
+    assert {case for case, *_ in plan} == {suite.SAME_WEIGHTS, *suite.VLA_CASES.values()}
+    # One process per robot in real time: 16 for ACT, 2 of each VLA.
+    assert (suite.SAME_WEIGHTS, suite.PHASED, suite.DEDICATED_SHARED, 16) in plan
+    for case in suite.VLA_CASES.values():
+        assert (case, suite.PHASED, suite.DEDICATED_SHARED, 2) in plan
+        assert (case, suite.PHASED, suite.NEURA_DEADLINE, 4) in plan
+    assert max(config.contention_counts) == config.contention_workers

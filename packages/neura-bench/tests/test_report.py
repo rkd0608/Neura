@@ -40,3 +40,20 @@ def test_report_command_regenerates_the_markdown(tmp_path: Path) -> None:
 def test_labels_are_directory_names() -> None:
     assert report.label("cpu").startswith("cpu-")
     assert "/" not in report.label("cpu")
+
+
+def test_a_vla_run_states_its_timing_and_each_models_contention() -> None:
+    data = json.loads(FIXTURE.read_text())
+    data["measurements"]["latency"]["smolvla"] = data["measurements"]["latency"]["act"]
+    data["measurements"]["vla_contention"] = {"smolvla": data["measurements"]["contention"]}
+    data["config"]["vla_timing"] = {
+        "actions_per_chunk": 50,
+        "refill_at": 30,
+        "min_useful_actions": 8,
+        "dispatch_ms": 600,
+        "acceptance_ms": 1500,
+    }
+    markdown = report.markdown(data)
+    assert "chunks of 50 actions, the next requested at 30 left" in markdown
+    assert "1500 ms when the robot accepts its chunk" in markdown
+    assert "Co-location of SmolVLA workers (simulated with this, not ACT's)" in markdown

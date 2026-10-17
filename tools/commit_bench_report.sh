@@ -8,9 +8,12 @@ set -euo pipefail
 report=${1:-bench-report}
 label=$(python3 - "$report/results.json" <<'PY'
 import json, re, sys
-name = json.load(open(sys.argv[1]))["environment"]["device_name"]
-name = re.sub(r"\(r\)|\(tm\)|cpu @.*|@.*", "", name.lower())
-print(re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60])
+environment = json.load(open(sys.argv[1]))["environment"]
+name = re.sub(r"\(r\)|\(tm\)|cpu @.*|@.*", "", environment["device_name"].lower())
+label = re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:56]
+# A preset other than the full suite gets its own directory beside the device's.
+preset = re.search(r"--preset (\S+)", environment.get("command", ""))
+print(label if not preset or preset.group(1) == "gpu" else f"{label}-{preset.group(1)}")
 PY
 )
 git config user.name "github-actions[bot]"

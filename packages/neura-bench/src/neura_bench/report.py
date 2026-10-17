@@ -143,6 +143,15 @@ def markdown(data: dict[str, Any]) -> str:
         if any(m in data["measurements"]["latency"] for m in suite.VLA_CASES)
         else ""
     )
+    timing = config.get("vla_timing")
+    if vla_note and timing:
+        vla_note += (
+            f" Their profile here: chunks of {timing['actions_per_chunk']} actions, the next "
+            f"requested at {timing['refill_at']} left, an observation at most "
+            f"{timing['dispatch_ms']} ms old when it reaches the model and "
+            f"{timing['acceptance_ms']} ms when the robot accepts its chunk (the example "
+            "profile's 100 and 150 ms cannot be met by a pass of about 0.4 s)."
+        )
     memory = slo.get("max_memory_mib")
     memory_clause = (
         f", and no more device memory than the device has ({memory} MiB: every worker "
@@ -232,18 +241,15 @@ def markdown(data: dict[str, Any]) -> str:
         f"slows a lone worker by {contention['background_slowdown']}x.",
         "",
     ]
-    out += _table(
-        ["Workers", "Slowdown", "p50 (ms)", "p99 (ms)"],
-        [
-            [
-                k,
-                _fmt(v),
-                _fmt(contention["by_workers"][k]["p50_ms"]),
-                _fmt(contention["by_workers"][k]["p99_ms"]),
-            ]
-            for k, v in contention["slowdown"].items()
-        ],
-    )
+    out += _contention_table(contention)
+    for model, own in (measured.get("vla_contention") or {}).items():
+        out += [
+            "",
+            f"Co-location of {MODEL_NAMES.get(model, model)} workers (simulated with this, not "
+            f"ACT's). Alone: p50 {own['alone_p50_ms']} ms.",
+            "",
+        ]
+        out += _contention_table(own)
     calibration = measured.get("calibration")
     if calibration:
         out += [
@@ -428,7 +434,7 @@ def markdown(data: dict[str, Any]) -> str:
         "serialization and IPC are included. Simulation draws forward-pass times from these "
         "measurements (lognormal fitted to p50 and p99) and shares the device between running "
         "passes by the measured co-location slowdown; beyond "
-        f"{config['contention_workers']} concurrent workers the slowdown is extrapolated "
+        f"{_most_workers(data)} concurrent workers the slowdown is extrapolated "
         "linearly.",
         "- Multi-adapter batching is measured at the forward pass and simulated at the serving "
         "level; the data plane does not group robots by base model yet (design §9.5: built "
@@ -528,6 +534,27 @@ def _crossovers(capacity: dict[str, Any]) -> list[str]:
                 f"{CONFIG_NAMES[best]} serves {n} robot(s) at the SLO."
             )
     return lines
+
+
+def _contention_table(contention: dict[str, Any]) -> list[str]:
+    return _table(
+        ["Workers", "Slowdown", "p50 (ms)", "p99 (ms)"],
+        [
+            [
+                k,
+                _fmt(v),
+                _fmt(contention["by_workers"][k]["p50_ms"]),
+                _fmt(contention["by_workers"][k]["p99_ms"]),
+            ]
+            for k, v in contention["slowdown"].items()
+        ],
+    )
+
+
+def _most_workers(data: dict[str, Any]) -> int:
+    """The most co-located workers ACT's slowdown was measured with."""
+    slowdown = data["measurements"]["contention"]["slowdown"]
+    return max((int(k) for k in slowdown), default=data["config"]["contention_workers"])
 
 
 def write(directory: Path, data: dict[str, Any]) -> tuple[Path, Path]:

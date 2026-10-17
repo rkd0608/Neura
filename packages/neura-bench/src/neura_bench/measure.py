@@ -240,16 +240,21 @@ async def contention(
     *,
     seconds: float,
     background: Sequence[str] | None = None,
+    counts: Sequence[int] = (),
 ) -> ContentionMeasurement:
-    """Slowdown with k = 1..len(deployments) workers busy on the device at batch size 1, and
-    with a background job (``background`` is the command that runs it)."""
+    """Slowdown with k workers busy on the device at batch size 1, for each k in ``counts``
+    (default 1..len(deployments); 1 is always measured), and with a background job
+    (``background`` is the command that runs it)."""
+    ks = sorted({1, *counts}) if counts else list(range(1, len(deployments) + 1))
+    if ks[-1] > len(deployments):
+        raise ValueError(f"{ks[-1]} workers asked for, {len(deployments)} deployments given")
     sample = sample_inputs(deployments[0].binding)
     results: dict[int, dict[str, float]] = {}
     async with workers(deployments, device, max_batch=1) as backends:
         for backend in backends:
             for i in range(3):
                 await _timed(backend, [sample], i)
-        for k in range(1, len(backends) + 1):
+        for k in ks:
             runs = await asyncio.gather(
                 *(_loop(b, [sample], seconds=seconds, minimum=10) for b in backends[:k])
             )

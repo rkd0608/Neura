@@ -14,6 +14,11 @@ on:
         description: "Modal stops the run after this many hours, finished or not (about $1.25 an hour)"
         type: number
         default: 3
+      preset:
+        description: "gpu: every sharing case; vla: SmolVLA and pi0 at a timing an L4 can meet, and contention to 24 workers"
+        type: choice
+        options: [gpu, vla]
+        default: gpu
       size:
         description: "The models' size"
         type: choice
@@ -57,6 +62,9 @@ jobs:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           NEURA_BENCH_HOURS: ${{ inputs.hours }}
+          # 24 co-located workers, each a process with PyTorch and CUDA loaded.
+          NEURA_BENCH_MEMORY_GIB: ${{ inputs.preset == 'vla' && '64' || '32' }}
+          PRESET: ${{ inputs.preset }}
           SIZE: ${{ inputs.size }}
         run: |
           if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
@@ -64,7 +72,7 @@ jobs:
             exit 1
           fi
           uv run --no-project --with "modal==$MODAL_VERSION" \
-            modal run deploy/modal/bench.py --size "$SIZE" --out bench-report
+            modal run deploy/modal/bench.py --preset "$PRESET" --size "$SIZE" --out bench-report
       - name: Summary
         if: always()
         run: |

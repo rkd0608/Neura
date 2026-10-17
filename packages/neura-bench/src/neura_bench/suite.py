@@ -24,9 +24,9 @@ from typing import Any, cast
 
 from neura_adapters.synthetic import Size
 from neura_bench import measure, realtime
-from neura_bench.deployments import DeploymentFiles, Model, synthetic, write_files
+from neura_bench.deployments import DeploymentFiles, Model, VlaTiming, synthetic, write_files
 from neura_bench.metrics import Result, Slo
-from neura_bench.sim import SECOND, GroupSpec, LatencyModel, Scenario, simulate
+from neura_bench.sim import SECOND, Contention, GroupSpec, LatencyModel, Scenario, simulate
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
 from neura_runtime.binding import ExecutionBinding
 from neura_server import capacity
@@ -101,6 +101,15 @@ class SuiteConfig:
     # and the robots of their real-time validation. pi0 has one size (LeRobot's).
     vlas: tuple[str, ...] = ("smolvla", "pi0")
     vla_realtime_robots: int = 4
+    # ACT's co-location slowdown at these worker counts (default 1..contention_workers).
+    contention_counts: tuple[int, ...] = ()
+    # Only these cases (default every case whose models were measured).
+    cases: tuple[str, ...] = ()
+    # The VLAs' chunking and freshness, in place of the example profile's.
+    vla_timing: VlaTiming | None = None
+    # Each VLA's own co-location slowdown, measured up to this many of its workers (1, 2, 4, ...
+    # up to it): their passes load the device far more than ACT's. Unmeasured: ACT's.
+    vla_contention: tuple[tuple[str, int], ...] = ()
 
 
 PRESETS = {
@@ -147,14 +156,31 @@ PRESETS = {
 # The VLA path end to end on a CPU, before a GPU run: a two-layer SmolVLA (pi0 has one size, too
 # large for a CI runner's memory).
 PRESETS["smoke-vla"] = replace(PRESETS["smoke"], vlas=("smolvla",), vla_realtime_robots=2)
+# The vision-language-action models on a GPU, at a timing a 0.4 s forward pass can meet (the
+# example profile's 150 ms at acceptance cannot be met on an L4 even with a GPU per robot), with
+# each model's own co-location measured, and ACT's measured up to 24 workers: the one-process-per-
+# robot baseline is no longer extrapolated from 4. ACT's same-weights case is kept as the
+# reference; the others are in the gpu preset.
+PRESETS["vla"] = replace(
+    PRESETS["gpu"],
+    cases=(SAME_WEIGHTS, *VLA_CASES.values()),
+    vla_timing=VlaTiming(),
+    contention_workers=24,
+    contention_counts=(1, 2, 4, 8, 16, 24),
+    vla_contention=(("smolvla", 8), ("pi0", 2)),
+)
 # Every stage on the GPU, at the GPU run's precision, in minutes: the code paths a CPU never takes
-# (tensors on two devices, bf16), and pi0 at its one size, before the hour-long run.
+# (tensors on two devices, bf16), pi0 at its one size, and the vla preset's options, before the
+# hour-long run.
 PRESETS["smoke-gpu"] = replace(
     PRESETS["smoke"],
     device="cuda:0",
     precision="bf16",
     vlas=("smolvla", "pi0"),
     vla_realtime_robots=2,
+    vla_timing=VlaTiming(),
+    contention_counts=(1, 2),
+    vla_contention=(("smolvla", 2), ("pi0", 2)),
 )
 
 
@@ -205,7 +231,11 @@ def build_models(config: SuiteConfig, directory: Path) -> Models:
         try:
             options = {**common, "size": "base" if name == "pi0" else config.size}
             models.vlas[name] = synthetic(
-                directory / name, model=cast("Model", name), seed=0, **options
+                directory / name,
+                model=cast("Model", name),
+                seed=0,
+                vla_timing=config.vla_timing,
+                **options,
             )
         except Exception as exc:  # one model that cannot be built does not cost the run
             log.exception("could not build %s", name)
@@ -225,6 +255,7 @@ class Measurements:
     vlas: dict[str, measure.LatencyMeasurement] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
     device_memory_mib: int | None = None
+    vla_contention: dict[str, measure.ContentionMeasurement] = field(default_factory=dict)
 
     def multi_adapter_model(self) -> LatencyModel:
         """ACT's measured latency scaled by the measured cost of mixing adapters in a batch.
@@ -252,6 +283,7 @@ class Measurements:
                 **{name: m.to_json() for name, m in self.vlas.items()},
             },
             "contention": self.contention.to_json(),
+            "vla_contention": {name: m.to_json() for name, m in self.vla_contention.items()},
             "multi_adapter": self.multi_adapter.to_json(),
             "device_memory_mib": self.device_memory_mib,
             "failed_models": self.failed,
@@ -268,13 +300,15 @@ async def take_measurements(config: SuiteConfig, models: Models) -> Measurements
     diffusion = await measure.latency(
         models.diffusion, config.device, batch_sizes=sizes, seconds=config.measure_seconds
     )
-    log.info("measuring contention between %d co-located workers", config.contention_workers)
-    workers = [models.copy(models.act, i) for i in range(config.contention_workers)]
+    count = max(config.contention_workers, *config.contention_counts, 1)
+    log.info("measuring contention between up to %d co-located workers", count)
+    workers = [models.copy(models.act, i) for i in range(count)]
     contention = await measure.contention(
         workers,
         config.device,
         seconds=config.measure_seconds,
         background=measure.background_command(config.device),
+        counts=config.contention_counts,
     )
     log.info("measuring multi-adapter batching")
     multi = await asyncio.to_thread(
@@ -302,6 +336,22 @@ async def take_measurements(config: SuiteConfig, models: Models) -> Measurements
         except Exception as exc:  # the run goes on without it
             log.exception("could not measure %s", name)
             measured.failed[name] = f"measuring it: {type(exc).__name__}: {exc}"
+    for name, most in config.vla_contention:
+        if name not in measured.vlas or most < 2:
+            continue
+        counts = [k for k in (1, 2, 4, 8, 16, 32) if k <= most]
+        log.info("measuring contention between up to %d %s workers", counts[-1], name)
+        try:
+            files = models.vlas[name]
+            measured.vla_contention[name] = await measure.contention(
+                [files, *(models.copy(files, i) for i in range(1, counts[-1]))],
+                config.device,
+                seconds=config.measure_seconds,
+                counts=counts,
+            )
+        except Exception as exc:  # the simulation falls back on ACT's contention
+            log.exception("could not measure %s contention", name)
+            measured.failed[f"{name} contention"] = f"{type(exc).__name__}: {exc}"
     return measured
 
 
@@ -418,8 +468,11 @@ class Builder:
     def cases(self) -> dict[str, tuple[str, ...]]:
         """Every case whose models were built and measured."""
         missing = {VLA_CASES[m] for m in VLA_CASES if m not in self.measured.vlas}
+        chosen = set(self.config.cases) or set(CASES)
         return {
-            case: configurations for case, configurations in CASES.items() if case not in missing
+            case: configurations
+            for case, configurations in CASES.items()
+            if case not in missing and case in chosen
         }
 
     def max_batch(self, case: str) -> int:
@@ -440,6 +493,13 @@ class Builder:
         if kind in self.measured.vlas:
             return self.measured.vlas[kind].model
         return self.measured.act.model
+
+    def contention(self, kinds: set[str]) -> Contention:
+        """How passes of these models slow each other on one device: a VLA's own measurement
+        when only it runs, else ACT's."""
+        if len(kinds) == 1 and (kind := next(iter(kinds))) in self.measured.vla_contention:
+            return self.measured.vla_contention[kind].contention
+        return self.measured.contention.contention
 
     def files(self, kind: str) -> DeploymentFiles:
         if kind == "diffusion":
@@ -488,7 +548,7 @@ class Builder:
         devices = sorted({g.device for g in groups})
         return Scenario(
             groups=tuple(groups),
-            contention=self.measured.contention.contention,
+            contention=self.contention({kind for _, kind, _ in p.groups}),
             starts_us={n: int(s * SECOND) for n, s in offsets.items()},
             warmup_us=int(warmup * SECOND),
             duration_us=int(duration * SECOND),
@@ -622,7 +682,8 @@ async def calibrate(builder: Builder) -> Calibration:
 def validation_plan(
     config: SuiteConfig, vlas: Sequence[str] = ()
 ) -> list[tuple[str, str, str, int]]:
-    """The real-time runs: ACT's main configurations, and Neura for each measured VLA."""
+    """The real-time runs: ACT's main configurations, and Neura for each measured VLA (and one
+    process per robot for a VLA whose own contention is measured), within ``config.cases``."""
     largest = max(config.realtime_robots)
     runs = [(SAME_WEIGHTS, PHASED, DEDICATED, 1)]
     runs += [(SAME_WEIGHTS, PHASED, NEURA_DEADLINE, n) for n in config.realtime_robots]
@@ -639,7 +700,14 @@ def validation_plan(
         for m in vlas
         if m in VLA_CASES
     ]
-    return runs
+    # Two processes of the same VLA, the most that fit beside each other for pi0.
+    runs += [
+        (VLA_CASES[m], PHASED, DEDICATED_SHARED, 2)
+        for m, most in config.vla_contention
+        if m in vlas and m in VLA_CASES and most >= 2
+    ]
+    chosen = set(config.cases) or set(CASES)
+    return [run for run in runs if run[0] in chosen]
 
 
 async def validate(

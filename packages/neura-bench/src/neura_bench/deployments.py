@@ -53,6 +53,35 @@ DIFFUSION_CHUNK = {"actions_per_chunk": 8, "refill_threshold_actions": 4, "min_u
 # The vision-language-action models: language-conditioned, chunks of 50 (the example SmolVLA
 # contracts); pi0 the same, with its own adapter.
 VLAS = ("smolvla", "pi0")
+
+
+@dataclass(frozen=True, slots=True)
+class VlaTiming:
+    """A VLA profile's chunking and freshness, in place of the example's (30-action chunks, 100 ms
+    at dispatch, 150 ms at acceptance), which no GPU slower than a forward pass of about 0.1 s
+    can meet. Illustrative, like every profile here: a site qualifies its own."""
+
+    actions_per_chunk: int = 50
+    refill_at: int = 30
+    min_useful_actions: int = 8
+    dispatch_ms: int = 600
+    acceptance_ms: int = 1500
+
+    def apply(self, profile: dict[str, Any]) -> None:
+        profile["spec"]["chunk"] = {
+            "actions_per_chunk": self.actions_per_chunk,
+            "refill_threshold_actions": self.refill_at,
+            "min_useful_actions": self.min_useful_actions,
+        }
+        # A request outlives a forward pass; the robot gives up on it when its chunk could no
+        # longer be accepted.
+        profile["spec"]["freshness"] = {
+            "max_observation_age_at_dispatch_us": self.dispatch_ms * 1000,
+            "max_observation_age_at_acceptance_us": self.acceptance_ms * 1000,
+            "request_timeout_us": self.acceptance_ms * 1000,
+        }
+
+
 WRITERS = {
     "act": write_act_checkpoint,
     "diffusion": write_diffusion_checkpoint,
@@ -69,11 +98,13 @@ def contracts(
     precision: str = "fp32",
     version: str = "bench-1",
     weights: list[dict[str, Any]] | None = None,
+    vla_timing: VlaTiming | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """The example SO-101 documents, edited. ``image`` is (height, width); None keeps the
     example's 480 x 640. ``device`` is "cpu" or "cuda". ``model="diffusion"`` turns the ACT
     artifact into a Diffusion Policy with 8-action chunks; ``smolvla`` is the example SmolVLA
-    contracts, and ``pi0`` the same with pi0's adapter."""
+    contracts, and ``pi0`` the same with pi0's adapter; ``vla_timing`` replaces their chunking
+    and freshness."""
     vla = model in VLAS
     artifact = copy.deepcopy(
         example("smolvla-so101.artifact.yaml" if vla else "act-so101.artifact.yaml")
@@ -96,6 +127,8 @@ def contracts(
         artifact["spec"]["validated_merge_modes"] = ["replace"]
         profile["metadata"]["name"] = "diffusion-so101-30hz"
         profile["spec"]["chunk"] = dict(DIFFUSION_CHUNK)
+    if vla and vla_timing is not None:
+        vla_timing.apply(profile)
     if weights is not None:
         artifact["spec"]["weights"] = weights
     if image is not None:
@@ -147,6 +180,7 @@ def synthetic(
     precision: str = "fp32",
     seed: int = 0,
     version: str | None = None,
+    vla_timing: VlaTiming | None = None,
 ) -> DeploymentFiles:
     """A synthetic checkpoint and contracts that bind to it. Different seeds give different
     weights, hence different artifacts: separate fine-tunes of one architecture."""
@@ -168,6 +202,7 @@ def synthetic(
         precision=precision,
         version=version,
         weights=weights_manifest(checkpoint),
+        vla_timing=vla_timing,
     )
     return write_files(directory, documents, checkpoint)
 

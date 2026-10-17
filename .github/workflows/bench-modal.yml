@@ -3,9 +3,10 @@ name: GPU benchmark (Modal)
 # The GPU-sharing benchmark (design §9.5, §10, §16 step 0) on one NVIDIA L4 at Modal
 # (deploy/modal/bench.py): ACT, Diffusion Policy, SmolVLA and pi0, robots per GPU shared by Neura
 # against one GPU per robot. The same suite as the Google Cloud workflow, for an account without
-# Google's GPU quota. Started by hand. Needs a Modal token in the repository's Actions secrets
-# MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (modal.com → Settings → API Tokens). The report is
-# uploaded as an artifact and committed to the bench-reports branch, under bench/reports/<gpu>/.
+# Google's GPU quota. Started by hand. Needs a Modal token in the secrets MODAL_TOKEN_ID and
+# MODAL_TOKEN_SECRET, the repository's or the production environment's (modal.com → Settings →
+# API Tokens). The report is uploaded as an artifact and committed to the bench-reports branch,
+# under bench/reports/<gpu>/.
 on:
   workflow_dispatch:
     inputs:
@@ -40,6 +41,7 @@ jobs:
   gpu:
     name: On an L4 at Modal
     runs-on: ubuntu-24.04
+    environment: production # the Modal token: a repository secret or one of this environment's
     timeout-minutes: 240
     permissions:
       contents: write # the report, committed to the bench-reports branch

@@ -1,0 +1,78 @@
+name: GPU benchmark (Modal)
+
+# The GPU-sharing benchmark (design §9.5, §10, §16 step 0) on one NVIDIA L4 at Modal
+# (deploy/modal/bench.py): ACT, Diffusion Policy, SmolVLA and pi0, robots per GPU shared by Neura
+# against one GPU per robot. The same suite as the Google Cloud workflow, for an account without
+# Google's GPU quota. Started by hand. Needs a Modal token in the repository's Actions secrets
+# MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (modal.com → Settings → API Tokens). The report is
+# uploaded as an artifact and committed to the bench-reports branch, under bench/reports/<gpu>/.
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Modal stops the run after this many hours, finished or not (about $1.25 an hour)"
+        type: number
+        default: 3
+      size:
+        description: "The models' size"
+        type: choice
+        options: [base, small, tiny]
+        default: base
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-modal
+  cancel-in-progress: false
+
+# bash -eo pipefail: a step piped into tee fails when its command does.
+defaults:
+  run:
+    shell: bash
+
+env:
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.13"
+  MODAL_VERSION: "1.6.1"
+
+jobs:
+  gpu:
+    name: On an L4 at Modal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write # the report, committed to the bench-reports branch
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Benchmark
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          NEURA_BENCH_HOURS: ${{ inputs.hours }}
+          SIZE: ${{ inputs.size }}
+        run: |
+          if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+            echo "::error::Add the MODAL_TOKEN_ID and MODAL_TOKEN_SECRET secrets: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          uv run --no-project --with "modal==$MODAL_VERSION" \
+            modal run deploy/modal/bench.py --size "$SIZE" --out bench-report
+      - name: Summary
+        if: always()
+        run: |
+          [ ! -f bench-report/README.md ] || cat bench-report/README.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: bench-report
+          path: bench-report
+          if-no-files-found: ignore
+      - name: Commit the report to bench-reports
+        if: success()
+        run: tools/commit_bench_report.sh bench-report | tee -a "$GITHUB_STEP_SUMMARY"

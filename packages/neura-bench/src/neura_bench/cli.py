@@ -3,8 +3,9 @@
 neura-bench run [--preset gpu|cpu|smoke|smoke-vla] [--device cuda:0] [--out DIR]
     build the models (ACT, Diffusion Policy, and on a GPU SmolVLA and pi0), measure on the
     device, simulate every sharing case against the dedicated baselines, validate in real time,
-    and write results.json and README.md (default: bench/reports/<device>/). On Google Cloud:
-    deploy/gcp/bench.sh run, or Actions, then GPU benchmark (Google Cloud).
+    and write results.json and README.md (default: bench/reports/<device>/). On a rented L4:
+    deploy/gcp/bench.sh run or deploy/modal/bench.py, or Actions, then GPU benchmark (Google
+    Cloud or Modal).
 neura-bench report DIR
     regenerate DIR/README.md from DIR/results.json
 """

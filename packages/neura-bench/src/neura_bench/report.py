@@ -412,7 +412,7 @@ def markdown(data: dict[str, Any]) -> str:
     if failed_runs:
         out += [
             "",
-            "Real-time runs that failed (the others went on): "
+            "Real-time runs missing from this table: "
             + "; ".join(f"{name} ({why})" for name, why in failed_runs.items())
             + ".",
         ]

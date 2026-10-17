@@ -7,9 +7,11 @@ Modal builds an image from this checkout with the models group's locked versions
 L4, runs every stage of the suite small first (`--preset smoke-gpu`, a few minutes: the code
 paths a CPU never takes, and pi0), then `neura-bench run --preset gpu` once, and hands the report
 back to bench-report/ (README.md, results.json and bench.log). A failed first stage ends the run
-before the long one. The container ends with the run, and Modal stops it
-when the run outlasts NEURA_BENCH_HOURS (default 3) or this command is stopped. Needs a Modal
-token: `modal token new`, or MODAL_TOKEN_ID and MODAL_TOKEN_SECRET.
+before the long one. The container ends with the run, and Modal stops it when the run outlasts
+NEURA_BENCH_HOURS (default 3) or this command is stopped. Ten minutes before that limit the run
+stops itself and hands back the report it wrote before its real-time runs, so running out of time
+costs those runs, not the measurements and simulations. Needs a Modal token: `modal token new`,
+or MODAL_TOKEN_ID and MODAL_TOKEN_SECRET.
 
 Costs: the L4 with 4 cores (8 vCPUs, as Google's g2-standard-8) and 32 GiB of memory (building
 pi0 takes about 14 GB), about $1.25 an hour; a run takes about 1.5 hours. Modal's GPU hosts run
@@ -23,6 +25,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import TextIO
 
@@ -35,6 +39,8 @@ HOURS = float(os.environ.get("NEURA_BENCH_HOURS", "3"))
 UV_VERSION = "0.11.32"
 PYTHON = "3.13"
 REPORT = ("README.md", "results.json")
+# Time kept back from Modal's limit to stop the run and hand its report back.
+MARGIN_S = 600
 
 image = (
     modal.Image.debian_slim(python_version=PYTHON)
@@ -52,9 +58,9 @@ image = (
 app = modal.App("neura-bench", image=image)
 
 
-def _run(arguments: list[str], cwd: str, env: dict[str, str], sink: TextIO) -> int:
-    """``neura-bench run`` with these arguments; its output to the log and, through Modal, to
-    whoever ran this."""
+def _run(arguments: list[str], cwd: str, env: dict[str, str], sink: TextIO, seconds: float) -> int:
+    """``neura-bench run`` with these arguments, stopped after ``seconds``; its output to the
+    log and, through Modal, to whoever ran this."""
     command = [shutil.which("uv") or "uv", "run", "--frozen", "--group", "models", "neura-bench"]
     with subprocess.Popen(  # noqa: S603 - fixed arguments but the size
         [*command, "run", *arguments],
@@ -64,15 +70,22 @@ def _run(arguments: list[str], cwd: str, env: dict[str, str], sink: TextIO) -> i
         stderr=subprocess.STDOUT,
         text=True,
     ) as process:
-        for line in process.stdout or ():
-            sink.write(line)
-            print(line, end="", flush=True)
+        timer = threading.Timer(max(seconds, 0.0), process.terminate)
+        timer.start()
+        try:
+            for line in process.stdout or ():
+                sink.write(line)
+                print(line, end="", flush=True)
+        finally:
+            timer.cancel()
     return process.returncode
 
 
 @app.function(gpu="L4", cpu=4.0, memory=32 * 1024, timeout=int(HOURS * 3600), retries=0)
-def bench(size: str, smoke: bool = True) -> dict[str, bytes]:
-    """Run the suite on this container's L4. Returns the report's files and the log."""
+def bench(size: str, smoke: bool = True, hours: float = HOURS) -> dict[str, bytes]:
+    """Run the suite on this container's L4. Returns the report's files, the log and the run's
+    exit code."""
+    deadline = time.monotonic() + hours * 3600 - MARGIN_S
     smi = shutil.which("nvidia-smi")
     if smi:
         subprocess.run([smi], check=False)  # noqa: S603 - fixed arguments
@@ -82,27 +95,35 @@ def bench(size: str, smoke: bool = True) -> dict[str, bytes]:
     with log.open("w") as sink:
         if smoke:
             print("--> every stage small, on the GPU", flush=True)
-            if _run(["--preset", "smoke-gpu", "--out", str(work / "smoke")], SRC, env, sink):
+            arguments = ["--preset", "smoke-gpu", "--out", str(work / "smoke")]
+            if _run(arguments, SRC, env, sink, deadline - time.monotonic()):
                 print("--> the small run failed: no long run", flush=True)
-                return {"bench.log": log.read_bytes()}
+                return {"bench.log": log.read_bytes(), "exit": b"1"}
         print("--> the benchmark", flush=True)
         arguments = ["--preset", "gpu", "--device", "cuda:0", "--size", size, "--out", str(out)]
-        code = _run(arguments, SRC, env, sink)
-    files = {"bench.log": log.read_bytes()}
-    if code == 0:
-        files.update({name: (out / name).read_bytes() for name in REPORT})
+        code = _run(arguments, SRC, env, sink, deadline - time.monotonic())
+        if time.monotonic() >= deadline:
+            print("--> stopped for time: the report written before the real-time runs", flush=True)
+    files = {"bench.log": log.read_bytes(), "exit": str(code).encode()}
+    # A run that stopped early keeps the report it wrote after its simulations.
+    files.update({name: (out / name).read_bytes() for name in REPORT if (out / name).exists()})
     return files
 
 
 @app.local_entrypoint()
 def main(size: str = "base", out: str = "bench-report", smoke: bool = True) -> None:
-    files = bench.remote(size, smoke)
+    files = bench.remote(size, smoke, HOURS)
+    code = int(files.pop("exit", b"1"))
     dest = Path(out)
     dest.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
         (dest / name).write_bytes(data)
+    tail = files["bench.log"].decode(errors="replace").splitlines()[-80:]
     if not all(name in files for name in REPORT):
-        tail = files["bench.log"].decode(errors="replace").splitlines()[-80:]
         print("the benchmark did not finish; the end of its log:", *tail, sep="\n", file=sys.stderr)
         raise SystemExit(1)
+    if code != 0:
+        # Kept and committed: the report says which real-time runs it lacks.
+        print(f"the benchmark stopped early (exit {code}); the report has what finished:")
+        print(*tail[-20:], sep="\n")
     print(f"--> the report: {dest / 'README.md'}")

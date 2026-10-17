@@ -31,6 +31,7 @@ log = logging.getLogger("neura.bench")
 
 async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
     started = time.monotonic()
+    directory = out or ROOT / "bench" / "reports" / report.label(config.device)
     with tempfile.TemporaryDirectory(prefix="neura-bench-") as tmp:
         log.info("building synthetic models (%s)", config.size)
         models = suite.build_models(config, Path(tmp))
@@ -38,19 +39,44 @@ async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
         builder = suite.Builder(config, models, measured)
         calibration = await suite.calibrate(builder)
         cells = await asyncio.to_thread(suite.sweep, builder)
+        estimates = (
+            suite.admission_estimate(config, models, measured),
+            suite.admission_estimates_vla(config, models, measured),
+        )
+        # The report so far, before the real-time runs: a run stopped during them (out of
+        # time, say) keeps its measurements and simulations.
+        not_run = {"every real-time run": "not run: the benchmark stopped before them"}
+        partial = _data(builder, measured, calibration, estimates, cells, [], not_run, started)
+        report.write(directory, partial)
         validation_failed: dict[str, str] = {}
         validation = await suite.validate(builder, failures=validation_failed)
-        estimate = suite.admission_estimate(config, models, measured)
-        estimates_vla = suite.admission_estimates_vla(config, models, measured)
+    data = _data(
+        builder, measured, calibration, estimates, cells, validation, validation_failed, started
+    )
+    results, markdown = report.write(directory, data)
+    log.info("wrote %s and %s in %.0f s", results, markdown, data["elapsed_s"])
+    return directory
+
+
+def _data(
+    builder: suite.Builder,
+    measured: suite.Measurements,
+    calibration: suite.Calibration,
+    estimates: tuple[Any, Any],
+    cells: list[suite.Cell],
+    validation: list[suite.Validation],
+    validation_failed: dict[str, str],
+    started: float,
+) -> dict[str, Any]:
     # The builder's config: its SLO includes the device's memory.
     config = builder.config
-    data: dict[str, Any] = {
+    return {
         "schema": 1,
         "environment": report.environment(config.device),
         "config": dataclasses.asdict(config),
         "measurements": {**measured.to_json(), "calibration": calibration.to_json()},
-        "admission_estimate": estimate,
-        "admission_estimates_vla": estimates_vla,
+        "admission_estimate": estimates[0],
+        "admission_estimates_vla": estimates[1],
         "cells": [
             {
                 "case": c.case,
@@ -80,10 +106,6 @@ async def run(config: suite.SuiteConfig, out: Path | None) -> Path:
         "validation_failed": validation_failed,
         "elapsed_s": round(time.monotonic() - started, 1),
     }
-    directory = out or ROOT / "bench" / "reports" / report.label(config.device)
-    results, markdown = report.write(directory, data)
-    log.info("wrote %s and %s in %.0f s", results, markdown, data["elapsed_s"])
-    return directory
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -235,15 +235,20 @@ def test_a_candidate_shadows_live_robots_before_it_may_replace_their_model(
             },
         )
         assert started.status_code == 202, started.text
-        seen_shadowing = False
+        seen_shadowing = seen_locally = False
         deadline = time.monotonic() + 60
         while (operation := finished(started.json()["metadata"]["id"])) is None:
             assert time.monotonic() < deadline, "the shadow evaluation did not finish"
             status = gateway.server.status() if gateway.server is not None else {}
             seen_shadowing |= candidate in status.get("shadows", {})
+            # The site's operator sees it in the agent's local status.
+            seen_locally |= {"candidate": candidate, "of": base} in core.jobs.local_status()[
+                "shadows"
+            ]
             time.sleep(0.2)
         assert operation["state"] == "Succeeded", operation
         assert seen_shadowing  # the gateway served the candidate while it ran
+        assert seen_locally
         evaluation = c.get(f"/v1/evaluations/{started.json()['target']}").json()
         assert evaluation["spec"]["baseline_revision_id"] == base
         report = evaluation["status"]["report"]

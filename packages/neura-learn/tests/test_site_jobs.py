@@ -166,6 +166,8 @@ async def test_the_site_evaluates_and_fine_tunes_on_its_own_episodes(tmp_path: P
     assert unknown == []  # every key is in the published schema
     datasets = core.capture.store.datasets()
     assert all(d["released"] for d in datasets)  # an evaluation keeps no episodes from retention
+    local = core.jobs.local_status()  # what the site's operator sees
+    assert (local["running"], local["shadows"], local["counters"]) == ([], [], {"evaluations": 1})
 
     training = await finish(
         core,

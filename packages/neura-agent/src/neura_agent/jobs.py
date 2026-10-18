@@ -132,6 +132,19 @@ class SiteJobs:
     def running(self) -> list[str]:
         return sorted(self._tasks)
 
+    def local_status(self) -> dict[str, Any]:
+        """What runs at this site for the control plane, for its operator (the local status
+        API and ``neura-agent status``): never sent to the cloud."""
+        return {
+            "running": self.running(),
+            "queued": max(0, len(self._tasks) - 1) if self._turn.locked() else 0,
+            "shadows": [
+                {"candidate": revision, "of": entry["of_revision_id"]}
+                for revision, entry in sorted(self.shadows.items())
+            ],
+            "counters": dict(self.counters),
+        }
+
     async def cancel(self, operation_id: str) -> bool:
         task = self._tasks.get(operation_id)
         if task is None:

@@ -191,6 +191,8 @@ def create_app(
             }
             body["site"] = c.diagnostics()
             body["pending_approvals"] = [asdict(a) for a in c.pending_approvals()]
+            # Evaluations, training jobs and shadows the control plane asked for (design §28).
+            body["jobs"] = c.jobs.local_status()
         return body
 
     @app.get("/v1/local/approvals")

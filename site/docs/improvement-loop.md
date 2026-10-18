@@ -70,6 +70,8 @@ serves robots, the job is refused (`AGENT_JOB_DEVICE_BUSY`) unless the operator 
 `NEURA_AGENT_JOB_SHARE_GPUS=true`; `NEURA_AGENT_JOB_DEVICE` pins a device (`cpu`, `cuda:1`).
 The operator can turn remote training and evaluation off by leaving `train` and `evaluate` out of
 `NEURA_AGENT_ALLOWED_OPERATIONS`.
+`neura-agent status` (the local status API) shows the operator what runs for the control plane:
+the job running, any queued behind it, and any candidate shadowing a revision.
 
 When the job succeeds, Neura checks the site's result before registering anything: the new
 artifact changes only the weights, names its base, this job and its dataset in its lineage, and

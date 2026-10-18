@@ -175,9 +175,39 @@ message Command {
     CollectDiagnostics collect_diagnostics = 5;
     CancelOperation cancel = 6;
     UpgradeAgent upgrade_agent = 8;
+    RunEvaluation evaluate = 9;
+    RunTraining train = 10;
   }
   // The operation this command belongs to; the agent reports progress against it.
   string operation_id = 7;
+}
+
+// Evaluate a candidate model against the one it would replace, at the site (design §28.3): in
+// simulation on the same scenes, or on episodes the site's robots recorded. The job runs in the
+// worker sandbox on a device serving does not use; the result is the evaluation's report.
+message RunEvaluation {
+  string evaluation_id = 1;
+  // Revisions in the site's manifest: the candidate's model, and the model it would replace
+  // (empty: none, for a replay without a baseline).
+  string candidate_revision_id = 2;
+  string baseline_revision_id = 3;
+  // {"kind": "simulation", ...} or {"kind": "replay", "filter": {...}, ...}, as JSON.
+  string suite_json = 4;
+}
+
+// Fine-tune a model on episodes recorded at the site (design §28.4). The episodes never leave the
+// site; the result is a new artifact the site signed, with its lineage, whose weights stay in the
+// site's artifact store.
+message RunTraining {
+  string training_job_id = 1;
+  // The revision whose model is the base.
+  string base_revision_id = 2;
+  // Which recorded episodes (an episode filter, design §28.2), as JSON.
+  string dataset_filter_json = 3;
+  string recipe_json = 4;
+  // The new artifact's metadata name and version.
+  string artifact_name = 5;
+  string artifact_version = 6;
 }
 
 // Upgrade one server's agent to a signed release (design §17.3). The agent verifies the bundle

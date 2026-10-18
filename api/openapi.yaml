@@ -46,6 +46,8 @@ tags:
 - name: Events
 - name: Audit
 - name: Access
+- name: Improvement
+  description: Recorded episodes, evaluations and training jobs at a site (design §28).
 - name: Weights
   description: Neura's registry of weights sealed with customer-managed keys (design §18.2).
 paths:
@@ -2566,6 +2568,227 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}/evaluations:
+    get:
+      operationId: listEvaluations
+      tags:
+      - Improvement
+      summary: List a deployment's evaluations.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createEvaluation
+      tags:
+      - Improvement
+      summary: Evaluate a candidate revision against the one it would replace.
+      description: 'Creates an Evaluation and an Operation. The deployment''s site runs it, on its own data
+        and hardware, in the worker sandbox and never on a GPU that serves robots: in simulation on the
+        same scenes for both models, or on episodes the site''s robots recorded (design §28.3). The episodes
+        never leave the site; the report does.'
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationCreate'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/evaluations/{evaluation_id}:
+    get:
+      operationId: getEvaluation
+      tags:
+      - Improvement
+      summary: Get an evaluation.
+      parameters:
+      - $ref: '#/components/parameters/EvaluationId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evaluation'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/deployments/{deployment_id}/training-jobs:
+    get:
+      operationId: listTrainingJobs
+      tags:
+      - Improvement
+      summary: List a deployment's training jobs.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/LabelSelector'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingJobPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createTrainingJob
+      tags:
+      - Improvement
+      summary: Fine-tune a revision's model on episodes recorded at its site.
+      description: Creates a TrainingJob and an Operation. The site snapshots the episodes the filter selects,
+        fine-tunes the base revision's model on them in the worker sandbox, and signs the result as a new
+        artifact with its lineage; its weights stay at the site (design §28.4). On success the new artifact
+        and its execution profile are registered and a candidate revision is created in the deployment,
+        to prepare, evaluate and activate like any other.
+      parameters:
+      - $ref: '#/components/parameters/DeploymentId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingJobCreate'
+      responses:
+        '202':
+          description: Accepted; follow the Operation until it finishes.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/training-jobs/{training_job_id}:
+    get:
+      operationId: getTrainingJob
+      tags:
+      - Improvement
+      summary: Get a training job.
+      parameters:
+      - $ref: '#/components/parameters/TrainingJobId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingJob'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     oidc:
@@ -2577,6 +2800,18 @@ components:
       scheme: bearer
       description: Scoped, expiring API token.
   parameters:
+    EvaluationId:
+      name: evaluation_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/EvaluationId'
+    TrainingJobId:
+      name: training_job_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TrainingJobId'
     ActivationRequestId:
       name: activation_request_id
       in: path
@@ -3519,6 +3754,8 @@ components:
           additionalProperties: false
         capture:
           $ref: '#/components/schemas/CaptureSettings'
+        release_gates:
+          $ref: '#/components/schemas/ReleaseGates'
         labels:
           $ref: '#/components/schemas/Labels'
       additionalProperties: false
@@ -3545,6 +3782,8 @@ components:
               - type: 'null'
             capture:
               $ref: '#/components/schemas/CaptureSettings'
+            release_gates:
+              $ref: '#/components/schemas/ReleaseGates'
           additionalProperties: false
       additionalProperties: false
     Digest:
@@ -4031,6 +4270,8 @@ components:
           - rollback
           - collect_diagnostics
           - upgrade_agent
+          - evaluate
+          - train
         target:
           type: string
           description: Identifier of the resource the operation acts on.
@@ -4950,3 +5191,405 @@ components:
     Timestamp:
       type: string
       format: date-time
+    EpisodeFilter:
+      type: object
+      description: 'Which recorded episodes (design §28.2): every field narrows; lists are any-of. Only complete
+        episodes are used unless complete_only is false.'
+      properties:
+        robot_names:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+          maxItems: 100
+        revision_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionId'
+          maxItems: 100
+        outcomes:
+          type: array
+          items:
+            enum:
+            - success
+            - failure
+            - unknown
+          uniqueItems: true
+        end_reasons:
+          type: array
+          items:
+            enum:
+            - stopped
+            - takeover
+            - fault
+            - new_epoch
+            - max_duration
+            - disconnected
+          uniqueItems: true
+        since:
+          $ref: '#/components/schemas/Timestamp'
+        until:
+          $ref: '#/components/schemas/Timestamp'
+        complete_only:
+          type: boolean
+          default: true
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100000
+      additionalProperties: false
+    SimulationSuite:
+      type: object
+      description: Both models on the same simulated scenes (seeds), in lockstep; the verdict is a paired
+        non-inferiority test of the success rates with the given margin.
+      required:
+      - kind
+      properties:
+        kind:
+          const: simulation
+        scene:
+          enum:
+          - aloha_transfer_cube
+          - aloha_insertion
+          default: aloha_transfer_cube
+        episodes:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 50
+        first_seed:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+          default: 1000
+        max_steps:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 400
+        margin:
+          type: number
+          minimum: 0
+          exclusiveMaximum: 1
+          default: 0.1
+          description: The largest drop in success rate still called no worse.
+      additionalProperties: false
+    ReplaySuite:
+      type: object
+      description: 'Both models on observations the site''s robots recorded, each prediction compared with
+        what the robot then did, in the model''s units, normalized by each action''s range. A regression check
+        on real data: it cannot show a candidate is better.'
+      required:
+      - kind
+      properties:
+        kind:
+          const: replay
+        filter:
+          $ref: '#/components/schemas/EpisodeFilter'
+        horizon:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        stride:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 5
+        max_episodes:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          default: 200
+        relative:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 0.25
+        absolute:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.01
+        batch_size:
+          type: integer
+          minimum: 1
+          maximum: 1024
+          default: 8
+      additionalProperties: false
+    EvaluationSuite:
+      oneOf:
+      - $ref: '#/components/schemas/SimulationSuite'
+      - $ref: '#/components/schemas/ReplaySuite'
+      discriminator:
+        propertyName: kind
+        mapping:
+          simulation: '#/components/schemas/SimulationSuite'
+          replay: '#/components/schemas/ReplaySuite'
+    EvaluationVerdict:
+      type: string
+      enum:
+      - superior
+      - non_inferior
+      - inconclusive
+      - inferior
+    EvaluationSpec:
+      type: object
+      required:
+      - candidate_revision_id
+      - suite
+      properties:
+        candidate_revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        baseline_revision_id:
+          oneOf:
+          - $ref: '#/components/schemas/RevisionId'
+          - type: 'null'
+          description: 'The revision it would replace. Default: the one the deployment''s robots run.'
+        suite:
+          $ref: '#/components/schemas/EvaluationSuite'
+      additionalProperties: false
+    EvaluationCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/EvaluationSpec'
+      additionalProperties: false
+    Evaluation:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          allOf:
+          - $ref: '#/components/schemas/EvaluationSpec'
+          properties:
+            deployment_id:
+              $ref: '#/components/schemas/DeploymentId'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - phase
+          properties:
+            phase: &id001
+              type: string
+              enum:
+              - Pending
+              - Running
+              - Succeeded
+              - Failed
+              - Cancelled
+            operation_id:
+              oneOf:
+              - $ref: '#/components/schemas/OperationId'
+              - type: 'null'
+            reason:
+              oneOf:
+              - $ref: '#/components/schemas/ReasonCode'
+              - type: 'null'
+            message:
+              type: string
+            verdict:
+              oneOf:
+              - $ref: '#/components/schemas/EvaluationVerdict'
+              - type: 'null'
+            report:
+              type:
+              - object
+              - 'null'
+              description: 'The site''s report: success rates and their intervals, the paired comparison and
+                each scene, or replay errors by episode outcome.'
+            finished_at:
+              oneOf:
+              - $ref: '#/components/schemas/Timestamp'
+              - type: 'null'
+      additionalProperties: false
+    EvaluationId:
+      type: string
+      pattern: ^evl_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Evaluation identifier: `evl_` followed by a ULID.'
+      examples:
+      - evl_01JA2B3C4D5E6F7G8H9JKMNPQR
+    EvaluationPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evaluation'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    TrainingRecipe:
+      type: object
+      description: How to fine-tune (LeRobot's training loop at the site).
+      properties:
+        steps:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+          default: 2000
+        batch_size:
+          type: integer
+          minimum: 1
+          maximum: 4096
+          default: 8
+        learning_rate:
+          oneOf:
+          - type: number
+            exclusiveMinimum: 0
+            exclusiveMaximum: 1
+          - type: 'null'
+          description: 'Default: the policy''s own training preset.'
+        seed:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+          default: 1000
+        num_workers:
+          type: integer
+          minimum: 0
+          maximum: 64
+          default: 2
+        normalization:
+          enum:
+          - base
+          - dataset
+          default: base
+          description: base keeps the base model's input and output normalization; dataset uses the recorded
+            data's statistics.
+        log_every:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 50
+      additionalProperties: false
+    TrainingJobSpec:
+      type: object
+      required:
+      - base_revision_id
+      properties:
+        base_revision_id:
+          $ref: '#/components/schemas/RevisionId'
+        episodes:
+          $ref: '#/components/schemas/EpisodeFilter'
+        recipe:
+          $ref: '#/components/schemas/TrainingRecipe'
+        artifact_name:
+          $ref: '#/components/schemas/Name'
+        artifact_version:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$
+      additionalProperties: false
+    TrainingJobCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/TrainingJobSpec'
+      additionalProperties: false
+    TrainingJob:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          allOf:
+          - $ref: '#/components/schemas/TrainingJobSpec'
+          properties:
+            deployment_id:
+              $ref: '#/components/schemas/DeploymentId'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - phase
+          properties:
+            phase: *id001
+            operation_id:
+              oneOf:
+              - $ref: '#/components/schemas/OperationId'
+              - type: 'null'
+            reason:
+              oneOf:
+              - $ref: '#/components/schemas/ReasonCode'
+              - type: 'null'
+            message:
+              type: string
+            artifact_id:
+              oneOf:
+              - $ref: '#/components/schemas/ModelArtifactId'
+              - type: 'null'
+            execution_profile_id:
+              oneOf:
+              - $ref: '#/components/schemas/ExecutionProfileId'
+              - type: 'null'
+            candidate_revision_id:
+              oneOf:
+              - $ref: '#/components/schemas/RevisionId'
+              - type: 'null'
+            dataset_digest:
+              oneOf:
+              - $ref: '#/components/schemas/Digest'
+              - type: 'null'
+            dataset_episodes:
+              type:
+              - integer
+              - 'null'
+              minimum: 0
+            metrics:
+              type:
+              - object
+              - 'null'
+              description: Episodes and frames trained on, steps, duration and loss.
+            finished_at:
+              oneOf:
+              - $ref: '#/components/schemas/Timestamp'
+              - type: 'null'
+      additionalProperties: false
+    TrainingJobId:
+      type: string
+      pattern: ^trn_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Training job identifier: `trn_` followed by a ULID.'
+      examples:
+      - trn_01JA2B3C4D5E6F7G8H9JKMNPQR
+    TrainingJobPage:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingJob'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    ReleaseGates:
+      type: object
+      description: 'Evidence a revision needs before it may be activated in place of the one robots run (design
+        §28.3): a Succeeded evaluation of each kind listed, against that revision, with a superior or non_inferior
+        verdict. A first activation has nothing to replace and needs none.'
+      properties:
+        evaluations:
+          type: array
+          items:
+            enum:
+            - simulation
+            - replay
+          uniqueItems: true
+      additionalProperties: false

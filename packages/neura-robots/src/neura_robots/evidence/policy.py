@@ -54,6 +54,10 @@ class LocalPolicy:
         self._torch = torch
         config = PreTrainedConfig.from_pretrained(checkpoint)
         config.device = device
+        if getattr(config, "pretrained_backbone_weights", None) is not None:
+            # Every weight comes from the checkpoint: building the backbone must not fetch
+            # ImageNet weights first (a site without internet access could not).
+            config.pretrained_backbone_weights = None
         self.config = config
         policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
         policy.eval()

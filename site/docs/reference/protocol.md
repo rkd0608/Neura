@@ -512,7 +512,33 @@ Desired state for the whole site. `manifest` is canonical JSON; the agent verifi
 | `collect_diagnostics` | `CollectDiagnostics` | 5 | (one of `kind`) |
 | `cancel` | `CancelOperation` | 6 | (one of `kind`) |
 | `upgrade_agent` | `UpgradeAgent` | 8 | (one of `kind`) |
+| `evaluate` | `RunEvaluation` | 9 | (one of `kind`) |
+| `train` | `RunTraining` | 10 | (one of `kind`) |
 | `operation_id` | `string` | 7 | The operation this command belongs to; the agent reports progress against it. |
+
+### Message `RunEvaluation`
+
+Evaluate a candidate model against the one it would replace, at the site (design §28.3): in simulation on the same scenes, or on episodes the site's robots recorded. The job runs in the worker sandbox on a device serving does not use; the result is the evaluation's report.
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `evaluation_id` | `string` | 1 |  |
+| `candidate_revision_id` | `string` | 2 | Revisions in the site's manifest: the candidate's model, and the model it would replace (empty: none, for a replay without a baseline). |
+| `baseline_revision_id` | `string` | 3 |  |
+| `suite_json` | `string` | 4 | {"kind": "simulation", ...} or {"kind": "replay", "filter": {...}, ...}, as JSON. |
+
+### Message `RunTraining`
+
+Fine-tune a model on episodes recorded at the site (design §28.4). The episodes never leave the site; the result is a new artifact the site signed, with its lineage, whose weights stay in the site's artifact store.
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `training_job_id` | `string` | 1 |  |
+| `base_revision_id` | `string` | 2 | The revision whose model is the base. |
+| `dataset_filter_json` | `string` | 3 | Which recorded episodes (an episode filter, design §28.2), as JSON. |
+| `recipe_json` | `string` | 4 |  |
+| `artifact_name` | `string` | 5 | The new artifact's metadata name and version. |
+| `artifact_version` | `string` | 6 |  |
 
 ### Message `UpgradeAgent`
 

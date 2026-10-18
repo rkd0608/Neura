@@ -33,6 +33,7 @@ from neura_agent.gateway import (
     write_revision_documents,
 )
 from neura_agent.identity import Identity, atomic_write
+from neura_agent.jobs import SiteJobs
 from neura_agent.outbound import Outbound, site_outbound
 from neura_agent.releases import UpgradeState
 from neura_agent.settings import AgentSettings
@@ -81,6 +82,14 @@ def _reason(code: ReasonCode | None, message: str = "") -> common_pb2.Reason:
     return common_pb2.Reason(code=code.value if code else "", message=message)
 
 
+class RevisionError(Exception):
+    """A revision this site cannot use, and why."""
+
+    def __init__(self, code: ReasonCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class AgentCore:
     def __init__(
         self,
@@ -122,6 +131,7 @@ class AgentCore:
         self.gateway_config_path: Path = self.gateway_dir / "site.yaml"
         self.capture = SiteCapture(settings)
         self._capture_summary: tuple[float, site_pb2.CaptureSummary] | None = None
+        self.jobs = SiteJobs(self)
         self.state: AgentState = self.store.load()
         self.outbox: asyncio.Queue[site_pb2.AgentMessage] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
         self._manifest_key = Ed25519PublicKey.from_public_bytes(
@@ -137,6 +147,10 @@ class AgentCore:
         self._running: dict[str, str] = {}
 
     # --- helpers ------------------------------------------------------------------------------
+
+    def cuda_indexes(self) -> list[int]:
+        """The CUDA GPUs this agent may use."""
+        return self._cuda_indexes()
 
     def _save(self) -> None:
         self.store.save(self.state)
@@ -420,6 +434,8 @@ class AgentCore:
             "collect_diagnostics": "collect_diagnostics",
             "cancel": "cancel",
             "upgrade_agent": "upgrade_agent",
+            "evaluate": "evaluate",
+            "train": "train",
         }.get(kind)
         if name is None or name not in self.settings.allowed_operations:
             self._report(
@@ -452,6 +468,10 @@ class AgentCore:
             await self._cancel(command.cancel.operation_id)
         elif kind == "collect_diagnostics":
             self._report(command_id, operation_id, "Succeeded", result=self.diagnostics())
+        elif kind == "evaluate":
+            self.jobs.start_evaluation(command_id, operation_id, command.evaluate)
+        elif kind == "train":
+            self.jobs.start_training(command_id, operation_id, command.train)
         elif kind == "upgrade_agent":
             if self.upgrader is None:
                 self._report(
@@ -464,8 +484,10 @@ class AgentCore:
             else:
                 self.upgrader.start(command_id, operation_id, command.upgrade_agent)
 
-    async def _prepare(self, command_id: str, operation_id: str, revision_id: str) -> None:
-        self._report(command_id, operation_id, "Running", message="verifying contracts")
+    def verified_revision(self, revision_id: str) -> tuple[dict[str, Any], ExecutionBinding]:
+        """A revision of the committed manifest, checked before anything of it is used: its
+        documents parse and match their digests and the revision's, a trusted publisher signed
+        its artifact, and the three bind. Raises RevisionError."""
         manifest = self.manifest()
         revision = next(
             (
@@ -477,14 +499,10 @@ class AgentCore:
             None,
         )
         if revision is None:
-            self._report(
-                command_id,
-                operation_id,
-                "Failed",
-                reason=ReasonCode.DEPLOYMENT_NOT_ACTIVE,
-                message="the revision is not in this site's committed desired state",
+            raise RevisionError(
+                ReasonCode.DEPLOYMENT_NOT_ACTIVE,
+                "the revision is not in this site's committed desired state",
             )
-            return
         parsed = {}
         for role, kind in (
             ("model_artifact", ModelArtifact),
@@ -495,17 +513,12 @@ class AgentCore:
             try:
                 document = parse_document(entry["document"])
             except ContractError as exc:
-                self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
-                return
+                raise RevisionError(exc.code, str(exc)) from exc
             if not isinstance(document, kind) or document.digest() != entry["digest"]:
-                self._report(
-                    command_id,
-                    operation_id,
-                    "Failed",
-                    reason=ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
-                    message=f"{role} does not match its declared digest",
+                raise RevisionError(
+                    ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                    f"{role} does not match its declared digest",
                 )
-                return
             parsed[role] = document
         expected_digest = content_digest(
             {
@@ -515,14 +528,10 @@ class AgentCore:
             }
         )
         if expected_digest != revision["revision_digest"]:
-            self._report(
-                command_id,
-                operation_id,
-                "Failed",
-                reason=ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
-                message="revision digest does not match its documents",
+            raise RevisionError(
+                ReasonCode.AGENT_ARTIFACT_DIGEST_MISMATCH,
+                "revision digest does not match its documents",
             )
-            return
         try:
             self._verify_publisher(revision["documents"]["model_artifact"])
         except signing.SignatureError as exc:
@@ -530,8 +539,7 @@ class AgentCore:
             self.audit.write(
                 "artifact.refused", revision=revision_id, reason=exc.code.value, detail=str(exc)
             )
-            self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
-            return
+            raise RevisionError(exc.code, str(exc)) from exc
         artifact, robot, profile = (
             parsed["model_artifact"],
             parsed["robot_profile"],
@@ -544,13 +552,15 @@ class AgentCore:
             binding = ExecutionBinding(artifact, robot, profile)
         except IncompatibleBindingError as exc:
             first = exc.report.issues[0]
-            self._report(
-                command_id,
-                operation_id,
-                "Failed",
-                reason=first.code,
-                message=f"incompatible at this site: {first.message}",
-            )
+            raise RevisionError(first.code, f"incompatible at this site: {first.message}") from exc
+        return revision, binding
+
+    async def _prepare(self, command_id: str, operation_id: str, revision_id: str) -> None:
+        self._report(command_id, operation_id, "Running", message="verifying contracts")
+        try:
+            revision, binding = self.verified_revision(revision_id)
+        except RevisionError as exc:
+            self._report(command_id, operation_id, "Failed", reason=exc.code, message=str(exc))
             return
         serving = self.serving_config()
         estimate_args: dict[str, Any] = {}
@@ -738,6 +748,7 @@ class AgentCore:
         )
 
     async def _cancel(self, operation_id: str) -> None:
+        await self.jobs.cancel(operation_id)  # reports Cancelled itself
         for command_id, activation in list(self.state.activations.items()):
             if activation.operation_id == operation_id:
                 self._revert(activation)

@@ -594,6 +594,36 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: true,
     message: "The robot's episode spool is full; new episodes are not recorded until uploads free space.",
   },
+  AGENT_JOB_FAILED: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "An evaluation or training job failed at the site; its message says why.",
+  },
+  AGENT_JOB_TIMED_OUT: {
+    area: "agent",
+    severity: "error",
+    retryable: true,
+    message: "An evaluation or training job ran longer than this site allows.",
+  },
+  AGENT_JOB_DEVICE_BUSY: {
+    area: "agent",
+    severity: "warning",
+    retryable: true,
+    message: "Every GPU this site's agent may use serves robots, and jobs may not share them.",
+  },
+  EVALUATION_INVALID: {
+    area: "evaluation",
+    severity: "error",
+    retryable: false,
+    message: "The evaluation's suite is not one the site can run.",
+  },
+  TRAINING_INVALID: {
+    area: "training",
+    severity: "error",
+    retryable: false,
+    message: "The training job's recipe or episode filter is not valid.",
+  },
   API_UNAUTHENTICATED: {
     area: "api",
     severity: "error",
@@ -677,5 +707,11 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     severity: "error",
     retryable: true,
     message: "The service is temporarily unavailable.",
+  },
+  API_RELEASE_GATE_UNMET: {
+    area: "api",
+    severity: "warning",
+    retryable: false,
+    message: "The deployment requires evidence the candidate revision does not have yet.",
   },
 };

@@ -149,6 +149,28 @@ results:
   gateway_suspended: {minimal: true, description: "Diagnostics: whether serving is suspended."}
   agent_version_from: {minimal: true, description: "Agent upgrade: the release before."}
   agent_version_to: {minimal: true, description: "Agent upgrade: the release after."}
+  evaluation.kind: {minimal: true, description: "Evaluation: simulation or replay."}
+  evaluation.verdict: {minimal: true, description: "Evaluation: superior, non_inferior, inconclusive or inferior."}
+  evaluation.suite.*: {minimal: false, description: "Evaluation: the suite's settings (scenes, seeds, margin, replay stride and tolerances)."}
+  evaluation.candidate.*: {minimal: false, description: "Evaluation: the candidate's success rate and interval, or its replay errors by outcome."}
+  evaluation.baseline.*: {minimal: false, description: "Evaluation: the same for the model it would replace."}
+  evaluation.comparison.*: {minimal: false, description: "Evaluation: the paired comparison (difference, interval, scenes gained and lost)."}
+  evaluation.scenes: {minimal: false, description: "Evaluation: each simulated scene's seed and whether each model succeeded."}
+  evaluation.episodes: {minimal: false, description: "Replay: recorded episodes evaluated on (counts, never their content)."}
+  evaluation.episodes_offered: {minimal: false, description: "Replay: recorded episodes selected."}
+  evaluation.samples: {minimal: false, description: "Replay: predictions compared."}
+  evaluation.dataset_digest: {minimal: true, description: "Replay: the dataset snapshot's digest."}
+  training.recipe.*: {minimal: false, description: "Training: the recipe (steps, batch size, learning rate, seed, normalization)."}
+  training.dataset.*: {minimal: false, description: "Training: episodes and frames trained on, and why any were left out."}
+  training.training.*: {minimal: false, description: "Training: steps, duration and loss."}
+  artifact: {minimal: true, description: "Training: the new model's artifact manifest (metadata, weight file digests and sizes, lineage; never the weights)."}
+  artifact_digest: {minimal: true, description: "Training: the new artifact's digest."}
+  execution_profile: {minimal: true, description: "Training: the base's execution profile, bound to the new artifact."}
+  artifact_signature.key_id: {minimal: true, description: "Training: the site key that signed it."}
+  artifact_signature.public_key: {minimal: true, description: "Training: that key's public half."}
+  artifact_signature.signature: {minimal: true, description: "Training: the signature."}
+  dataset_digest: {minimal: true, description: "Training: the dataset snapshot the model was trained on."}
+  dataset_episodes: {minimal: true, description: "Training: how many episodes it holds."}
 
 # TelemetryBatch metrics (standard mode only). Labels not listed are dropped.
 metrics:

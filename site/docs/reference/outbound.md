@@ -157,6 +157,28 @@ Schema version 1.
 | `gateway_suspended` | yes | Diagnostics: whether serving is suspended. |
 | `agent_version_from` | yes | Agent upgrade: the release before. |
 | `agent_version_to` | yes | Agent upgrade: the release after. |
+| `evaluation.kind` | yes | Evaluation: simulation or replay. |
+| `evaluation.verdict` | yes | Evaluation: superior, non_inferior, inconclusive or inferior. |
+| `evaluation.suite.*` | no | Evaluation: the suite's settings (scenes, seeds, margin, replay stride and tolerances). |
+| `evaluation.candidate.*` | no | Evaluation: the candidate's success rate and interval, or its replay errors by outcome. |
+| `evaluation.baseline.*` | no | Evaluation: the same for the model it would replace. |
+| `evaluation.comparison.*` | no | Evaluation: the paired comparison (difference, interval, scenes gained and lost). |
+| `evaluation.scenes` | no | Evaluation: each simulated scene's seed and whether each model succeeded. |
+| `evaluation.episodes` | no | Replay: recorded episodes evaluated on (counts, never their content). |
+| `evaluation.episodes_offered` | no | Replay: recorded episodes selected. |
+| `evaluation.samples` | no | Replay: predictions compared. |
+| `evaluation.dataset_digest` | yes | Replay: the dataset snapshot's digest. |
+| `training.recipe.*` | no | Training: the recipe (steps, batch size, learning rate, seed, normalization). |
+| `training.dataset.*` | no | Training: episodes and frames trained on, and why any were left out. |
+| `training.training.*` | no | Training: steps, duration and loss. |
+| `artifact` | yes | Training: the new model's artifact manifest (metadata, weight file digests and sizes, lineage; never the weights). |
+| `artifact_digest` | yes | Training: the new artifact's digest. |
+| `execution_profile` | yes | Training: the base's execution profile, bound to the new artifact. |
+| `artifact_signature.key_id` | yes | Training: the site key that signed it. |
+| `artifact_signature.public_key` | yes | Training: that key's public half. |
+| `artifact_signature.signature` | yes | Training: the signature. |
+| `dataset_digest` | yes | Training: the dataset snapshot the model was trained on. |
+| `dataset_episodes` | yes | Training: how many episodes it holds. |
 
 ## Metrics (standard mode only)
 

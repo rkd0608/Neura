@@ -205,7 +205,7 @@ class Signature(_message.Message):
     def __init__(self, key_id: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
 
 class Command(_message.Message):
-    __slots__ = ("command_id", "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "upgrade_agent", "operation_id")
+    __slots__ = ("command_id", "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "upgrade_agent", "evaluate", "train", "operation_id")
     COMMAND_ID_FIELD_NUMBER: _ClassVar[int]
     PREPARE_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ACTIVATION_FIELD_NUMBER: _ClassVar[int]
@@ -213,6 +213,8 @@ class Command(_message.Message):
     COLLECT_DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
     CANCEL_FIELD_NUMBER: _ClassVar[int]
     UPGRADE_AGENT_FIELD_NUMBER: _ClassVar[int]
+    EVALUATE_FIELD_NUMBER: _ClassVar[int]
+    TRAIN_FIELD_NUMBER: _ClassVar[int]
     OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
     command_id: str
     prepare: PrepareRevision
@@ -221,8 +223,38 @@ class Command(_message.Message):
     collect_diagnostics: CollectDiagnostics
     cancel: CancelOperation
     upgrade_agent: UpgradeAgent
+    evaluate: RunEvaluation
+    train: RunTraining
     operation_id: str
-    def __init__(self, command_id: _Optional[str] = ..., prepare: _Optional[_Union[PrepareRevision, _Mapping]] = ..., request_activation: _Optional[_Union[RequestActivation, _Mapping]] = ..., rollback: _Optional[_Union[Rollback, _Mapping]] = ..., collect_diagnostics: _Optional[_Union[CollectDiagnostics, _Mapping]] = ..., cancel: _Optional[_Union[CancelOperation, _Mapping]] = ..., upgrade_agent: _Optional[_Union[UpgradeAgent, _Mapping]] = ..., operation_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, command_id: _Optional[str] = ..., prepare: _Optional[_Union[PrepareRevision, _Mapping]] = ..., request_activation: _Optional[_Union[RequestActivation, _Mapping]] = ..., rollback: _Optional[_Union[Rollback, _Mapping]] = ..., collect_diagnostics: _Optional[_Union[CollectDiagnostics, _Mapping]] = ..., cancel: _Optional[_Union[CancelOperation, _Mapping]] = ..., upgrade_agent: _Optional[_Union[UpgradeAgent, _Mapping]] = ..., evaluate: _Optional[_Union[RunEvaluation, _Mapping]] = ..., train: _Optional[_Union[RunTraining, _Mapping]] = ..., operation_id: _Optional[str] = ...) -> None: ...
+
+class RunEvaluation(_message.Message):
+    __slots__ = ("evaluation_id", "candidate_revision_id", "baseline_revision_id", "suite_json")
+    EVALUATION_ID_FIELD_NUMBER: _ClassVar[int]
+    CANDIDATE_REVISION_ID_FIELD_NUMBER: _ClassVar[int]
+    BASELINE_REVISION_ID_FIELD_NUMBER: _ClassVar[int]
+    SUITE_JSON_FIELD_NUMBER: _ClassVar[int]
+    evaluation_id: str
+    candidate_revision_id: str
+    baseline_revision_id: str
+    suite_json: str
+    def __init__(self, evaluation_id: _Optional[str] = ..., candidate_revision_id: _Optional[str] = ..., baseline_revision_id: _Optional[str] = ..., suite_json: _Optional[str] = ...) -> None: ...
+
+class RunTraining(_message.Message):
+    __slots__ = ("training_job_id", "base_revision_id", "dataset_filter_json", "recipe_json", "artifact_name", "artifact_version")
+    TRAINING_JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    BASE_REVISION_ID_FIELD_NUMBER: _ClassVar[int]
+    DATASET_FILTER_JSON_FIELD_NUMBER: _ClassVar[int]
+    RECIPE_JSON_FIELD_NUMBER: _ClassVar[int]
+    ARTIFACT_NAME_FIELD_NUMBER: _ClassVar[int]
+    ARTIFACT_VERSION_FIELD_NUMBER: _ClassVar[int]
+    training_job_id: str
+    base_revision_id: str
+    dataset_filter_json: str
+    recipe_json: str
+    artifact_name: str
+    artifact_version: str
+    def __init__(self, training_job_id: _Optional[str] = ..., base_revision_id: _Optional[str] = ..., dataset_filter_json: _Optional[str] = ..., recipe_json: _Optional[str] = ..., artifact_name: _Optional[str] = ..., artifact_version: _Optional[str] = ...) -> None: ...
 
 class UpgradeAgent(_message.Message):
     __slots__ = ("server_id", "version", "bundle_url", "bundle_sha256")

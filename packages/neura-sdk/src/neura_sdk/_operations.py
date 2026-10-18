@@ -24,6 +24,9 @@ from neura_sdk.models import (
     DeploymentUpdate,
     EnrollmentToken,
     EnrollmentTokenCreate,
+    Evaluation,
+    EvaluationCreate,
+    EvaluationPage,
     ExecutionProfile,
     ExecutionProfileCreate,
     ExecutionProfilePage,
@@ -70,6 +73,9 @@ from neura_sdk.models import (
     SupportGrant,
     SupportGrantCreate,
     SupportGrantPage,
+    TrainingJob,
+    TrainingJobCreate,
+    TrainingJobPage,
 )
 
 
@@ -1082,4 +1088,98 @@ class Operations:
             "DELETE",
             f"/v1/projects/{_segment(project_id)}/sealed-weights/{_segment(digest)}",
             if_match=if_match,
+        )
+
+    def list_evaluations(
+        self,
+        deployment_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int | None = None,
+        label: list[str] | None = None,
+    ) -> EvaluationPage:
+        """
+        List a deployment's evaluations. (``GET
+        /v1/deployments/{deployment_id}/evaluations``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/deployments/{_segment(deployment_id)}/evaluations",
+            query={"cursor": cursor, "page_size": page_size, "label": label},
+        )
+
+    def create_evaluation(
+        self,
+        deployment_id: str,
+        *,
+        body: EvaluationCreate,
+        idempotency_key: str | None = None,
+    ) -> Operation:
+        """
+        Evaluate a candidate revision against the one it would replace. (``POST
+        /v1/deployments/{deployment_id}/evaluations``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/deployments/{_segment(deployment_id)}/evaluations",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def get_evaluation(
+        self,
+        evaluation_id: str,
+    ) -> Evaluation:
+        """Get an evaluation. (``GET /v1/evaluations/{evaluation_id}``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/evaluations/{_segment(evaluation_id)}",
+        )
+
+    def list_training_jobs(
+        self,
+        deployment_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int | None = None,
+        label: list[str] | None = None,
+    ) -> TrainingJobPage:
+        """
+        List a deployment's training jobs. (``GET /v1/deployments/{deployment_id}/training-
+        jobs``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/deployments/{_segment(deployment_id)}/training-jobs",
+            query={"cursor": cursor, "page_size": page_size, "label": label},
+        )
+
+    def create_training_job(
+        self,
+        deployment_id: str,
+        *,
+        body: TrainingJobCreate,
+        idempotency_key: str | None = None,
+    ) -> Operation:
+        """
+        Fine-tune a revision's model on episodes recorded at its site. (``POST
+        /v1/deployments/{deployment_id}/training-jobs``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/deployments/{_segment(deployment_id)}/training-jobs",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def get_training_job(
+        self,
+        training_job_id: str,
+    ) -> TrainingJob:
+        """Get a training job. (``GET /v1/training-jobs/{training_job_id}``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/training-jobs/{_segment(training_job_id)}",
         )

@@ -189,6 +189,35 @@ class EvidenceRef(ContractModel):
     digest: Digest | None = None
 
 
+class DatasetRef(ContractModel):
+    """Recorded episodes a model was trained on (design §28.4): a site's dataset snapshot, named
+    by the digest over its episodes. The episodes themselves stay at that site."""
+
+    digest: Digest
+    episodes: PositiveInt
+    site_id: Annotated[str, StringConstraints(min_length=1, max_length=64)] | None = None
+
+
+class TrainingRef(ContractModel):
+    """How a model was trained from its base."""
+
+    recipe: dict[FeatureName, str | int | float | bool | None] = Field(default_factory=dict)
+    steps: PositiveInt
+    # The job that trained it, and the software that ran it.
+    job_id: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    trainer: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class Lineage(ContractModel):
+    """Where a fine-tuned model came from: the artifact it started from, the data and the
+    training run. Part of the artifact's digest, so it cannot be changed without changing the
+    artifact."""
+
+    base_artifact: Digest
+    datasets: list[DatasetRef] = Field(min_length=1)
+    training: TrainingRef
+
+
 class ModelArtifactSpec(ContractModel):
     weights: list[WeightFile] = Field(min_length=1)
     runtime_image: RuntimeImage
@@ -204,6 +233,7 @@ class ModelArtifactSpec(ContractModel):
         default_factory=dict
     )
     evidence: list[EvidenceRef] = Field(default_factory=list)
+    lineage: Lineage | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:

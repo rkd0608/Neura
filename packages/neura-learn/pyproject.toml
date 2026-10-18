@@ -1,0 +1,29 @@
+[project]
+name = "neura-learn"
+version = "0.1.0.dev0"
+description = "Neura's evaluate and improve layers: simulation and replay evaluations of a candidate against the running model, and fine-tuning on episodes recorded at the site."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-runtime",
+    "neura-server",
+    "neura-adapters",
+    "neura-robots",
+    "numpy>=2.2",
+]
+
+[project.scripts]
+neura-learn = "neura_learn.jobs:main"
+
+[project.optional-dependencies]
+# Models and training: PyTorch, LeRobot with its dataset support, and MuJoCo for the simulated
+# scenes. Installed where jobs run (the worker image), like the adapters' models.
+models = [
+    "neura-adapters[lerobot]",
+    "neura-robots[sim]",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"

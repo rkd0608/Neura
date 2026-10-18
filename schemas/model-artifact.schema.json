@@ -105,6 +105,43 @@
       "title": "ColorOrder",
       "type": "string"
     },
+    "DatasetRef": {
+      "additionalProperties": false,
+      "description": "Recorded episodes a model was trained on (design §28.4): a site's dataset snapshot, named\nby the digest over its episodes. The episodes themselves stay at that site.",
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "episodes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Episodes",
+          "type": "integer"
+        },
+        "site_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Site Id"
+        }
+      },
+      "required": [
+        "digest",
+        "episodes"
+      ],
+      "title": "DatasetRef",
+      "type": "object"
+    },
     "DeviceKind": {
       "enum": [
         "cuda",
@@ -397,6 +434,35 @@
       "title": "Licenses",
       "type": "object"
     },
+    "Lineage": {
+      "additionalProperties": false,
+      "description": "Where a fine-tuned model came from: the artifact it started from, the data and the\ntraining run. Part of the artifact's digest, so it cannot be changed without changing the\nartifact.",
+      "properties": {
+        "base_artifact": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Base Artifact",
+          "type": "string"
+        },
+        "datasets": {
+          "items": {
+            "$ref": "#/$defs/DatasetRef"
+          },
+          "minItems": 1,
+          "title": "Datasets",
+          "type": "array"
+        },
+        "training": {
+          "$ref": "#/$defs/TrainingRef"
+        }
+      },
+      "required": [
+        "base_artifact",
+        "datasets",
+        "training"
+      ],
+      "title": "Lineage",
+      "type": "object"
+    },
     "MergeMode": {
       "description": "How a new action chunk combines with queued future actions (design §5.3).",
       "enum": [
@@ -501,6 +567,17 @@
         },
         "licenses": {
           "$ref": "#/$defs/Licenses"
+        },
+        "lineage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Lineage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "outputs": {
           "$ref": "#/$defs/ActionOutput"
@@ -705,6 +782,62 @@
         "components"
       ],
       "title": "StateInput",
+      "type": "object"
+    },
+    "TrainingRef": {
+      "additionalProperties": false,
+      "description": "How a model was trained from its base.",
+      "properties": {
+        "job_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Job Id",
+          "type": "string"
+        },
+        "recipe": {
+          "patternProperties": {
+            "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "title": "Recipe",
+          "type": "object"
+        },
+        "steps": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "trainer": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Trainer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "steps",
+        "job_id",
+        "trainer"
+      ],
+      "title": "TrainingRef",
       "type": "object"
     },
     "Unit": {

@@ -15,7 +15,14 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, model_
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RemoteOperation = Literal[
-    "prepare", "request_activation", "rollback", "collect_diagnostics", "cancel", "upgrade_agent"
+    "prepare",
+    "request_activation",
+    "rollback",
+    "collect_diagnostics",
+    "cancel",
+    "upgrade_agent",
+    "evaluate",
+    "train",
 ]
 # Remote agent upgrades run new code on the server: the site operator opts in to them.
 DEFAULT_OPERATIONS = [o for o in get_args(RemoteOperation) if o != "upgrade_agent"]
@@ -151,6 +158,17 @@ class AgentSettings(BaseSettings):
     capture_dir: Path | None = None
     capture_max_gib: float = Field(default=200.0, gt=0)
     capture_max_age_days: int | None = Field(default=None, ge=1)
+
+    # --- evaluation and training jobs (design §28.3, §28.4: on this site's data and hardware) ---
+    # Where jobs run: auto picks a GPU no worker serves on (cpu on a server without GPUs), and
+    # refuses when every GPU serves unless job_share_gpus allows sharing one with serving.
+    job_device: str = Field(default="auto", pattern=r"^(auto|cpu|cuda:[0-9]{1,3})$")
+    job_share_gpus: bool = False
+    job_timeout_s: float = Field(default=6 * 3600.0, gt=0)
+    # What runs a job: a child process (worker_sandbox=process), or this entrypoint in the
+    # artifact's runtime image (container).
+    job_command: list[str] = Field(default_factory=lambda: [sys.executable, "-m", "neura_learn"])
+    job_entrypoint: list[str] = Field(default_factory=lambda: ["neura-learn"], min_length=1)
 
     # --- what leaves the site (design §18.2) ---
     # standard: every field of the published outbound schema (catalog/outbound.yaml). minimal:

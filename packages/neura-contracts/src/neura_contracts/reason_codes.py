@@ -112,6 +112,11 @@ class ReasonCode(StrEnum):
     CAPTURE_DATASET_UNKNOWN = "CAPTURE_DATASET_UNKNOWN"
     CAPTURE_DATASET_RELEASED = "CAPTURE_DATASET_RELEASED"
     CAPTURE_SPOOL_FULL = "CAPTURE_SPOOL_FULL"
+    AGENT_JOB_FAILED = "AGENT_JOB_FAILED"
+    AGENT_JOB_TIMED_OUT = "AGENT_JOB_TIMED_OUT"
+    AGENT_JOB_DEVICE_BUSY = "AGENT_JOB_DEVICE_BUSY"
+    EVALUATION_INVALID = "EVALUATION_INVALID"
+    TRAINING_INVALID = "TRAINING_INVALID"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
     API_FORBIDDEN = "API_FORBIDDEN"
     API_NOT_FOUND = "API_NOT_FOUND"
@@ -126,6 +131,7 @@ class ReasonCode(StrEnum):
     API_RATE_LIMITED = "API_RATE_LIMITED"
     API_INTERNAL_ERROR = "API_INTERNAL_ERROR"
     API_UNAVAILABLE = "API_UNAVAILABLE"
+    API_RELEASE_GATE_UNMET = "API_RELEASE_GATE_UNMET"
 
 
 @dataclass(frozen=True, slots=True)
@@ -818,6 +824,41 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=True,
         message="The robot's episode spool is full; new episodes are not recorded until uploads free space.",
     ),
+    ReasonCode.AGENT_JOB_FAILED: ReasonCodeInfo(
+        code=ReasonCode.AGENT_JOB_FAILED,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message='An evaluation or training job failed at the site; its message says why.',
+    ),
+    ReasonCode.AGENT_JOB_TIMED_OUT: ReasonCodeInfo(
+        code=ReasonCode.AGENT_JOB_TIMED_OUT,
+        area="agent",
+        severity="error",
+        retryable=True,
+        message='An evaluation or training job ran longer than this site allows.',
+    ),
+    ReasonCode.AGENT_JOB_DEVICE_BUSY: ReasonCodeInfo(
+        code=ReasonCode.AGENT_JOB_DEVICE_BUSY,
+        area="agent",
+        severity="warning",
+        retryable=True,
+        message="Every GPU this site's agent may use serves robots, and jobs may not share them.",
+    ),
+    ReasonCode.EVALUATION_INVALID: ReasonCodeInfo(
+        code=ReasonCode.EVALUATION_INVALID,
+        area="evaluation",
+        severity="error",
+        retryable=False,
+        message="The evaluation's suite is not one the site can run.",
+    ),
+    ReasonCode.TRAINING_INVALID: ReasonCodeInfo(
+        code=ReasonCode.TRAINING_INVALID,
+        area="training",
+        severity="error",
+        retryable=False,
+        message="The training job's recipe or episode filter is not valid.",
+    ),
     ReasonCode.API_UNAUTHENTICATED: ReasonCodeInfo(
         code=ReasonCode.API_UNAUTHENTICATED,
         area="api",
@@ -929,6 +970,14 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=True,
         message='The service is temporarily unavailable.',
         http_status=503,
+    ),
+    ReasonCode.API_RELEASE_GATE_UNMET: ReasonCodeInfo(
+        code=ReasonCode.API_RELEASE_GATE_UNMET,
+        area="api",
+        severity="warning",
+        retryable=False,
+        message='The deployment requires evidence the candidate revision does not have yet.',
+        http_status=409,
     ),
 }
 

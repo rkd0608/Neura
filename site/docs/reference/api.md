@@ -843,6 +843,84 @@ Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`,
 
 Responses: `204`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
 
+## Improvement
+
+### List a deployment's evaluations
+
+`GET /v1/deployments/{deployment_id}/evaluations` · operation `listEvaluations`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `deployment_id` | path | yes |  |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+| `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Evaluate a candidate revision against the one it would replace
+
+`POST /v1/deployments/{deployment_id}/evaluations` · operation `createEvaluation`
+
+Creates an Evaluation and an Operation. The deployment's site runs it, on its own data and hardware, in the worker sandbox and never on a GPU that serves robots: in simulation on the same scenes for both models, or on episodes the site's robots recorded (design §28.3). The episodes never leave the site; the report does.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `deployment_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `EvaluationCreate`.
+
+Responses: `202`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Get an evaluation
+
+`GET /v1/evaluations/{evaluation_id}` · operation `getEvaluation`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `evaluation_id` | path | yes |  |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
+### List a deployment's training jobs
+
+`GET /v1/deployments/{deployment_id}/training-jobs` · operation `listTrainingJobs`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `deployment_id` | path | yes |  |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+| `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Fine-tune a revision's model on episodes recorded at its site
+
+`POST /v1/deployments/{deployment_id}/training-jobs` · operation `createTrainingJob`
+
+Creates a TrainingJob and an Operation. The site snapshots the episodes the filter selects, fine-tunes the base revision's model on them in the worker sandbox, and signs the result as a new artifact with its lineage; its weights stay at the site (design §28.4). On success the new artifact and its execution profile are registered and a candidate revision is created in the deployment, to prepare, evaluate and activate like any other.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `deployment_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `TrainingJobCreate`.
+
+Responses: `202`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Get a training job
+
+`GET /v1/training-jobs/{training_job_id}` · operation `getTrainingJob`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `training_job_id` | path | yes |  |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
 ## Weights
 
 ### List the sealed weight files of a project

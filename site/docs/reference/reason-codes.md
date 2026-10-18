@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 111 codes.
+Catalog version 1, 117 codes.
 
 ## Contracts
 
@@ -128,6 +128,9 @@ Catalog version 1, 111 codes.
 | `AGENT_ACTIVATION_SUPERSEDED` | info | no |  | A newer activation for the same robots was approved before every robot switched. |
 | `AGENT_BOUNDARY_DENIED` | error | no |  | The instruction is outside the boundaries configured on this server. |
 | `AGENT_OPERATION_INTERRUPTED` | warning | yes |  | The site agent restarted while the operation was running; run it again. |
+| `AGENT_JOB_FAILED` | error | yes |  | An evaluation or training job failed at the site; its message says why. |
+| `AGENT_JOB_TIMED_OUT` | error | yes |  | An evaluation or training job ran longer than this site allows. |
+| `AGENT_JOB_DEVICE_BUSY` | warning | yes |  | Every GPU this site's agent may use serves robots, and jobs may not share them. |
 
 ## Capture
 
@@ -145,6 +148,18 @@ Catalog version 1, 111 codes.
 | `CAPTURE_DATASET_UNKNOWN` | warning | no |  | No dataset with this identifier exists at this site. |
 | `CAPTURE_DATASET_RELEASED` | warning | no |  | The dataset was released; its episodes may be gone. |
 | `CAPTURE_SPOOL_FULL` | warning | yes |  | The robot's episode spool is full; new episodes are not recorded until uploads free space. |
+
+## Evaluation
+
+| Code | Severity | Retryable | HTTP | Meaning |
+| --- | --- | --- | --- | --- |
+| `EVALUATION_INVALID` | error | no |  | The evaluation's suite is not one the site can run. |
+
+## Training
+
+| Code | Severity | Retryable | HTTP | Meaning |
+| --- | --- | --- | --- | --- |
+| `TRAINING_INVALID` | error | no |  | The training job's recipe or episode filter is not valid. |
 
 ## Api
 
@@ -164,4 +179,5 @@ Catalog version 1, 111 codes.
 | `API_RATE_LIMITED` | warning | yes | 429 | Too many requests; retry after the indicated delay. |
 | `API_INTERNAL_ERROR` | error | yes | 500 | An internal error occurred. |
 | `API_UNAVAILABLE` | error | yes | 503 | The service is temporarily unavailable. |
+| `API_RELEASE_GATE_UNMET` | warning | no | 409 | The deployment requires evidence the candidate revision does not have yet. |
 

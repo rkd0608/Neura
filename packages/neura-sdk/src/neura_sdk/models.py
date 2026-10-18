@@ -295,6 +295,7 @@ class DeploymentSpec(TypedDict):
     desired_revision_id: NotRequired[RevisionId | None]
     rollout: DeploymentSpecRollout
     capture: NotRequired[CaptureSettings]
+    release_gates: NotRequired[ReleaseGates]
     labels: NotRequired[Labels]
 
 
@@ -304,6 +305,7 @@ class DeploymentUpdateSpec(TypedDict):
     robot_ids: NotRequired[list[RobotId]]
     desired_revision_id: NotRequired[RevisionId | None]
     capture: NotRequired[CaptureSettings]
+    release_gates: NotRequired[ReleaseGates]
 
 
 class DeploymentUpdate(TypedDict):
@@ -537,7 +539,13 @@ class Operation(TypedDict):
 
     metadata: Metadata
     kind: Literal[
-        "prepare_revision", "activate_revision", "rollback", "collect_diagnostics", "upgrade_agent"
+        "prepare_revision",
+        "activate_revision",
+        "rollback",
+        "collect_diagnostics",
+        "upgrade_agent",
+        "evaluate",
+        "train",
     ]
     target: str
     state: OperationState
@@ -965,3 +973,155 @@ class SupportGrantPage(TypedDict):
 
 
 type Timestamp = str
+
+
+class EpisodeFilter(TypedDict):
+    """
+    Which recorded episodes (design §28.2): every field narrows; lists are any-of. Only
+    complete episodes are used unless complete_only is false.
+    """
+
+    robot_names: NotRequired[list[str]]
+    revision_ids: NotRequired[list[RevisionId]]
+    outcomes: NotRequired[list[Literal["success", "failure", "unknown"]]]
+    end_reasons: NotRequired[
+        list[Literal["stopped", "takeover", "fault", "new_epoch", "max_duration", "disconnected"]]
+    ]
+    since: NotRequired[Timestamp]
+    until: NotRequired[Timestamp]
+    complete_only: NotRequired[bool]
+    limit: NotRequired[int]
+
+
+class SimulationSuite(TypedDict):
+    """
+    Both models on the same simulated scenes (seeds), in lockstep; the verdict is a paired
+    non-inferiority test of the success rates with the given margin.
+    """
+
+    kind: Literal["simulation"]
+    scene: NotRequired[Literal["aloha_transfer_cube", "aloha_insertion"]]
+    episodes: NotRequired[int]
+    first_seed: NotRequired[int]
+    max_steps: NotRequired[int]
+    margin: NotRequired[float]
+
+
+class ReplaySuite(TypedDict):
+    """
+    Both models on observations the site's robots recorded, each prediction compared with
+    what the robot then did, in the model's units, normalized by each action's range. A
+    regression check on real data: it cannot show a candidate is better.
+    """
+
+    kind: Literal["replay"]
+    filter: NotRequired[EpisodeFilter]
+    horizon: NotRequired[int]
+    stride: NotRequired[int]
+    max_episodes: NotRequired[int]
+    relative: NotRequired[float]
+    absolute: NotRequired[float]
+    batch_size: NotRequired[int]
+
+
+type EvaluationSuite = SimulationSuite | ReplaySuite
+
+
+type EvaluationVerdict = Literal["superior", "non_inferior", "inconclusive", "inferior"]
+
+
+class EvaluationSpec(TypedDict):
+    candidate_revision_id: RevisionId
+    baseline_revision_id: NotRequired[RevisionId | None]
+    suite: EvaluationSuite
+
+
+class EvaluationCreate(TypedDict):
+    spec: EvaluationSpec
+
+
+class EvaluationStatus(TypedDict):
+    phase: Literal["Pending", "Running", "Succeeded", "Failed", "Cancelled"]
+    operation_id: NotRequired[OperationId | None]
+    reason: NotRequired[ReasonCode | None]
+    message: NotRequired[str]
+    verdict: NotRequired[EvaluationVerdict | None]
+    report: NotRequired[dict[str, Any] | None]
+    finished_at: NotRequired[Timestamp | None]
+
+
+class Evaluation(TypedDict):
+    metadata: Metadata
+    spec: EvaluationSpec
+    status: EvaluationStatus
+
+
+type EvaluationId = str
+
+
+class EvaluationPage(TypedDict):
+    items: list[Evaluation]
+    page: PageInfo
+
+
+class TrainingRecipe(TypedDict):
+    """How to fine-tune (LeRobot's training loop at the site)."""
+
+    steps: NotRequired[int]
+    batch_size: NotRequired[int]
+    learning_rate: NotRequired[float | None]
+    seed: NotRequired[int]
+    num_workers: NotRequired[int]
+    normalization: NotRequired[Literal["base", "dataset"]]
+    log_every: NotRequired[int]
+
+
+class TrainingJobSpec(TypedDict):
+    base_revision_id: RevisionId
+    episodes: NotRequired[EpisodeFilter]
+    recipe: NotRequired[TrainingRecipe]
+    artifact_name: NotRequired[Name]
+    artifact_version: NotRequired[str]
+
+
+class TrainingJobCreate(TypedDict):
+    spec: TrainingJobSpec
+
+
+class TrainingJobStatus(TypedDict):
+    phase: Literal["Pending", "Running", "Succeeded", "Failed", "Cancelled"]
+    operation_id: NotRequired[OperationId | None]
+    reason: NotRequired[ReasonCode | None]
+    message: NotRequired[str]
+    artifact_id: NotRequired[ModelArtifactId | None]
+    execution_profile_id: NotRequired[ExecutionProfileId | None]
+    candidate_revision_id: NotRequired[RevisionId | None]
+    dataset_digest: NotRequired[Digest | None]
+    dataset_episodes: NotRequired[int | None]
+    metrics: NotRequired[dict[str, Any] | None]
+    finished_at: NotRequired[Timestamp | None]
+
+
+class TrainingJob(TypedDict):
+    metadata: Metadata
+    spec: TrainingJobSpec
+    status: TrainingJobStatus
+
+
+type TrainingJobId = str
+
+
+class TrainingJobPage(TypedDict):
+    items: list[TrainingJob]
+    page: PageInfo
+
+
+class ReleaseGates(TypedDict):
+    """
+    Evidence a revision needs before it may be activated in place of the one robots run
+    (design §28.3): a Succeeded evaluation of each kind listed, against that revision, with a
+    superior or non_inferior verdict. A first activation has nothing to replace and needs
+    none.
+    """
+
+    evaluations: NotRequired[list[Literal["simulation", "replay"]]]

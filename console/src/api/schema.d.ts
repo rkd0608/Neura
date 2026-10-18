@@ -829,6 +829,82 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/deployments/{deployment_id}/evaluations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a deployment's evaluations. */
+    get: operations["listEvaluations"];
+    put?: never;
+    /**
+     * Evaluate a candidate revision against the one it would replace.
+     * @description Creates an Evaluation and an Operation. The deployment's site runs it, on its own data and hardware, in the worker sandbox and never on a GPU that serves robots: in simulation on the same scenes for both models, or on episodes the site's robots recorded (design §28.3). The episodes never leave the site; the report does.
+     */
+    post: operations["createEvaluation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluations/{evaluation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get an evaluation. */
+    get: operations["getEvaluation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/deployments/{deployment_id}/training-jobs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a deployment's training jobs. */
+    get: operations["listTrainingJobs"];
+    put?: never;
+    /**
+     * Fine-tune a revision's model on episodes recorded at its site.
+     * @description Creates a TrainingJob and an Operation. The site snapshots the episodes the filter selects, fine-tunes the base revision's model on them in the worker sandbox, and signs the result as a new artifact with its lineage; its weights stay at the site (design §28.4). On success the new artifact and its execution profile are registered and a candidate revision is created in the deployment, to prepare, evaluate and activate like any other.
+     */
+    post: operations["createTrainingJob"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/training-jobs/{training_job_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a training job. */
+    get: operations["getTrainingJob"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1110,6 +1186,7 @@ export interface components {
         canary_robot_id?: components["schemas"]["RobotId"];
       };
       capture?: components["schemas"]["CaptureSettings"];
+      release_gates?: components["schemas"]["ReleaseGates"];
       labels?: components["schemas"]["Labels"];
     };
     /** @description JSON Merge Patch (RFC 7396) of the mutable spec fields. */
@@ -1120,6 +1197,7 @@ export interface components {
         robot_ids?: components["schemas"]["RobotId"][];
         desired_revision_id?: components["schemas"]["RevisionId"] | null;
         capture?: components["schemas"]["CaptureSettings"];
+        release_gates?: components["schemas"]["ReleaseGates"];
       };
     };
     Digest: string;
@@ -1328,7 +1406,9 @@ export interface components {
         | "activate_revision"
         | "rollback"
         | "collect_diagnostics"
-        | "upgrade_agent";
+        | "upgrade_agent"
+        | "evaluate"
+        | "train";
       /** @description Identifier of the resource the operation acts on. */
       target: string;
       state: components["schemas"]["OperationState"];
@@ -1695,6 +1775,168 @@ export interface components {
     };
     /** Format: date-time */
     Timestamp: string;
+    /** @description Which recorded episodes (design §28.2): every field narrows; lists are any-of. Only complete episodes are used unless complete_only is false. */
+    EpisodeFilter: {
+      robot_names?: string[];
+      revision_ids?: components["schemas"]["RevisionId"][];
+      outcomes?: ("success" | "failure" | "unknown")[];
+      end_reasons?: (
+        "stopped" | "takeover" | "fault" | "new_epoch" | "max_duration" | "disconnected"
+      )[];
+      since?: components["schemas"]["Timestamp"];
+      until?: components["schemas"]["Timestamp"];
+      /** @default true */
+      complete_only: boolean;
+      limit?: number;
+    };
+    /** @description Both models on the same simulated scenes (seeds), in lockstep; the verdict is a paired non-inferiority test of the success rates with the given margin. */
+    SimulationSuite: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "simulation";
+      /**
+       * @default aloha_transfer_cube
+       * @enum {unknown}
+       */
+      scene: "aloha_transfer_cube" | "aloha_insertion";
+      /** @default 50 */
+      episodes: number;
+      /** @default 1000 */
+      first_seed: number;
+      /** @default 400 */
+      max_steps: number;
+      /**
+       * @description The largest drop in success rate still called no worse.
+       * @default 0.1
+       */
+      margin: number;
+    };
+    /** @description Both models on observations the site's robots recorded, each prediction compared with what the robot then did, in the model's units, normalized by each action's range. A regression check on real data: it cannot show a candidate is better. */
+    ReplaySuite: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "replay";
+      filter?: components["schemas"]["EpisodeFilter"];
+      horizon?: number;
+      /** @default 5 */
+      stride: number;
+      /** @default 200 */
+      max_episodes: number;
+      /** @default 0.25 */
+      relative: number;
+      /** @default 0.01 */
+      absolute: number;
+      /** @default 8 */
+      batch_size: number;
+    };
+    EvaluationSuite:
+      components["schemas"]["SimulationSuite"] | components["schemas"]["ReplaySuite"];
+    /** @enum {string} */
+    EvaluationVerdict: "superior" | "non_inferior" | "inconclusive" | "inferior";
+    EvaluationSpec: {
+      candidate_revision_id: components["schemas"]["RevisionId"];
+      /** @description The revision it would replace. Default: the one the deployment's robots run. */
+      baseline_revision_id?: components["schemas"]["RevisionId"] | null;
+      suite: components["schemas"]["EvaluationSuite"];
+    };
+    EvaluationCreate: {
+      spec: components["schemas"]["EvaluationSpec"];
+    };
+    Evaluation: {
+      metadata: components["schemas"]["Metadata"];
+      spec: {
+        deployment_id?: components["schemas"]["DeploymentId"];
+      } & components["schemas"]["EvaluationSpec"];
+      readonly status: {
+        /** @enum {string} */
+        phase: "Pending" | "Running" | "Succeeded" | "Failed" | "Cancelled";
+        operation_id?: components["schemas"]["OperationId"] | null;
+        reason?: components["schemas"]["ReasonCode"] | null;
+        message?: string;
+        verdict?: components["schemas"]["EvaluationVerdict"] | null;
+        /** @description The site's report: success rates and their intervals, the paired comparison and each scene, or replay errors by episode outcome. */
+        report?: Record<string, never> | null;
+        finished_at?: components["schemas"]["Timestamp"] | null;
+      };
+    };
+    /**
+     * @description Evaluation identifier: `evl_` followed by a ULID.
+     * @example evl_01JA2B3C4D5E6F7G8H9JKMNPQR
+     */
+    EvaluationId: string;
+    EvaluationPage: {
+      items: components["schemas"]["Evaluation"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /** @description How to fine-tune (LeRobot's training loop at the site). */
+    TrainingRecipe: {
+      /** @default 2000 */
+      steps: number;
+      /** @default 8 */
+      batch_size: number;
+      /** @description Default: the policy's own training preset. */
+      learning_rate?: number | null;
+      /** @default 1000 */
+      seed: number;
+      /** @default 2 */
+      num_workers: number;
+      /**
+       * @description base keeps the base model's input and output normalization; dataset uses the recorded data's statistics.
+       * @default base
+       * @enum {unknown}
+       */
+      normalization: "base" | "dataset";
+      /** @default 50 */
+      log_every: number;
+    };
+    TrainingJobSpec: {
+      base_revision_id: components["schemas"]["RevisionId"];
+      episodes?: components["schemas"]["EpisodeFilter"];
+      recipe?: components["schemas"]["TrainingRecipe"];
+      artifact_name?: components["schemas"]["Name"];
+      artifact_version?: string;
+    };
+    TrainingJobCreate: {
+      spec: components["schemas"]["TrainingJobSpec"];
+    };
+    TrainingJob: {
+      metadata: components["schemas"]["Metadata"];
+      spec: {
+        deployment_id?: components["schemas"]["DeploymentId"];
+      } & components["schemas"]["TrainingJobSpec"];
+      readonly status: {
+        /** @enum {string} */
+        phase: "Pending" | "Running" | "Succeeded" | "Failed" | "Cancelled";
+        operation_id?: components["schemas"]["OperationId"] | null;
+        reason?: components["schemas"]["ReasonCode"] | null;
+        message?: string;
+        artifact_id?: components["schemas"]["ModelArtifactId"] | null;
+        execution_profile_id?: components["schemas"]["ExecutionProfileId"] | null;
+        candidate_revision_id?: components["schemas"]["RevisionId"] | null;
+        dataset_digest?: components["schemas"]["Digest"] | null;
+        dataset_episodes?: number | null;
+        /** @description Episodes and frames trained on, steps, duration and loss. */
+        metrics?: Record<string, never> | null;
+        finished_at?: components["schemas"]["Timestamp"] | null;
+      };
+    };
+    /**
+     * @description Training job identifier: `trn_` followed by a ULID.
+     * @example trn_01JA2B3C4D5E6F7G8H9JKMNPQR
+     */
+    TrainingJobId: string;
+    TrainingJobPage: {
+      items: components["schemas"]["TrainingJob"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /** @description Evidence a revision needs before it may be activated in place of the one robots run (design §28.3): a Succeeded evaluation of each kind listed, against that revision, with a superior or non_inferior verdict. A first activation has nothing to replace and needs none. */
+    ReleaseGates: {
+      evaluations?: ("simulation" | "replay")[];
+    };
   };
   responses: {
     /** @description API_CONFLICT */
@@ -1808,6 +2050,8 @@ export interface components {
     };
   };
   parameters: {
+    EvaluationId: components["schemas"]["EvaluationId"];
+    TrainingJobId: components["schemas"]["TrainingJobId"];
     ActivationRequestId: components["schemas"]["ActivationRequestId"];
     ApiTokenId: components["schemas"]["ApiTokenId"];
     AuditRecordId: components["schemas"]["AuditRecordId"];
@@ -4293,6 +4537,212 @@ export interface operations {
       412: components["responses"]["PreconditionFailed"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listEvaluations: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+        /** @description Filter by label, `key=value`. Repeat to AND several labels. */
+        label?: components["parameters"]["LabelSelector"];
+      };
+      header?: never;
+      path: {
+        deployment_id: components["parameters"]["DeploymentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EvaluationPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createEvaluation: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        deployment_id: components["parameters"]["DeploymentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EvaluationCreate"];
+      };
+    };
+    responses: {
+      /** @description Accepted; follow the Operation until it finishes. */
+      202: {
+        headers: {
+          Location: components["headers"]["Location"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Operation"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getEvaluation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        evaluation_id: components["parameters"]["EvaluationId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Evaluation"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listTrainingJobs: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+        /** @description Filter by label, `key=value`. Repeat to AND several labels. */
+        label?: components["parameters"]["LabelSelector"];
+      };
+      header?: never;
+      path: {
+        deployment_id: components["parameters"]["DeploymentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TrainingJobPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createTrainingJob: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        deployment_id: components["parameters"]["DeploymentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TrainingJobCreate"];
+      };
+    };
+    responses: {
+      /** @description Accepted; follow the Operation until it finishes. */
+      202: {
+        headers: {
+          Location: components["headers"]["Location"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Operation"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getTrainingJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        training_job_id: components["parameters"]["TrainingJobId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TrainingJob"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];

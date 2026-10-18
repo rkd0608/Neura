@@ -23,6 +23,7 @@ neura-sdk = { workspace = true }
 neura-adapters = { workspace = true }
 neura-bench = { workspace = true }
 neura-robots = { workspace = true }
+neura-learn = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -37,6 +38,7 @@ dev = [
     "neura-adapters",
     "neura-bench",
     "neura-robots",
+    "neura-learn",
     "grpcio-tools==1.84.0",
     "httpx2>=0.1",
     "hypothesis>=6.169",
@@ -51,7 +53,7 @@ dev = [
     "types-pyyaml>=6.0.12",
 ]
 # Real models (PyTorch, LeRobot): `uv sync --group models`. Not part of the default setup.
-models = ["neura-adapters[lerobot]", "neura-robots[so101,sim]"]
+models = ["neura-adapters[lerobot]", "neura-robots[so101,sim]", "neura-learn[models]"]
 
 [tool.ruff]
 line-length = 100

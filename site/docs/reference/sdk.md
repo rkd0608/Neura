@@ -42,11 +42,13 @@ with Client("https://neura.example", token="...") as neura:
 | `create_api_token` | `(organization_id: str, *, body: ApiTokenCreate, idempotency_key: str \| None=None) -&gt; ApiTokenWithSecret` | Create an API token. The secret is returned once. (``POST /v1/organizations/{organization_id}/api-tokens``) |
 | `create_deployment` | `(project_id: str, *, body: DeploymentCreate, idempotency_key: str \| None=None) -&gt; Deployment` | Create a deployment. (``POST /v1/projects/{project_id}/deployments``) |
 | `create_enrollment_token` | `(site_id: str, *, body: EnrollmentTokenCreate, idempotency_key: str \| None=None) -&gt; EnrollmentToken` | Create a one-time server enrollment token. (``POST /v1/sites/{site_id}/enrollment- tokens``) |
+| `create_evaluation` | `(deployment_id: str, *, body: EvaluationCreate, idempotency_key: str \| None=None) -&gt; Operation` | Evaluate a candidate revision against the one it would replace. (``POST /v1/deployments/{deployment_id}/evaluations``) |
 | `create_project` | `(organization_id: str, *, body: ProjectCreate, idempotency_key: str \| None=None) -&gt; Project` | Create a project. (``POST /v1/organizations/{organization_id}/projects``) |
 | `create_revision` | `(deployment_id: str, *, body: RevisionCreate, idempotency_key: str \| None=None) -&gt; Revision` | Create an immutable revision. (``POST /v1/deployments/{deployment_id}/revisions``) |
 | `create_robot` | `(project_id: str, *, body: RobotCreate, idempotency_key: str \| None=None) -&gt; Robot` | Create a robot. (``POST /v1/projects/{project_id}/robots``) |
 | `create_site` | `(project_id: str, *, body: SiteCreate, idempotency_key: str \| None=None) -&gt; Site` | Create a site. (``POST /v1/projects/{project_id}/sites``) |
 | `create_support_grant` | `(organization_id: str, *, body: SupportGrantCreate, idempotency_key: str \| None=None) -&gt; SupportGrant` | Grant time-boxed support access. (``POST /v1/organizations/{organization_id}/support- grants``) |
+| `create_training_job` | `(deployment_id: str, *, body: TrainingJobCreate, idempotency_key: str \| None=None) -&gt; Operation` | Fine-tune a revision's model on episodes recorded at its site. (``POST /v1/deployments/{deployment_id}/training-jobs``) |
 | `delete_deployment` | `(deployment_id: str, *, if_match: str) -&gt; None` | Delete a deployment. (``DELETE /v1/deployments/{deployment_id}``) |
 | `delete_robot` | `(robot_id: str, *, if_match: str) -&gt; None` | Delete a robot. (``DELETE /v1/robots/{robot_id}``) |
 | `delete_sealed_weights` | `(project_id: str, digest: str, *, if_match: str) -&gt; None` | Remove a sealed weight file from Neura's registry. (``DELETE /v1/projects/{project_id}/sealed-weights/{digest}``) |
@@ -54,6 +56,7 @@ with Client("https://neura.example", token="...") as neura:
 | `delete_site` | `(site_id: str, *, if_match: str) -&gt; None` | Delete a site. (``DELETE /v1/sites/{site_id}``) |
 | `get_current_principal` | `() -&gt; CurrentPrincipal` | Who the caller is and which organizations it can access. (``GET /v1/me``) |
 | `get_deployment` | `(deployment_id: str) -&gt; Deployment` | Get a deployment. (``GET /v1/deployments/{deployment_id}``) |
+| `get_evaluation` | `(evaluation_id: str) -&gt; Evaluation` | Get an evaluation. (``GET /v1/evaluations/{evaluation_id}``) |
 | `get_execution_profile` | `(execution_profile_id: str) -&gt; ExecutionProfile` | Get a registered execution profile. (``GET /v1/execution- profiles/{execution_profile_id}``) |
 | `get_fault` | `(fault_id: str) -&gt; Fault` | Get a fault. (``GET /v1/faults/{fault_id}``) |
 | `get_meta` | `() -&gt; ServiceMeta` | Service and API version information. (``GET /v1/meta``) |
@@ -68,10 +71,12 @@ with Client("https://neura.example", token="...") as neura:
 | `get_server` | `(server_id: str) -&gt; Server` | Get a server, its GPUs and preflight results. (``GET /v1/servers/{server_id}``) |
 | `get_session` | `(session_id: str) -&gt; Session` | Get a session. (``GET /v1/sessions/{session_id}``) |
 | `get_site` | `(site_id: str) -&gt; Site` | Get a site. (``GET /v1/sites/{site_id}``) |
+| `get_training_job` | `(training_job_id: str) -&gt; TrainingJob` | Get a training job. (``GET /v1/training-jobs/{training_job_id}``) |
 | `list_activation_requests` | `(deployment_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ActivationRequestPage` | List activation requests. (``GET /v1/deployments/{deployment_id}/activation- requests``) |
 | `list_api_tokens` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ApiTokenPage` | List API tokens. (``GET /v1/organizations/{organization_id}/api-tokens``) |
 | `list_audit_records` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; AuditRecordPage` | List audit records. (``GET /v1/projects/{project_id}/audit-records``) |
 | `list_deployments` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; DeploymentPage` | List deployments. (``GET /v1/projects/{project_id}/deployments``) |
+| `list_evaluations` | `(deployment_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; EvaluationPage` | List a deployment's evaluations. (``GET /v1/deployments/{deployment_id}/evaluations``) |
 | `list_execution_profiles` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ExecutionProfilePage` | List registered execution profiles. (``GET /v1/projects/{project_id}/execution- profiles``) |
 | `list_faults` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; FaultPage` | List faults. (``GET /v1/projects/{project_id}/faults``) |
 | `list_members` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; MemberPage` | List the organization's members and invitations. (``GET /v1/organizations/{organization_id}/members``) |
@@ -85,6 +90,7 @@ with Client("https://neura.example", token="...") as neura:
 | `list_sessions` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; SessionPage` | List live and recent robot sessions. (``GET /v1/projects/{project_id}/sessions``) |
 | `list_sites` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; SitePage` | List sites. (``GET /v1/projects/{project_id}/sites``) |
 | `list_support_grants` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; SupportGrantPage` | List support access grants. (``GET /v1/organizations/{organization_id}/support- grants``) |
+| `list_training_jobs` | `(deployment_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; TrainingJobPage` | List a deployment's training jobs. (``GET /v1/deployments/{deployment_id}/training- jobs``) |
 | `prepare_revision` | `(revision_id: str, *, idempotency_key: str \| None=None) -&gt; Operation` | Prepare a revision at its site: pull, verify, warm and profile. (``POST /v1/revisions/{revision_id}/prepare``) |
 | `query_metrics` | `(project_id: str, *, body: MetricsQuery) -&gt; MetricsResult` | Query aggregate metrics. (``POST /v1/projects/{project_id}/metrics/query``) |
 | `register_execution_profile` | `(project_id: str, *, body: ExecutionProfileCreate, idempotency_key: str \| None=None) -&gt; ExecutionProfile` | Register an immutable execution profile document. (``POST /v1/projects/{project_id}/execution-profiles``) |

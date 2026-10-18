@@ -1985,8 +1985,15 @@ Built:
 - **The loop, end to end** through the control plane and a real agent on a synthetic-weight ACT
   model (§28.4, *Evidence*).
 
-Not built yet: the same loop on the simulated ALOHA cell, from episodes the cell records (labeled
-by the simulator) to a simulation-suite verdict and an activation; an episode viewer at the site.
+- **The loop's data path on the simulated ALOHA cell**
+  (`packages/neura-learn/tests/test_aloha_loop.py`): the cell's robot, served by a site gateway,
+  records its tasks (two arms, fourteen joints, its cameras), each labeled by the simulator; the
+  recordings fine-tune the served ACT model; the result is evaluated against its base on the same
+  simulated scenes and on the recordings. With synthetic weights nothing is solved, so this shows
+  each stage works on the cell's data, not that the loop improves a policy.
+
+Not built yet: the same run with the published pretrained ALOHA checkpoint (it needs the model
+hub, or a GPU runner, to show a policy improving), and an episode viewer at the site.
 
 ---
 

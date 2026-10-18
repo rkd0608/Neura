@@ -23,7 +23,7 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M9. Capture | Robots record what they see and do, episodes kept and labeled at the site, datasets, export to LeRobot | Built |
 | M10. Evaluate | A candidate model against the running one, at the site: simulation, replay and shadow suites, release gates | Built |
 | M11. Improve | Fine-tuning at the site on recorded episodes, signed artifacts with lineage, candidate revisions | Built |
-| M12. The loop | The loop in the console and these docs; capture, fine-tune, evaluate and activate on the simulated cell | In progress: console and docs built, the run on the simulated cell pending |
+| M12. The loop | The loop in the console and these docs; capture, fine-tune, evaluate and activate on the simulated cell | In progress: console, docs and the cell's data path built; the run with a pretrained policy pending |
 
 ## Not yet on this site
 

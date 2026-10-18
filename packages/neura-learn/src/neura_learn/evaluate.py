@@ -255,6 +255,12 @@ def evaluate_replay(
 ) -> dict[str, Any]:
     samples = replay_samples(episodes, candidate_binding, suite)
     if not samples:
+        from neura_server.capture.export import fits
+
+        if any(fits(episode, candidate_binding) is None for episode in episodes):
+            raise ValueError(
+                "the recorded episodes are shorter than the actions compared per prediction"
+            )
         raise ValueError("no recorded episode fits the candidate model")
     ranges = action_ranges(candidate_binding)
     report: dict[str, Any] = {

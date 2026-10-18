@@ -1,5 +1,5 @@
 """Release gates (design §28.3): the evidence a revision needs before robots switch to it from
-the revision they run.
+the revision they run (a simulation, a replay on recorded episodes, or a shadow on live ones).
 
 A deployment lists the kinds of evaluation it requires. A revision passes a kind when an
 evaluation of that kind, of this revision against the revision a robot runs now, succeeded with a

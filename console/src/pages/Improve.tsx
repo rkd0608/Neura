@@ -56,6 +56,9 @@ const SIMULATION = {
   first_seed: 1000,
   max_steps: 400,
 } as const;
+const SHADOW = { kind: "shadow", min_samples: 200, every_nth: 1, tolerance: 0.05 } as const;
+
+type SuiteKind = "replay" | "simulation" | "shadow";
 
 export function ImprovePanel({
   deployment,
@@ -330,6 +333,10 @@ export function EvaluationRow({
           <span>
             Simulation <span className="muted small">· {suite.episodes} scenes</span>
           </span>
+        ) : suite.kind === "shadow" ? (
+          <span>
+            Shadow <span className="muted small">· live observations</span>
+          </span>
         ) : (
           <span>
             Replay <span className="muted small">· recorded episodes</span>
@@ -377,6 +384,19 @@ function summary(evaluation: Evaluation) {
   const report = evaluation.status.report as Record<string, Record<string, unknown>> | null;
   if (!report) return <span className="muted">—</span>;
   const episodes = (report as Record<string, unknown>).episodes;
+  if (evaluation.spec.suite.kind === "shadow") {
+    const mean = report.divergence?.mean;
+    const samples = (report as Record<string, unknown>).samples;
+    return (
+      <span title="Mean distance from the running model's actions, as a share of each command's range">
+        {typeof mean === "number" ? `${(mean * 100).toFixed(1)}%` : "—"}
+        <span className="muted small">
+          {" "}
+          apart · {typeof samples === "number" ? samples : 0} live observations
+        </span>
+      </span>
+    );
+  }
   if (evaluation.spec.suite.kind === "simulation") {
     return (
       <span>
@@ -412,7 +432,7 @@ function ReleaseGates({
   const toasts = useToasts();
   const required = deployment.spec.release_gates?.evaluations ?? [];
   const save = useApiMutation(
-    async (evaluations: ("simulation" | "replay")[]) =>
+    async (evaluations: SuiteKind[]) =>
       unwrap(
         await api.PATCH("/v1/deployments/{deployment_id}", {
           params: {
@@ -424,7 +444,7 @@ function ReleaseGates({
       ),
     [["p", projectId]],
   );
-  const toggle = (kind: "simulation" | "replay") => {
+  const toggle = (kind: SuiteKind) => {
     const next = required.includes(kind) ? required.filter((k) => k !== kind) : [...required, kind];
     save.mutate(next, { onSuccess: () => toasts.info("Release gates saved.") });
   };
@@ -438,6 +458,7 @@ function ReleaseGates({
           [
             ["simulation", "A simulation evaluation, no worse than the running revision"],
             ["replay", "A replay on recorded episodes, no worse than the running revision"],
+            ["shadow", "A shadow on live observations, close to the running revision's actions"],
           ] as const
         ).map(([kind, text]) => (
           <label key={kind} className="row" style={{ gap: 8 }}>
@@ -633,7 +654,8 @@ function Evaluate({
       "",
   );
   const [baseline, setBaseline] = useState("");
-  const [kind, setKind] = useState<"replay" | "simulation">("replay");
+  const [kind, setKind] = useState<SuiteKind>("replay");
+  const [minutes, setMinutes] = useState(10);
   const [scenes, setScenes] = useState(50);
   const [margin, setMargin] = useState(0.1);
   const evaluate = useApiMutation(
@@ -646,7 +668,11 @@ function Evaluate({
               candidate_revision_id: candidate,
               baseline_revision_id: baseline || null,
               suite:
-                kind === "replay" ? { ...REPLAY } : { ...SIMULATION, episodes: scenes, margin },
+                kind === "replay"
+                  ? { ...REPLAY }
+                  : kind === "shadow"
+                    ? { ...SHADOW, duration_s: minutes * 60 }
+                    : { ...SIMULATION, episodes: scenes, margin },
             },
           },
         }),
@@ -700,13 +726,36 @@ function Evaluate({
             <select
               id="ev-kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as "replay" | "simulation")}
+              onChange={(e) => setKind(e.target.value as SuiteKind)}
             >
               <option value="replay">Replay on recorded episodes</option>
+              <option value="shadow">Shadow on live observations</option>
               <option value="simulation">Simulation (ALOHA transfer cube)</option>
             </select>
           </Field>
-          {kind === "simulation" ? (
+          {kind === "shadow" ? (
+            <>
+              <Field
+                id="ev-minutes"
+                label="Minutes"
+                hint="How long the candidate shadows the robots running the revision it would replace."
+              >
+                <input
+                  id="ev-minutes"
+                  type="number"
+                  min={1}
+                  max={10_080}
+                  value={minutes}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                />
+              </Field>
+              <p className="muted small">
+                The candidate sees what the robots see, in a worker of its own; its actions are
+                compared with theirs and never sent to a robot. It skips observations rather than
+                slow anything down.
+              </p>
+            </>
+          ) : kind === "simulation" ? (
             <div className="row" style={{ gap: 12 }}>
               <Field id="ev-scenes" label="Scenes">
                 <input

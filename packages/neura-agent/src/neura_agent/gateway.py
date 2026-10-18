@@ -73,10 +73,13 @@ def build_gateway_config(
     *,
     tls: GatewayTls | None = None,
     site_id: str | None = None,
+    shadows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The gateway's site.yaml: devices with credentials, and for every revision a robot may run
     (current or next), the robots allowed to run it. With ``tls``, robots authenticate with
-    certificates from the site CA; without it, with device tokens (development only)."""
+    certificates from the site CA; without it, with device tokens (development only).
+    ``shadows`` are candidates shadowing a served revision (design §28.3); each shadows the
+    robots allowed that revision."""
     manifest = state.manifest() or {"robots": [], "deployments": []}
     names = {r["name"] for r in manifest.get("robots", [])}
     devices: list[dict[str, Any]] = []
@@ -127,6 +130,11 @@ def build_gateway_config(
             deployment["capture"] = capture
         deployments.append(deployment)
     served = {d["revision_id"] for d in deployments}
+    shadowing = [
+        {**shadow, "robots": by_revision[shadow["of_revision_id"]]}
+        for shadow in shadows or []
+        if shadow["of_revision_id"] in served
+    ]
     assignments = {
         name: preferred
         for name, assignment in sorted(state.assignments.items())
@@ -139,6 +147,7 @@ def build_gateway_config(
         "lease_store": str(gateway_dir / "leases.db"),
         "devices": devices,
         "deployments": deployments,
+        "shadows": shadowing,
         "assignments": assignments,
         "serving": {
             "backend": settings.gateway_backend,

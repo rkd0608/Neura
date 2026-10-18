@@ -95,6 +95,23 @@ class DeploymentConfig(_Model):
     capture: CaptureConfig | None = None
 
 
+class ShadowConfig(_Model):
+    """A candidate served on the observations of robots running another revision, its actions
+    compared and never sent (design §28.3)."""
+
+    revision_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+    of_revision_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+    artifact: Path
+    robot_profile: Path
+    execution_profile: Path
+    robots: list[str] = Field(min_length=1)
+    checkpoint: Path | None = None
+    adapter: str | None = None
+    device: Device | None = None
+    # Offer the candidate every nth observation of each robot.
+    every_nth: int = Field(default=1, ge=1, le=10_000)
+
+
 class ProfilePointConfig(_Model):
     batch_size: int = Field(ge=1)
     p50_ms: float = Field(gt=0)
@@ -187,6 +204,7 @@ class GatewayConfig(_Model):
     default_rtt_ms: float = Field(default=20, gt=0)
     devices: list[DeviceConfig] = Field(default_factory=list)
     deployments: list[DeploymentConfig] = Field(default_factory=list)
+    shadows: list[ShadowConfig] = Field(default_factory=list)
     # Robot -> the revision it should run (its next one during an activation).
     assignments: dict[str, str] = Field(default_factory=dict)
     serving: ServingConfig = Field(default_factory=ServingConfig)
@@ -196,6 +214,9 @@ class GatewayConfig(_Model):
         for device in self.devices:
             if self.tls is not None and not device.certificate_sha256:
                 raise ValueError(f"device {device.robot_id} needs a certificate: TLS is on")
+        shadowed = [s.revision_id for s in self.shadows]
+        if len(set(shadowed)) != len(shadowed):
+            raise ValueError("a revision shadows at most one other")
         return self
 
     @classmethod
@@ -216,6 +237,17 @@ class GatewayConfig(_Model):
             )
             for d in config.deployments
         ]
+        shadows = [
+            s.model_copy(
+                update={
+                    "artifact": (base / s.artifact).resolve(),
+                    "robot_profile": (base / s.robot_profile).resolve(),
+                    "execution_profile": (base / s.execution_profile).resolve(),
+                    "checkpoint": (base / s.checkpoint).resolve() if s.checkpoint else None,
+                }
+            )
+            for s in config.shadows
+        ]
         lease_store = (base / config.lease_store).resolve() if config.lease_store else None
         tls = config.tls
         if tls is not None:
@@ -232,6 +264,7 @@ class GatewayConfig(_Model):
         return config.model_copy(
             update={
                 "deployments": deployments,
+                "shadows": shadows,
                 "lease_store": lease_store,
                 "serving": serving,
                 "tls": tls,

@@ -1024,7 +1024,24 @@ class ReplaySuite(TypedDict):
     batch_size: NotRequired[int]
 
 
-type EvaluationSuite = SimulationSuite | ReplaySuite
+class ShadowSuite(TypedDict):
+    """
+    The candidate on the live observations of the robots running the baseline, for a while.
+    Its actions are compared with theirs, in robot command units over the actions a robot
+    executes between refills, and never sent to a robot. It runs in a worker of its own, one
+    observation at a time, and skips observations rather than wait. The verdict says whether
+    it stayed within the tolerance of the running model; it cannot say which is better.
+    """
+
+    kind: Literal["shadow"]
+    duration_s: NotRequired[float]
+    min_samples: NotRequired[int]
+    max_samples: NotRequired[int | None]
+    every_nth: NotRequired[int]
+    tolerance: NotRequired[float]
+
+
+type EvaluationSuite = SimulationSuite | ReplaySuite | ShadowSuite
 
 
 type EvaluationVerdict = Literal["superior", "non_inferior", "inconclusive", "inferior"]
@@ -1126,4 +1143,4 @@ class ReleaseGates(TypedDict):
     none.
     """
 
-    evaluations: NotRequired[list[Literal["simulation", "replay"]]]
+    evaluations: NotRequired[list[Literal["simulation", "replay", "shadow"]]]

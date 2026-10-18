@@ -168,6 +168,11 @@ Schema version 1.
 | `evaluation.episodes_offered` | no | Replay: recorded episodes selected. |
 | `evaluation.samples` | no | Replay: predictions compared. |
 | `evaluation.dataset_digest` | yes | Replay: the dataset snapshot's digest. |
+| `evaluation.offered` | no | Shadow: live observations offered to the candidate. |
+| `evaluation.robots` | no | Shadow: how many robots it shadowed. |
+| `evaluation.duration_s` | no | Shadow: how long it shadowed, in seconds. |
+| `evaluation.divergence.*` | no | Shadow: how far the candidate's actions were from the running model's (mean, p95, max share of each command's range). |
+| `evaluation.skipped.*` | no | Shadow: observations not compared, by why (candidate busy, invalid input, running model's result lost). |
 | `training.recipe.*` | no | Training: the recipe (steps, batch size, learning rate, seed, normalization). |
 | `training.dataset.*` | no | Training: episodes and frames trained on, and why any were left out. |
 | `training.training.*` | no | Training: steps, duration and loss. |

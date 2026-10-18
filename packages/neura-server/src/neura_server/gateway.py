@@ -15,7 +15,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_adapters import PolicyError
+from neura_adapters import ModelInputs, PolicyError
 from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
@@ -23,6 +23,7 @@ from neura_server.admission import AdmissionController, SessionDemand
 from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.leases import Lease, LeaseDenied, LeaseTable
 from neura_server.scheduler import Batch, Dropped, InferenceRequest, Scheduler
+from neura_server.shadow import ShadowDeployment, ShadowRequest, ShadowTracker
 
 MAX_REPORTED_RTT_US = 10_000_000
 
@@ -92,9 +93,12 @@ class GatewayCore:
         leases: LeaseTable,
         max_message_bytes: int = 16 * 1024 * 1024,
         default_rtt_us: int = 20_000,
+        shadows: list[ShadowDeployment] | None = None,
     ) -> None:
         self.groups = groups
         self._deployments_by_robot = self._index(deployments)
+        self.shadows: dict[str, ShadowTracker] = {}
+        self.replace_shadows(shadows or [])
         self.leases = leases
         self.max_message_bytes = max_message_bytes
         self.default_rtt_us = default_rtt_us
@@ -138,6 +142,32 @@ class GatewayCore:
                 session.deployment = index[robot][session.deployment.revision_id]
         self._deployments_by_robot = index
         return closed
+
+    def replace_shadows(self, shadows: list[ShadowDeployment]) -> None:
+        """Apply a new set of shadows. One whose candidate, baseline, robots and sampling are
+        unchanged keeps its statistics."""
+
+        def identity(s: ShadowDeployment) -> tuple[Any, ...]:
+            return (
+                s.revision_id,
+                s.of_revision_id,
+                s.robots,
+                s.every_nth,
+                s.binding.artifact_digest,
+                s.binding.execution_profile_digest,
+            )
+
+        trackers = {}
+        for shadow in shadows:
+            if shadow.revision_id in trackers:
+                raise ValueError(f"revision {shadow.revision_id} shadows twice")
+            kept = self.shadows.get(shadow.revision_id)
+            same = kept is not None and identity(kept.shadow) == identity(shadow)
+            trackers[shadow.revision_id] = kept if same and kept else ShadowTracker(shadow)
+        self.shadows = trackers
+
+    def _shadows_of(self, revision_id: str) -> list[ShadowTracker]:
+        return [t for t in self.shadows.values() if t.shadow.of_revision_id == revision_id]
 
     def close_robots_without_credentials(self, allowed: set[str]) -> list[str]:
         """End the sessions of robots that no longer hold a valid credential (revoked)."""
@@ -362,7 +392,52 @@ class GatewayCore:
             accept_by_us=accept_by,
         )
         dropped = session.group.scheduler.submit(request)
+        if not any(d.request is request for d in dropped):
+            self._offer_shadows(session, observation, decoded, now_us)
         return self._rejections(dropped)
+
+    def _offer_shadows(
+        self,
+        session: Session,
+        observation: dataplane_pb2.Observation,
+        decoded: ModelInputs,
+        now_us: int,
+    ) -> None:
+        """Give a shadowing candidate the observation the running model just accepted. Only
+        bookkeeping happens here, on the robot's path; the candidate runs elsewhere."""
+        env = observation.envelope
+        for tracker in self._shadows_of(session.deployment.revision_id):
+            binding = tracker.shadow.binding
+            same = (
+                binding.artifact_digest == session.deployment.binding.artifact_digest
+                and binding.execution_profile_digest
+                == session.deployment.binding.execution_profile_digest
+            )
+            inputs = decoded if same else decode_observation(observation, binding)
+            usable = inputs if isinstance(inputs, ModelInputs) else None
+            tracker.offer(
+                env.session_id,
+                session.lease.robot_id,
+                int(env.sequence),
+                usable,
+                now_us,
+                invalid=usable is None,
+            )
+
+    def next_shadow(self, revision_id: str) -> ShadowRequest | None:
+        """The observation the shadow's candidate should run now, if any."""
+        tracker = self.shadows.get(revision_id)
+        return tracker.take() if tracker is not None else None
+
+    def shadow_done(
+        self,
+        revision_id: str,
+        request: ShadowRequest,
+        output: NDArray[np.float32] | PolicyError,
+    ) -> None:
+        tracker = self.shadows.get(revision_id)
+        if tracker is not None:
+            tracker.candidate(request, None if isinstance(output, PolicyError) else output)
 
     def next_batch(self, group_key: str, now_us: int) -> tuple[Batch | None, list[Delivery]]:
         batch, dropped = self.groups[group_key].scheduler.next_batch(now_us)
@@ -419,6 +494,8 @@ class GatewayCore:
             deliveries.append(
                 Delivery(request.session_id, dataplane_pb2.GatewayMessage(action_chunk=chunk))
             )
+            for tracker in self._shadows_of(session.deployment.revision_id):
+                tracker.primary(request.session_id, request.sequence, output, binding)
         return deliveries
 
     def sweep(self, now_us: int) -> None:
@@ -427,6 +504,8 @@ class GatewayCore:
             self._drop_session(lease.session_id, ReasonCode.LEASE_EXPIRED)
         for group in self.groups.values():
             group.scheduler.profile.expire(now_us)
+        for tracker in self.shadows.values():
+            tracker.expire(now_us)
 
     def _rejections(self, dropped: list[Dropped]) -> list[Delivery]:
         deliveries = []
@@ -480,6 +559,14 @@ class GatewayCore:
                     "admitted_sessions": len(g.admission.admitted),
                 }
                 for key, g in self.groups.items()
+            },
+            "shadows": {
+                revision_id: {
+                    "of_revision_id": t.shadow.of_revision_id,
+                    "robot_names": sorted(t.shadow.robots),
+                    **t.stats.to_json(),
+                }
+                for revision_id, t in sorted(self.shadows.items())
             },
             "counters": dict(self.counters),
         }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import itertools
 import json
 import logging
 import math
@@ -38,8 +39,10 @@ from neura_server.config import (
     DeviceRegistry,
     GatewayConfig,
     ServingConfig,
+    ShadowConfig,
     TlsConfig,
     load_binding,
+    load_binding_files,
     load_profile_points,
     profile_batch_sizes,
 )
@@ -54,9 +57,12 @@ from neura_server.metrics import GatewayMetrics
 from neura_server.profiles import LatencyProfile
 from neura_server.sandbox import launcher_for, remove_stale
 from neura_server.scheduler import Batch, Scheduler
+from neura_server.shadow import ShadowDeployment
 
 log = logging.getLogger("neura.gateway")
 STREAM_QUEUE = 256
+# A shadow's candidate has no deadline (no robot waits for it), but a hung worker is restarted.
+SHADOW_TIMEOUT_S = 60.0
 
 
 def monotonic_us() -> int:
@@ -96,6 +102,15 @@ class _Group:
     task: asyncio.Task[None] | None = None
 
 
+@dataclass(slots=True)
+class _Shadow:
+    revision_id: str
+    identity: tuple[Any, ...]  # what its worker loads, and where
+    backend: Backend
+    wake: asyncio.Event = field(default_factory=asyncio.Event)
+    task: asyncio.Task[None] | None = None
+
+
 class GatewayServer:
     def __init__(
         self, config: GatewayConfig, *, generation_store: GenerationStore | None = None
@@ -110,6 +125,7 @@ class GatewayServer:
         else:
             self._worker_dir = self._owned_worker_dir = Path(tempfile.mkdtemp(prefix="neura-w-"))
         deployments, groups, backends = self._build(config, set())
+        shadows, self._shadows = self._build_shadows(config, {})
         # A store the server opens itself is closed by stop(); a caller's store stays the caller's.
         self._owned_store: SqliteGenerationStore | None = None
         if generation_store is None:
@@ -123,6 +139,7 @@ class GatewayServer:
             leases=LeaseTable(generation_store, config.lease_ttl_ms * 1000),
             max_message_bytes=config.max_message_bytes,
             default_rtt_us=int(config.default_rtt_ms * 1000),
+            shadows=shadows,
         )
         self._groups = backends
         self._streams: dict[str, asyncio.Queue[dataplane_pb2.GatewayMessage]] = {}
@@ -221,12 +238,89 @@ class GatewayServer:
             start_timeout_s=serving.worker_start_timeout_s,
         )
 
+    def _build_shadows(
+        self, config: GatewayConfig, existing: dict[str, _Shadow]
+    ) -> tuple[list[ShadowDeployment], dict[str, _Shadow]]:
+        """Shadow deployments from config, and their backends: an existing one is kept when its
+        worker would load the same thing on the same device."""
+        deployments, runners = [], {}
+        for item in config.shadows:
+            try:
+                binding = load_binding_files(
+                    item.artifact, item.robot_profile, item.execution_profile
+                )
+            except ValueError as exc:
+                raise ValueError(f"shadow {item.revision_id}: {exc}") from exc
+            shadow = ShadowDeployment(
+                item.revision_id,
+                item.of_revision_id,
+                binding,
+                frozenset(item.robots),
+                item.device,
+                item.every_nth,
+            )
+            deployments.append(shadow)
+            identity = (
+                binding.artifact_digest,
+                binding.execution_profile_digest,
+                item.checkpoint,
+                item.adapter,
+                shadow.device_name,
+            )
+            kept = existing.get(item.revision_id)
+            if kept is not None and kept.identity == identity:
+                runners[item.revision_id] = kept
+            else:
+                runners[item.revision_id] = _Shadow(
+                    item.revision_id, identity, self._shadow_backend(config.serving, item, shadow)
+                )
+        return deployments, runners
+
+    def _shadow_backend(
+        self, serving: ServingConfig, item: ShadowConfig, shadow: ShadowDeployment
+    ) -> Backend:
+        if serving.backend == "simulated":
+            policy: PolicyBackend = MockPolicy(shadow.binding)
+            if serving.simulate_latency:
+                policy = SimulatedLatency(policy, LatencyProfile(serving.profile_points()))
+            return InProcessBackend(policy)
+        self._group_seq += 1
+        spec = WorkerSpec(
+            artifact=item.artifact,
+            robot_profile=item.robot_profile,
+            execution_profile=item.execution_profile,
+            device=shadow.device_name,
+            checkpoint=item.checkpoint,
+            adapter=item.adapter,
+            warmup_batches=(1,),
+        )
+        return WorkerBackend(
+            f"s{self._group_seq}",
+            spec,
+            launcher=launcher_for(
+                serving.sandbox,
+                serving.worker_command,
+                shadow.binding.artifact.spec.runtime_image.reference,
+            ),
+            socket_dir=self._worker_dir,
+            start_timeout_s=serving.worker_start_timeout_s,
+        )
+
     def reload(self, config: GatewayConfig) -> list[str]:
         """Apply a new configuration in place (devices and deployments). Serving settings and
         listen addresses need a restart. Returns the ids of sessions that were closed."""
         deployments, groups, backends = self._build(config, set(self.core.groups))
+        shadows, runners = self._build_shadows(config, self._shadows)
         self.devices = DeviceRegistry(config.devices, site_id=config.site_id)
         closed = self.core.replace_deployments(deployments, groups)
+        self.core.replace_shadows(shadows)
+        for revision_id, runner in self._shadows.items():
+            if runners.get(revision_id) is not runner:
+                self._tasks.append(asyncio.create_task(self._retire_shadow(runner)))
+        for revision_id, runner in runners.items():
+            if self._shadows.get(revision_id) is not runner and self._server is not None:
+                self._launch_shadow(runner)
+        self._shadows = runners
         closed += self.core.close_robots_without_credentials(self.devices.robots())
         for group in backends.values():
             self._groups[group.key] = group
@@ -256,6 +350,43 @@ class GatewayServer:
             await self._dispatch(group)
 
         group.task = asyncio.create_task(run(), name=f"dispatch-{group.key[:16]}")
+
+    def _launch_shadow(self, shadow: _Shadow) -> None:
+        async def run() -> None:
+            await shadow.backend.start()
+            await self._shadow_dispatch(shadow)
+
+        shadow.task = asyncio.create_task(run(), name=f"shadow-{shadow.revision_id[:16]}")
+
+    async def _retire_shadow(self, shadow: _Shadow) -> None:
+        if shadow.task is not None:
+            shadow.task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await shadow.task
+        await shadow.backend.stop()
+        log.info("shadow of %s retired", shadow.revision_id)
+
+    async def _shadow_dispatch(self, shadow: _Shadow) -> None:
+        """Run the candidate on the observations its tracker takes, one at a time."""
+        batch_ids = itertools.count(1)
+        while True:
+            await shadow.wake.wait()
+            shadow.wake.clear()
+            request = self.core.next_shadow(shadow.revision_id)
+            if request is None:
+                continue
+            output: NDArray[np.float32] | PolicyError
+            try:
+                outputs = await shadow.backend.infer(
+                    next(batch_ids), [request.inputs], timeout_s=SHADOW_TIMEOUT_S
+                )
+                output = outputs[0] if len(outputs) == 1 else PolicyError("not one output")
+            except PolicyError as exc:
+                output = exc
+            except Exception as exc:  # a backend bug must never stop the shadow's dispatcher
+                log.exception("shadow backend %s failed", shadow.revision_id)
+                output = PolicyError(f"{type(exc).__name__}: {exc}")
+            self.core.shadow_done(shadow.revision_id, request, output)
 
     async def _retire(self, group: _Group) -> None:
         """Stop a group's dispatcher and worker, freeing its device memory."""
@@ -291,6 +422,8 @@ class GatewayServer:
         await self._server.start()
         for group in self._groups.values():
             self._launch(group)
+        for shadow in self._shadows.values():
+            self._launch_shadow(shadow)
         self._tasks.append(asyncio.create_task(self._sweep(), name="lease-sweeper"))
         if self.config.status_listen:
             host, _, port = self.config.status_listen.rpartition(":")
@@ -303,7 +436,11 @@ class GatewayServer:
     async def stop(self) -> None:
         if self._status_server is not None:
             self._status_server.should_exit = True
-        tasks = [*self._tasks, *(g.task for g in self._groups.values() if g.task is not None)]
+        tasks = [
+            *self._tasks,
+            *(g.task for g in self._groups.values() if g.task is not None),
+            *(s.task for s in self._shadows.values() if s.task is not None),
+        ]
         for task in tasks:
             task.cancel()
         for task in tasks:
@@ -311,7 +448,10 @@ class GatewayServer:
                 await task
         if self._server is not None:
             await self._server.stop(grace=0.5)
-        await asyncio.gather(*(g.backend.stop() for g in self._groups.values()))
+        await asyncio.gather(
+            *(g.backend.stop() for g in self._groups.values()),
+            *(s.backend.stop() for s in self._shadows.values()),
+        )
         if self._owned_worker_dir is not None:
             shutil.rmtree(self._owned_worker_dir, ignore_errors=True)
         if self._owned_store is not None:
@@ -339,6 +479,10 @@ class GatewayServer:
         session = self.core.sessions.get(session_id)
         if session is not None:
             self._groups[session.group.key].wake.set()
+        for revision_id, shadow in self._shadows.items():
+            tracker = self.core.shadows.get(revision_id)
+            if tracker is not None and tracker.pending is not None:
+                shadow.wake.set()
 
     def bind_stream(
         self, session_id: str, queue: asyncio.Queue[dataplane_pb2.GatewayMessage]
@@ -453,6 +597,9 @@ class GatewayServer:
             if key in status["groups"]:
                 status["groups"][key]["profile_source"] = group.profile_source
                 status["groups"][key]["worker"] = group.backend.status()
+        for revision_id, shadow in self._shadows.items():
+            if revision_id in status["shadows"]:
+                status["shadows"][revision_id]["worker"] = shadow.backend.status()
         status["streams"] = len(self._streams)
         return status
 

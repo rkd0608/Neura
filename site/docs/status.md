@@ -21,7 +21,7 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M7. Production hardening | Mutual TLS, artifact signing, customer-managed keys, outbound ledger, dashboards, installer and signed upgrades, worker sandbox, supply-chain controls, chaos and soak testing, a security review, these docs | Built; 72-hour soaks with injected faults had no invariant violation |
 | M8. Physical validation | SO-101 class arms through the same platform: fault suite and parity on hardware | Built and passing on the emulated arm; the run on hardware is pending |
 | M9. Capture | Robots record what they see and do, episodes kept and labeled at the site, datasets, export to LeRobot | Built |
-| M10. Evaluate | A candidate model against the running one, at the site: simulation and replay suites, release gates | Built; shadow serving pending |
+| M10. Evaluate | A candidate model against the running one, at the site: simulation, replay and shadow suites, release gates | Built |
 | M11. Improve | Fine-tuning at the site on recorded episodes, signed artifacts with lineage, candidate revisions | Built |
 | M12. The loop | The loop in the console and these docs; capture, fine-tune, evaluate and activate on the simulated cell | In progress: console and docs built, the run on the simulated cell pending |
 

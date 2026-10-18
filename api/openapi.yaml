@@ -5329,15 +5329,56 @@ components:
           maximum: 1024
           default: 8
       additionalProperties: false
+    ShadowSuite:
+      type: object
+      description: The candidate on the live observations of the robots running the baseline, for a while. Its actions are compared with theirs, in robot command units over the actions a robot executes between refills, and never sent to a robot. It runs in a worker of its own, one observation at a time, and skips observations rather than wait. The verdict says whether it stayed within the tolerance of the running model; it cannot say which is better.
+      required:
+      - kind
+      properties:
+        kind:
+          const: shadow
+        duration_s:
+          type: number
+          minimum: 1
+          maximum: 604800
+          default: 600
+        min_samples:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+          default: 200
+          description: Fewer observations compared than this is inconclusive.
+        max_samples:
+          oneOf:
+          - type: integer
+            minimum: 1
+            maximum: 10000000
+          - type: 'null'
+          description: Stop once this many are compared. Default, the whole duration.
+        every_nth:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 1
+          description: Offer the candidate every nth observation of each robot.
+        tolerance:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+          default: 0.05
+          description: The largest mean divergence still called close, as a share of each command's range.
+      additionalProperties: false
     EvaluationSuite:
       oneOf:
       - $ref: '#/components/schemas/SimulationSuite'
       - $ref: '#/components/schemas/ReplaySuite'
+      - $ref: '#/components/schemas/ShadowSuite'
       discriminator:
         propertyName: kind
         mapping:
           simulation: '#/components/schemas/SimulationSuite'
           replay: '#/components/schemas/ReplaySuite'
+          shadow: '#/components/schemas/ShadowSuite'
     EvaluationVerdict:
       type: string
       enum:
@@ -5603,5 +5644,6 @@ components:
             enum:
             - simulation
             - replay
+            - shadow
           uniqueItems: true
       additionalProperties: false

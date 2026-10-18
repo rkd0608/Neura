@@ -79,6 +79,27 @@ describe("EvaluationRow", () => {
   });
 });
 
+describe("EvaluationRow for a shadow", () => {
+  it("states how far the candidate's live actions were from the running model's", () => {
+    const shadow = evaluation({
+      verdict: "non_inferior",
+      report: { kind: "shadow", samples: 240, divergence: { mean: 0.012, p95: 0.03, max: 0.08 } },
+    });
+    shadow.spec.suite = {
+      kind: "shadow",
+      duration_s: 600,
+      min_samples: 200,
+      every_nth: 1,
+      tolerance: 0.05,
+    };
+    table(<EvaluationRow fineTuned={false} evaluation={shadow} />);
+    expect(screen.getByText("Shadow")).toBeInTheDocument();
+    expect(screen.getByText(/1\.2%/)).toBeInTheDocument();
+    expect(screen.getByText(/240 live observations/)).toBeInTheDocument();
+    expect(screen.getByText("No worse")).toBeInTheDocument();
+  });
+});
+
 describe("TrainingRow", () => {
   it("shows what the model was trained on, its loss and the candidate it became", () => {
     table(

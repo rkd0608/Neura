@@ -10,7 +10,10 @@ The control plane asks; the agent runs the job here, on the site's own data and 
   directory), one job at a time, on a device no worker serves on: a job never slows a robot;
 - an evaluation's result is its report; a training job's result is a new artifact, signed with
   the site's training key, with its lineage, whose weights go to the site's artifact store and
-  never leave it.
+  never leave it;
+- a shadow evaluation runs in the gateway instead (``neura_server.shadow``): for its duration
+  the candidate sees the observations of the robots running the baseline, its actions compared
+  with theirs and never sent.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from neura_contracts import ModelArtifact, ReasonCode, parse_document, signing
 from neura_runtime.binding import ExecutionBinding
 from neura_server.capture.store import EpisodeFilter, StoreError
 from neura_server.sandbox import Invocation, launcher_for
+from neura_server.shadow import ShadowSuite, comparable, shadow_verdict
 
 if TYPE_CHECKING:
     from neura_agent.core import AgentCore
@@ -106,6 +110,8 @@ class SiteJobs:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         self.counters: dict[str, int] = {}
+        # Candidates shadowing a served revision now: revision -> the gateway's shadow entry.
+        self.shadows: dict[str, dict[str, Any]] = {}
 
     # --- commands -----------------------------------------------------------------------------
 
@@ -194,10 +200,13 @@ class SiteJobs:
             suite = json.loads(message.suite_json or "{}")
         except ValueError as exc:
             raise JobError(ReasonCode.EVALUATION_INVALID, f"the suite is not JSON: {exc}") from exc
-        if suite.get("kind") not in ("simulation", "replay"):
+        if suite.get("kind") not in ("simulation", "replay", "shadow"):
             raise JobError(
-                ReasonCode.EVALUATION_INVALID, "the suite's kind is simulation or replay"
+                ReasonCode.EVALUATION_INVALID, "the suite's kind is simulation, replay or shadow"
             )
+        if suite["kind"] == "shadow":
+            await self._shadow(command_id, operation_id, message, suite)
+            return
         candidate = await self._model(message.candidate_revision_id)
         baseline = (
             await self._model(message.baseline_revision_id)
@@ -305,6 +314,107 @@ class SiteJobs:
                 "dataset_episodes": dataset["episodes"],
             },
         )
+
+    async def _shadow(
+        self,
+        command_id: str,
+        operation_id: str,
+        message: site_pb2.RunEvaluation,
+        suite_json: dict[str, Any],
+    ) -> None:
+        report = self.core._report
+        try:
+            suite = ShadowSuite.from_json(suite_json)
+        except (TypeError, ValueError) as exc:
+            raise JobError(ReasonCode.EVALUATION_INVALID, f"the shadow suite: {exc}") from exc
+        if not message.baseline_revision_id:
+            raise JobError(
+                ReasonCode.EVALUATION_INVALID, "a shadow compares with a revision robots run"
+            )
+        candidate = await self._model(message.candidate_revision_id)
+        baseline = await self._model(message.baseline_revision_id)
+        why = comparable(candidate.binding, baseline.binding)
+        if why is not None:
+            raise JobError(ReasonCode.EVALUATION_INVALID, why)
+        served = {d["revision_id"]: d for d in self.core.gateway_config().get("deployments", [])}
+        if baseline.revision_id not in served:
+            raise JobError(
+                ReasonCode.EVALUATION_INVALID,
+                f"no robot at this site runs {baseline.revision_id}: prepare and activate it",
+            )
+        from neura_agent.gateway import write_revision_documents
+
+        paths = write_revision_documents(
+            self.core.gateway_dir,
+            candidate.revision_id,
+            {role: {"document": doc} for role, doc in candidate.documents.items()},
+        )
+        entry: dict[str, Any] = {
+            "revision_id": candidate.revision_id,
+            "of_revision_id": baseline.revision_id,
+            "artifact": str(paths["model_artifact"]),
+            "robot_profile": str(paths["robot_profile"]),
+            "execution_profile": str(paths["execution_profile"]),
+            "every_nth": suite.every_nth,
+        }
+        if self.settings.gateway_backend == "workers":
+            entry["device"] = self.device()
+            entry["checkpoint"] = str(candidate.checkpoint)
+            adapter = served[baseline.revision_id].get("adapter")
+            if adapter is not None:  # a development override applies to both models
+                entry["adapter"] = adapter
+        self.shadows[candidate.revision_id] = entry
+        started = time.monotonic()
+        stats: dict[str, Any] = {}
+        try:
+            await self.core.reconcile()
+            report(command_id, operation_id, "Running", message="shadowing live observations")
+            while time.monotonic() - started < suite.duration_s:
+                await asyncio.sleep(min(PROGRESS_INTERVAL_S, suite.duration_s))
+                status = await self.core.gateway.status() or {}
+                stats = status.get("shadows", {}).get(candidate.revision_id, stats)
+                compared = int(stats.get("compared", 0))
+                report(
+                    command_id,
+                    operation_id,
+                    "Running",
+                    message=f"{compared} live observations compared",
+                )
+                if suite.max_samples is not None and compared >= suite.max_samples:
+                    break
+        finally:
+            self.shadows.pop(candidate.revision_id, None)
+            with contextlib.suppress(Exception):
+                await self.core.reconcile()
+        verdict, why = shadow_verdict(
+            stats, min_samples=suite.min_samples, tolerance=suite.tolerance
+        )
+        out_of_range = stats.get("out_of_range", {})
+        result = {
+            "kind": "shadow",
+            "suite": suite.to_json(),
+            "verdict": verdict,
+            "samples": int(stats.get("compared", 0)),
+            "offered": int(stats.get("offered", 0)),
+            "robots": int(stats.get("robots", 0)),
+            "duration_s": round(time.monotonic() - started, 1),
+            "divergence": stats.get("divergence", {}),
+            "candidate": {
+                "invalid_outputs": int(stats.get("invalid_outputs", 0)),
+                "failed": int(stats.get("failed", 0)),
+                "out_of_range": int(out_of_range.get("candidate", 0)),
+            },
+            "baseline": {"out_of_range": int(out_of_range.get("running", 0))},
+            "skipped": dict(stats.get("skipped", {})),
+        }
+        self.counters["evaluations"] = self.counters.get("evaluations", 0) + 1
+        self.core.audit.write(
+            "evaluation.finished",
+            evaluation=message.evaluation_id,
+            candidate=candidate.revision_id,
+            verdict=verdict,
+        )
+        report(command_id, operation_id, "Succeeded", message=why, result={"evaluation": result})
 
     # --- pieces -----------------------------------------------------------------------------
 

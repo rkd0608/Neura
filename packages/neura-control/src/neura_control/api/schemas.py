@@ -139,7 +139,9 @@ class CaptureSettings(Strict):
 class ReleaseGates(Strict):
     """Evaluations a revision needs before it replaces the one robots run (design §28.3)."""
 
-    evaluations: list[Literal["simulation", "replay"]] = Field(default_factory=list, max_length=2)
+    evaluations: list[Literal["simulation", "replay", "shadow"]] = Field(
+        default_factory=list, max_length=3
+    )
 
     @model_validator(mode="after")
     def _unique(self) -> Self:
@@ -251,7 +253,27 @@ class ReplaySuite(Strict):
     batch_size: int = Field(default=8, ge=1, le=1024)
 
 
-EvaluationSuite = Annotated[SimulationSuite | ReplaySuite, Field(discriminator="kind")]
+class ShadowSuite(Strict):
+    """The candidate on the live observations of the robots running the baseline; its actions
+    are compared and never sent."""
+
+    kind: Literal["shadow"]
+    duration_s: float = Field(default=600, ge=1, le=7 * 86_400)
+    min_samples: int = Field(default=200, ge=1, le=10_000_000)
+    max_samples: int | None = Field(default=None, ge=1, le=10_000_000)
+    every_nth: int = Field(default=1, ge=1, le=10_000)
+    tolerance: float = Field(default=0.05, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def _samples(self) -> Self:
+        if self.max_samples is not None and self.max_samples < self.min_samples:
+            raise ValueError("max_samples must be at least min_samples")
+        return self
+
+
+EvaluationSuite = Annotated[
+    SimulationSuite | ReplaySuite | ShadowSuite, Field(discriminator="kind")
+]
 
 
 class EvaluationSpec(Strict):

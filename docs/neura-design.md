@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm; M9 (capture), M10 (evaluate, except shadow serving) and M11 (improve) implemented, M12 (the loop: console and local tools) in progress (§28) · October 18, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm; M9 (capture), M10 (evaluate) and M11 (improve) implemented, M12 (the loop: console and local tools) in progress (§28) · October 18, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -690,7 +690,7 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
 | **M8. Physical validation** (built; hardware run pending) | SO-101-class arms connected through the same platform: the SO-101 integration over LeRobot, a servo bus emulator, `neura-arm`, and `neura-qualify` (hardware fault suite, open-loop parity, closed-loop non-inferiority); implementation notes in §7.1 | Fault suite and parity pass on hardware. Built and passing on the emulated arm (`qualification/reports/`); the hardware report is produced by `neura-qualify` with the arm |
 | **M9. Capture** ✅ | Episode recording on the robot off the action path, the site's capture service and episode store, labels, dataset snapshots, retention, LeRobot export, deployment capture settings within the site's boundary (§28.2) | A recorded task reaches the site's store, verified and labeled, while the arm is served as usual (emulated SO-101); episodes never leave the site |
-| **M10. Evaluate** (built; shadow serving planned) | Closed-loop simulation suites, replay on captured episodes, shadow serving, release gates (§28.3) | A candidate's evidence is computed at the site and required before activation |
+| **M10. Evaluate** (built) | Closed-loop simulation suites, replay on captured episodes, shadow serving, release gates (§28.3) | A candidate's evidence is computed at the site and required before activation |
 | **M11. Improve** (built) | Fine-tuning jobs at the site, signed artifacts with lineage (§28.4) | A captured dataset fine-tunes a model at the site into a new, signed, traceable artifact |
 | **M12. The loop** (in progress) | API, console and the end-to-end run (§28.5) | Capture, fine-tune, evaluate and activate, end to end, on the simulated cell |
 
@@ -1813,12 +1813,12 @@ Not built yet: recording the operator's corrective motions during a takeover (it
 customer's teleoperation to feed Neura its commands), video encoding on the robot, and an episode
 viewer (§28.5).
 
-### 28.3 Evaluate (M10, built; shadow serving planned)
+### 28.3 Evaluate (M10, built)
 
 An evaluation compares a **candidate** revision with a **baseline**: by default the revision most
 of the deployment's robots run, the one the candidate would replace. Both run at the site, in the
 worker sandbox (`neura-learn evaluate`, `packages/neura-learn`), and never on a GPU that serves
-robots (§28.4, *Jobs at the site*). Two suites:
+robots (§28.4, *Jobs at the site*). Three suites:
 
 - **Simulation.** Both models on the same seeded scenes of a task the site can simulate (ALOHA
   transfer-cube and insertion, §25), in lockstep: the world waits for the policy, as LeRobot
@@ -1840,6 +1840,24 @@ robots (§28.4, *Jobs at the site*). Two suites:
   most the baseline's × (1 + 0.25) + 0.01, and is `inconclusive` without successful episodes. A
   replay is a regression check on real data: it can catch a candidate that drifts from behavior
   that worked, but it cannot show a candidate is better, since the baseline produced those actions.
+- **Shadow.** The candidate on the live observations of the robots running the baseline, for a set
+  time (`neura_server.shadow`), its actions compared with the running model's and never sent to a
+  robot. The running model comes first, by construction:
+  - the candidate has a batch group and a worker of its own, never a robot's scheduler, and runs
+    on a device no worker serves on (as jobs do);
+  - it takes one observation at a time; one offered while it is busy is skipped and counted,
+    never queued, and its results have no deadline;
+  - on the robot's path the gateway only takes note (which observation, which chunk).
+
+  Each model's observation is decoded through its own execution profile, and both chunks are
+  compared in robot command units, over the actions a robot executes between refills, as a share
+  of each command's range. The site reports how many observations it offered and compared, the
+  mean, p95 and maximum divergence, what was skipped and why, the candidate's failures and
+  invalid outputs, and commands outside the robot's ranges. The verdict is `inferior` when the
+  candidate failed, produced unusable actions or asked for more out-of-range commands than the
+  running model; `inconclusive` below `min_samples` compared; otherwise `non_inferior` when the
+  mean divergence is within the tolerance (0.05 by default), `inferior` when not. Like a replay,
+  a shadow says how far the candidate is from the running model, not which is better.
 
 **API** (tag *Improvement*). `POST /v1/deployments/{id}/evaluations` with the candidate, an
 optional baseline and the suite creates an `Evaluation` and an `Operation` (`kind: evaluate`), and
@@ -1850,6 +1868,11 @@ it holds nothing from retention) and reports the verdict, the suite, both models
 the comparison and, for a replay, counts and the dataset's digest. All of it is allowlisted
 (`catalog/outbound.yaml`, `evaluation.*`); no episode leaves the site. The control plane records a
 report only if it is of the kind asked for (`EVALUATION_REPORT_INVALID` otherwise).
+
+A shadow needs the baseline to be what the deployment's robots run, and both to be for the same
+robot profile and control period. It runs as a site job (one at a time) for its duration, or
+until `max_samples` are compared, and takes the candidate out of the gateway when it ends,
+fails or is cancelled.
 
 **Release gates.** A deployment's `release_gates.evaluations` lists the kinds of evaluation a
 revision needs before robots switch to it: for each robot targeted, a `Succeeded` evaluation of
@@ -1870,8 +1893,15 @@ candidate, need no evidence; neither does a rollback.
   the wrong kind refused, the gate refusing an `inferior` verdict and accepting `non_inferior`, a
   first activation and a rollback passing without evidence.
 
-Not built yet: **shadow serving**, a candidate served on live observations whose actions never
-reach a robot, with divergence statistics against the running model.
+- Shadow tests at the gateway: the candidate is offered the robot's observation and the robot gets
+  only its own chunk; one request queued in the robot's scheduler; a busy candidate skips and the
+  robot is served every time; sampling, invalid outputs, a failed worker, a lost pair; a reload
+  keeps an unchanged shadow's statistics; the verdict's cases.
+- **Shadow, end to end** (`packages/neura-control/tests/test_shadow_e2e.py`): two simulated robots
+  run the base revision over mutual TLS. Activation of a candidate is refused for want of a shadow
+  evaluation. The shadow evaluation serves the candidate on the robots' live observations until
+  five are compared, reports `non_inferior`, and leaves the gateway as it was; the robots were
+  served throughout with no rejection. Then the activation is accepted.
 
 ### 28.4 Improve (M11, built)
 

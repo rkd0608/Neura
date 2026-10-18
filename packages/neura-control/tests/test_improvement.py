@@ -496,3 +496,47 @@ def test_release_gates_are_part_of_the_deployment(site: Site) -> None:
         f"/v1/deployments/{site.deployment}/activation-requests", {"revision_id": site.base}
     )
     assert activated.status_code == 202, activated.text
+
+
+def test_a_shadow_compares_with_what_the_robots_run(site: Site) -> None:
+    c = site.c
+    evaluations = f"/v1/deployments/{site.deployment}/evaluations"
+    shadow = {"kind": "shadow", "duration_s": 30, "min_samples": 50}
+    other = site.revision(
+        c.get(f"/v1/revisions/{site.base}").json()["spec"]["model_artifact_id"],
+        c.get(f"/v1/revisions/{site.base}").json()["spec"]["execution_profile_id"],
+    )
+    # Only a revision the robots run can be shadowed.
+    refused = c.post(
+        evaluations,
+        {
+            "spec": {
+                "candidate_revision_id": site.base,
+                "baseline_revision_id": other,
+                "suite": shadow,
+            }
+        },
+    )
+    assert refused.status_code == 422
+    assert "robots run" in refused.json()["detail"]
+    bad = c.post(
+        evaluations,
+        {
+            "spec": {
+                "candidate_revision_id": other,
+                "suite": {**shadow, "min_samples": 50, "max_samples": 10},
+            }
+        },
+    )
+    assert bad.status_code == 422
+    accepted = c.post(evaluations, {"spec": {"candidate_revision_id": other, "suite": shadow}})
+    assert accepted.status_code == 202, accepted.text
+    command = site.command(accepted.json()["metadata"]["id"])
+    assert command.evaluate.baseline_revision_id == site.base
+    assert json.loads(command.evaluate.suite_json) == {
+        "kind": "shadow",
+        "duration_s": 30.0,
+        "min_samples": 50,
+        "every_nth": 1,
+        "tolerance": 0.05,
+    }

@@ -160,6 +160,11 @@ results:
   evaluation.episodes_offered: {minimal: false, description: "Replay: recorded episodes selected."}
   evaluation.samples: {minimal: false, description: "Replay: predictions compared."}
   evaluation.dataset_digest: {minimal: true, description: "Replay: the dataset snapshot's digest."}
+  evaluation.offered: {minimal: false, description: "Shadow: live observations offered to the candidate."}
+  evaluation.robots: {minimal: false, description: "Shadow: how many robots it shadowed."}
+  evaluation.duration_s: {minimal: false, description: "Shadow: how long it shadowed, in seconds."}
+  evaluation.divergence.*: {minimal: false, description: "Shadow: how far the candidate's actions were from the running model's (mean, p95, max share of each command's range)."}
+  evaluation.skipped.*: {minimal: false, description: "Shadow: observations not compared, by why (candidate busy, invalid input, running model's result lost)."}
   training.recipe.*: {minimal: false, description: "Training: the recipe (steps, batch size, learning rate, seed, normalization)."}
   training.dataset.*: {minimal: false, description: "Training: episodes and frames trained on, and why any were left out."}
   training.training.*: {minimal: false, description: "Training: steps, duration and loss."}

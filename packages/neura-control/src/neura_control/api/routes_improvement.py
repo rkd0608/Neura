@@ -169,11 +169,16 @@ async def create_evaluation(
             )
         if baseline_id is not None:
             await _revision(session, deployment, baseline_id, "baseline")
-        elif spec.suite.kind == "simulation":
+        elif spec.suite.kind in ("simulation", "shadow"):
             raise ProblemError(
                 ReasonCode.API_VALIDATION_FAILED,
                 "the deployment's robots run no other revision to compare with; give "
                 "baseline_revision_id",
+            )
+        if spec.suite.kind == "shadow" and baseline_id not in running_revisions(deployment):
+            raise ProblemError(
+                ReasonCode.API_VALIDATION_FAILED,
+                "a shadow compares with a revision the deployment's robots run",
             )
         suite = spec.suite.model_dump(mode="json", exclude_none=True)
         command_suite = dict(suite)

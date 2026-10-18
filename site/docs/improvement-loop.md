@@ -86,16 +86,25 @@ curl -X POST "$NEURA_API/v1/deployments/$DEPLOYMENT/evaluations" \
   -d '{"spec": {"candidate_revision_id": "rev_...", "suite": {"kind": "replay"}}}'
 ```
 
-The baseline defaults to the revision the deployment's robots run. Two suites:
+The baseline defaults to the revision the deployment's robots run. Three suites:
 
 | Suite | What it does | Verdict |
 | --- | --- | --- |
 | `simulation` | Both models on the same seeded scenes of a simulated task (ALOHA transfer cube or insertion), the world waiting for each model | Paired test on success rates against a margin (0.10 by default): `superior`, `non_inferior`, `inconclusive` or `inferior` |
 | `replay` | Both models on observations the robots recorded, each prediction compared with what the robot then did | `non_inferior` when the candidate's error on successful episodes is at most the baseline's × 1.25 + 0.01 of each action's range; `inconclusive` without successful episodes |
+| `shadow` | The candidate on the live observations of the robots running the baseline, for `duration_s`; its actions are compared with the running model's and never sent | `non_inferior` when the mean distance is within `tolerance` (0.05 of each command's range); `inconclusive` below `min_samples`; `inferior` if the candidate failed, produced unusable actions or left the robot's ranges |
 
 A replay catches a candidate that drifts from behavior that worked. It cannot show that a
 candidate is better, because the baseline produced the recorded actions; use a simulation suite,
 or a canary rollout, for that.
+
+A shadow never slows the robots: the candidate runs in a worker of its own, on a GPU no robot is
+served from (unless the operator allows sharing), one observation at a time, and an observation
+that arrives while it is busy is skipped and counted rather than queued. Each model's input is
+decoded through its own execution profile and both models' actions are compared in the robot's
+command units, so a candidate of another architecture can shadow too, as long as it is for the
+same robot profile and control period. Like a replay, a shadow measures how far the candidate is
+from the running model, not which one is better.
 
 ## 4. Gate activation on the evidence
 
@@ -113,7 +122,5 @@ and their losses, the evaluations and their verdicts, and the release gates.
 
 ## Limits
 
-- Shadow serving (a candidate served on live observations, its actions never reaching a robot) is
-  not built yet.
 - The simulation suite covers the ALOHA tasks only; a customer task needs its own simulated scene.
 - Recording does not yet capture an operator's corrective motions during a takeover.

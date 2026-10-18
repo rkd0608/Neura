@@ -1833,8 +1833,37 @@ export interface components {
       /** @default 8 */
       batch_size: number;
     };
+    /** @description The candidate on the live observations of the robots running the baseline, for a while. Its actions are compared with theirs, in robot command units over the actions a robot executes between refills, and never sent to a robot. It runs in a worker of its own, one observation at a time, and skips observations rather than wait. The verdict says whether it stayed within the tolerance of the running model; it cannot say which is better. */
+    ShadowSuite: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "shadow";
+      /** @default 600 */
+      duration_s: number;
+      /**
+       * @description Fewer observations compared than this is inconclusive.
+       * @default 200
+       */
+      min_samples: number;
+      /** @description Stop once this many are compared. Default, the whole duration. */
+      max_samples?: number | null;
+      /**
+       * @description Offer the candidate every nth observation of each robot.
+       * @default 1
+       */
+      every_nth: number;
+      /**
+       * @description The largest mean divergence still called close, as a share of each command's range.
+       * @default 0.05
+       */
+      tolerance: number;
+    };
     EvaluationSuite:
-      components["schemas"]["SimulationSuite"] | components["schemas"]["ReplaySuite"];
+      | components["schemas"]["SimulationSuite"]
+      | components["schemas"]["ReplaySuite"]
+      | components["schemas"]["ShadowSuite"];
     /** @enum {string} */
     EvaluationVerdict: "superior" | "non_inferior" | "inconclusive" | "inferior";
     EvaluationSpec: {
@@ -1937,7 +1966,7 @@ export interface components {
     };
     /** @description Evidence a revision needs before it may be activated in place of the one robots run (design §28.3): a Succeeded evaluation of each kind listed, against that revision, with a superior or non_inferior verdict. A first activation has nothing to replace and needs none. */
     ReleaseGates: {
-      evaluations?: ("simulation" | "replay")[];
+      evaluations?: ("simulation" | "replay" | "shadow")[];
     };
   };
   responses: {

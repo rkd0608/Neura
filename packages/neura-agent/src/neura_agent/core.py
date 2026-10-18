@@ -1022,16 +1022,26 @@ class AgentCore:
 
     def gateway_config(self) -> dict[str, Any]:
         """The gateway's configuration, with mutual TLS from the site CA unless disabled."""
+        shadows = list(self.jobs.shadows.values())
         if not self.settings.gateway_tls:
             return build_gateway_config(
-                self.state, self.settings, self.gateway_dir, site_id=self.identity.site_id
+                self.state,
+                self.settings,
+                self.gateway_dir,
+                site_id=self.identity.site_id,
+                shadows=shadows,
             )
         names = sorted({*default_gateway_names(), *self.settings.gateway_tls_names})
         tls = self.pki.gateway_tls(self.gateway_dir / "tls", names)
         if self.settings.dev_robot_certificate_dir is not None:
             self._issue_dev_robot_certificates(self.settings.dev_robot_certificate_dir)
         return build_gateway_config(
-            self.state, self.settings, self.gateway_dir, tls=tls, site_id=self.identity.site_id
+            self.state,
+            self.settings,
+            self.gateway_dir,
+            tls=tls,
+            site_id=self.identity.site_id,
+            shadows=shadows,
         )
 
     def _robot_names(self) -> set[str]:

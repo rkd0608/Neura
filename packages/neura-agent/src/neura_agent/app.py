@@ -24,6 +24,7 @@ from prometheus_client import CONTENT_TYPE_LATEST
 from pydantic import BaseModel, ConfigDict, Field
 
 from neura.v1 import common_pb2
+from neura_agent import episode_viewer
 from neura_agent.connectivity import ControlPlaneProbe
 from neura_agent.core import LocalActionError
 from neura_agent.metrics import AgentMetrics
@@ -341,6 +342,50 @@ def create_app(
         except StoreError as exc:
             raise store_error(exc) from exc
         return record
+
+    async def recorded(episode_id: str) -> Any:
+        try:
+            return await asyncio.to_thread(store().episode, episode_id)
+        except StoreError as exc:
+            raise store_error(exc) from exc
+
+    @app.get("/v1/local/episodes/{episode_id}/steps")
+    async def episode_steps(episode_id: str, request: Request) -> dict[str, Any]:
+        operator(request)
+        episode = await recorded(episode_id)
+        steps: dict[str, Any] = await asyncio.to_thread(episode_viewer.steps_json, episode)
+        return steps
+
+    @app.get("/v1/local/episodes/{episode_id}/frames/{role}/{index}")
+    async def episode_frame(episode_id: str, role: str, index: int, request: Request) -> Response:
+        operator(request)
+        episode = await recorded(episode_id)
+        try:
+            image = await asyncio.to_thread(episode_viewer.frame_png, episode, role, index)
+        except LookupError as exc:
+            raise LocalError(ReasonCode.API_NOT_FOUND, 404, str(exc)) from exc
+        # Episodes never change once stored; only this operator's browser keeps the image.
+        return Response(
+            image, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"}
+        )
+
+    def page(name: str) -> Response:
+        content, media_type = episode_viewer.asset(name)
+        return Response(content, media_type=media_type, headers=episode_viewer.HEADERS)
+
+    @app.get("/episodes")
+    async def episodes_page() -> Response:
+        """The episode viewer. The page holds no data: it asks the local API, with the operator
+        credential the operator enters."""
+        return page("episodes")
+
+    @app.get("/episodes.js")
+    async def episodes_script() -> Response:
+        return page("episodes.js")
+
+    @app.get("/episodes.css")
+    async def episodes_style() -> Response:
+        return page("episodes.css")
 
     @app.post("/v1/local/episodes/{episode_id}/label")
     async def label(episode_id: str, body: Label, request: Request) -> dict[str, Any]:

@@ -408,6 +408,18 @@ class SiteJobs:
                 )
                 if suite.max_samples is not None and compared >= suite.max_samples:
                     break
+                worker = stats.get("worker") or {}
+                if worker.get("state") == "failed":  # the candidate cannot even be loaded
+                    error = worker.get("last_error") or {}
+                    try:
+                        code = ReasonCode(str(error.get("code")))
+                    except ValueError:
+                        code = ReasonCode.WORKER_LOAD_FAILED
+                    raise JobError(
+                        code,
+                        "the candidate's worker could not start: "
+                        + str(error.get("message", "no detail")),
+                    )
         finally:
             self.shadows.pop(candidate_id, None)
             with contextlib.suppress(Exception):

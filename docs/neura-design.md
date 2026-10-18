@@ -1810,8 +1810,8 @@ offline.
   arm is served as usual.
 
 Not built yet: recording the operator's corrective motions during a takeover (it needs the
-customer's teleoperation to feed Neura its commands), video encoding on the robot, and an episode
-viewer (§28.5).
+customer's teleoperation to feed Neura its commands), and video encoding on the robot. The
+episode viewer is in §28.5.
 
 ### 28.3 Evaluate (M10, built)
 
@@ -1845,8 +1845,8 @@ robots (§28.4, *Jobs at the site*). Three suites:
   robot. The running model comes first, by construction:
   - the candidate has a batch group and a worker of its own, never a robot's scheduler, and runs
     on a device no worker serves on (as jobs do);
-  - it takes one observation at a time; one offered while it is busy is skipped and counted,
-    never queued, and its results have no deadline;
+  - it takes one observation at a time; one offered while it is busy, or while its worker is
+    still starting, is skipped and counted, never queued, and its results have no deadline;
   - on the robot's path the gateway only takes note (which observation, which chunk).
 
   Each model's observation is decoded through its own execution profile, and both chunks are
@@ -1897,6 +1897,11 @@ candidate, need no evidence; neither does a rollback.
   only its own chunk; one request queued in the robot's scheduler; a busy candidate skips and the
   robot is served every time; sampling, invalid outputs, a failed worker, a lost pair; a reload
   keeps an unchanged shadow's statistics; the verdict's cases.
+- Shadow with real workers (`tests/integration/test_shadow_worker.py`): two ACT checkpoints
+  with different weights, each in its own worker process. The candidate shadows a robot served
+  by the base: its chunks differ, none reaches the robot, the robot is refused nothing while it
+  shadows, and removing the shadow stops its worker only. A candidate whose weights are damaged
+  fails to load and never touches the robot; the evaluation fails with the worker's reason.
 - **Shadow, end to end** (`packages/neura-control/tests/test_shadow_e2e.py`): two simulated robots
   run the base revision over mutual TLS. Activation of a candidate is refused for want of a shadow
   evaluation. The shadow evaluation serves the candidate on the robots' live observations until
@@ -1992,8 +1997,16 @@ Built:
   simulated scenes and on the recordings. With synthetic weights nothing is solved, so this shows
   each stage works on the cell's data, not that the loop improves a policy.
 
+- **The episode viewer at the site** (`neura_agent.episode_viewer`, the agent's local API at
+  `/episodes`): the operator signs in with the operator credential, lists the episodes, steps
+  through one's camera frames (PNG, decoded from the store) and commands, and labels or deletes
+  it. The page is static, loads only itself (a strict content security policy) and sets data as
+  text; its data comes from the local API behind the same credential, and never leaves the site.
+  Tests: the API (credential, steps, frames compared pixel for pixel, labels, deletion) and the
+  page in Chromium, with the accessibility checks the console passes.
+
 Not built yet: the same run with the published pretrained ALOHA checkpoint (it needs the model
-hub, or a GPU runner, to show a policy improving), and an episode viewer at the site.
+hub, or a GPU runner, to show a policy improving).
 
 ---
 

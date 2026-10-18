@@ -1,0 +1,198 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #16181d;
+  --muted: #5d6470;
+  --line: #d9dde3;
+  --accent: #2f5bd3;
+  --ok: #1d7a46;
+  --bad: #b3261e;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111317;
+    --fg: #e8eaee;
+    --muted: #a3a9b4;
+    --line: #2c3038;
+    --accent: #8aa8ff;
+    --ok: #6cc796;
+    --bad: #ff8a80;
+  }
+}
+
+body {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.45;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+form,
+fieldset {
+  display: grid;
+  gap: 6px;
+  max-width: 480px;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.outcome-success {
+  color: var(--ok);
+}
+
+.outcome-failure {
+  color: var(--bad);
+}
+
+.cameras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cameras figure {
+  margin: 0;
+  flex: 1 1 320px;
+  max-width: 480px;
+}
+
+.cameras img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #000;
+}
+
+#step {
+  width: 100%;
+  max-width: 960px;
+}
+
+.traces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.traces figure {
+  margin: 0;
+}
+
+.traces svg {
+  width: 100%;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.traces .command {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.traces .cursor {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+figcaption {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

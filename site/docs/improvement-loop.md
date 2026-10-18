@@ -50,6 +50,12 @@ neura-agent label ep_01J... success --operator ops@site --note "placed on the fi
 
 Without a label, a fault or takeover counts as a failure and anything else as unknown.
 
+To watch what was recorded, open the episode viewer on the server, at `http://127.0.0.1:8090/episodes`
+(the agent's local API, loopback by default), and sign in with the operator credential
+(`NEURA_AGENT_OPERATOR_TOKEN`). It shows each episode's camera frames and commands step by step,
+and labels or deletes it. It is served by the agent and asks only the agent: nothing it shows
+leaves the site.
+
 ## 2. Fine-tune at the site
 
 ```bash

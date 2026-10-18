@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
 from neura_adapters import MockPolicy, PolicyError
+from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.gateway import GatewayCore
 from neura_server.shadow import PAIR_TIMEOUT_US, ShadowDeployment, comparable, shadow_verdict
@@ -127,6 +128,18 @@ def test_a_busy_candidate_skips_observations_and_never_delays_the_robot(make_bin
     assert robot.runtime.counters["chunks_accepted"] == 4
     core.shadow_done("rev_2", in_flight, PolicyError("worker crashed"))
     assert core.status()["shadows"]["rev_2"]["failed"] == 1
+    # A worker still starting was never asked: skipped, not failed.
+    now += 40 * MS
+    robot.deliver(serve_primary(core, now))
+    message = observe(robot, core, now)
+    core.receive("r1", message, message.ByteSize(), now + MS)
+    starting = core.next_shadow("rev_2")
+    assert starting is not None
+    core.shadow_done(
+        "rev_2", starting, PolicyError("starting", reason=ReasonCode.WORKER_UNAVAILABLE)
+    )
+    stats = core.status()["shadows"]["rev_2"]
+    assert (stats["failed"], stats["skipped"]["unavailable"]) == (1, 1)
 
 
 def test_sampling_invalid_outputs_and_lost_pairs(make_binding: Any) -> None:

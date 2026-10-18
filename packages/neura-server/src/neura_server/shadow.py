@@ -189,6 +189,14 @@ class ShadowTracker:
         pair.horizon = executed_horizon(binding)
         self._compare((session_id, sequence), pair)
 
+    def skip(self, request: ShadowRequest, why: str) -> None:
+        """The candidate could not be asked (its worker is starting or restarting): no attempt,
+        so no failure."""
+        if self.in_flight is request:
+            self.in_flight = None
+        self._pairs.pop(request.key, None)
+        self.stats.skipped[why] += 1
+
     def candidate(self, request: ShadowRequest, output: NDArray[np.float32] | None) -> None:
         """The candidate's chunk (None: its worker failed)."""
         if self.in_flight is request:

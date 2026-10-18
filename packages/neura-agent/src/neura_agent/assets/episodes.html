@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Episodes · Neura site</title>
+    <link rel="stylesheet" href="/episodes.css" />
+    <script src="/episodes.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <h1>Episodes at this site</h1>
+      <p class="muted">
+        What this site's robots recorded. Episodes stay on this server; Neura's cloud sees only
+        how many there are.
+      </p>
+    </header>
+
+    <main>
+      <section id="sign-in" aria-labelledby="sign-in-title">
+        <h2 id="sign-in-title">Operator credential</h2>
+        <form id="sign-in-form">
+          <label for="token">Credential (<code>NEURA_AGENT_OPERATOR_TOKEN</code>)</label>
+          <input id="token" type="password" autocomplete="off" required />
+          <label for="operator">Your name, for the labels you set</label>
+          <input id="operator" type="text" maxlength="200" required />
+          <button type="submit">Open</button>
+        </form>
+      </section>
+
+      <section id="list" aria-labelledby="list-title" hidden>
+        <div class="row">
+          <h2 id="list-title">Recorded episodes</h2>
+          <label for="outcome-filter">Outcome</label>
+          <select id="outcome-filter">
+            <option value="">All</option>
+            <option value="success">Success</option>
+            <option value="failure">Failure</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <button type="button" id="refresh">Refresh</button>
+          <button type="button" id="sign-out" class="quiet">Sign out</button>
+        </div>
+        <p id="summary" class="muted"></p>
+        <div class="table-wrap">
+          <table>
+            <caption class="visually-hidden">Recorded episodes, newest first</caption>
+            <thead>
+              <tr>
+                <th scope="col">Started</th>
+                <th scope="col">Robot</th>
+                <th scope="col">Revision</th>
+                <th scope="col">Ended</th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Steps</th>
+                <th scope="col"><span class="visually-hidden">Open</span></th>
+              </tr>
+            </thead>
+            <tbody id="episodes"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="detail" aria-labelledby="detail-title" hidden>
+        <h2 id="detail-title">Episode</h2>
+        <p id="detail-meta" class="muted"></p>
+        <div id="cameras" class="cameras"></div>
+        <label for="step">Step <output id="step-label" for="step"></output></label>
+        <input id="step" type="range" min="0" max="0" value="0" />
+        <h3>Commands</h3>
+        <div id="traces" class="traces"></div>
+        <form id="label-form">
+          <fieldset>
+            <legend>Outcome</legend>
+            <label><input type="radio" name="outcome" value="success" /> Success</label>
+            <label><input type="radio" name="outcome" value="failure" /> Failure</label>
+            <label><input type="radio" name="outcome" value="unknown" /> Unknown</label>
+          </fieldset>
+          <label for="note">Note</label>
+          <input id="note" type="text" maxlength="500" />
+          <button type="submit">Save label</button>
+          <button type="button" id="delete" class="danger">Delete episode</button>
+        </form>
+      </section>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </body>
+</html>

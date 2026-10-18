@@ -436,8 +436,12 @@ class GatewayCore:
         output: NDArray[np.float32] | PolicyError,
     ) -> None:
         tracker = self.shadows.get(revision_id)
-        if tracker is not None:
-            tracker.candidate(request, None if isinstance(output, PolicyError) else output)
+        if tracker is None:
+            return
+        if isinstance(output, PolicyError) and output.reason is ReasonCode.WORKER_UNAVAILABLE:
+            tracker.skip(request, "unavailable")  # the worker is starting: nothing was asked
+            return
+        tracker.candidate(request, None if isinstance(output, PolicyError) else output)
 
     def next_batch(self, group_key: str, now_us: int) -> tuple[Batch | None, list[Delivery]]:
         batch, dropped = self.groups[group_key].scheduler.next_batch(now_us)

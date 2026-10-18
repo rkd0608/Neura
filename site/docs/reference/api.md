@@ -146,7 +146,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `SiteUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Delete a site
 
@@ -197,7 +197,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `ServerUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `412`, `413`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Unenroll a server and revoke its certificate
 
@@ -287,7 +287,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `RobotUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Delete a robot
 
@@ -349,7 +349,7 @@ A read-only computation; safe to repeat, so no Idempotency-Key is required.
 
 Request body: `application/json`, `CompatibilityCheckRequest`.
 
-Responses: `200`, `401`, `403`, `404`, `413`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `413`, `422`, `429`, `500`, `503`.
 
 ### List registered execution profiles
 
@@ -468,7 +468,7 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 
 Request body: `application/merge-patch+json`, `DeploymentUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Delete a deployment
 
@@ -655,7 +655,7 @@ A read-only query; safe to repeat, so no Idempotency-Key is required.
 
 Request body: `application/json`, `MetricsQuery`.
 
-Responses: `200`, `401`, `403`, `404`, `413`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `413`, `422`, `429`, `500`, `503`.
 
 ### List live and recent robot sessions
 
@@ -830,7 +830,7 @@ Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`,
 
 Request body: `application/merge-patch+json`, `MemberUpdate`.
 
-Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `428`, `429`, `500`, `503`.
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `428`, `429`, `500`, `503`.
 
 ### Remove a member or withdraw an invitation
 
@@ -854,7 +854,6 @@ Responses: `204`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
 | `deployment_id` | path | yes |  |
 | `cursor` | query | no |  |
 | `page_size` | query | no |  |
-| `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
 
 Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 
@@ -892,7 +891,6 @@ Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
 | `deployment_id` | path | yes |  |
 | `cursor` | query | no |  |
 | `page_size` | query | no |  |
-| `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
 
 Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 

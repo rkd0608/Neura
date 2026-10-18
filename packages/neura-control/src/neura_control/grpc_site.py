@@ -750,6 +750,26 @@ def _command_message(command: SiteCommand) -> site_pb2.Command:
                 bundle_sha256=data["bundle_sha256"],
             )
         )
+    elif kind == "evaluate":
+        message.evaluate.CopyFrom(
+            site_pb2.RunEvaluation(
+                evaluation_id=data["evaluation_id"],
+                candidate_revision_id=data["candidate_revision_id"],
+                baseline_revision_id=data.get("baseline_revision_id") or "",
+                suite_json=json.dumps(data["suite"], sort_keys=True),
+            )
+        )
+    elif kind == "train":
+        message.train.CopyFrom(
+            site_pb2.RunTraining(
+                training_job_id=data["training_job_id"],
+                base_revision_id=data["base_revision_id"],
+                dataset_filter_json=json.dumps(data["episodes"], sort_keys=True),
+                recipe_json=json.dumps(data["recipe"], sort_keys=True),
+                artifact_name=data["artifact_name"],
+                artifact_version=data["artifact_version"],
+            )
+        )
     else:
         message.collect_diagnostics.CopyFrom(
             site_pb2.CollectDiagnostics(scope=str(data.get("scope", "")))

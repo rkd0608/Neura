@@ -14,25 +14,41 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from neura_contracts import ReasonCode
+from neura_contracts import (
+    ContractError,
+    ExecutionProfile,
+    ModelArtifact,
+    ReasonCode,
+    RobotProfile,
+    check_compatibility,
+    parse_document,
+    signing,
+)
 from neura_control.clock import iso, utcnow
 from neura_control.db.models import (
     ActivationRequest,
+    ContractDocument,
     Deployment,
+    Evaluation,
     Fault,
     MetricPoint,
     Operation,
+    Project,
     Revision,
     Robot,
     RobotSession,
     Server,
     Site,
+    TrainingJob,
 )
 from neura_control.ids import Kind, new_id
+from neura_control.security.principal import Principal, PrincipalKind
 from neura_control.services import records
+from neura_control.services.revisions import report_json, revision_digest
 
 log = logging.getLogger("neura.control")
 TERMINAL = frozenset({"Succeeded", "Failed", "Cancelled"})
+VERDICTS = frozenset({"superior", "non_inferior", "inconclusive", "inferior"})
 
 
 def _touch(row: Any) -> None:
@@ -84,6 +100,12 @@ async def update_operation(
     )
     if state in TERMINAL:
         await _apply_outcome(session, operation)
+    elif operation.kind in ("evaluate", "train"):
+        row = await _job(session, operation)
+        if row is not None and (row.phase, row.message) != ("Running", operation.message):
+            row.phase, row.message = "Running", operation.message
+            _touch(row)
+            await _emit(session, row.project_id, row)
     return operation
 
 
@@ -191,6 +213,240 @@ async def _apply_outcome(session: AsyncSession, operation: Operation) -> None:
             robot_ids = operation.result.get("robot_ids", [])
             if revision_id:
                 await set_active_revision(session, revision_id, list(robot_ids))
+    elif operation.kind in ("evaluate", "train"):
+        row = await _job(session, operation)
+        if row is None:
+            return
+        row.phase, row.reason, row.message = operation.state, operation.reason, operation.message
+        row.finished_at = operation.finished_at
+        if succeeded:
+            try:
+                if isinstance(row, Evaluation):
+                    _evaluation_report(row, operation.result)
+                else:
+                    await _register_trained_model(session, operation, row)
+            except _ResultRejectedError as exc:
+                # The site said it succeeded, but what it sent does not hold up: the operation
+                # failed, and nothing it sent is registered.
+                operation.state, operation.reason, operation.message = (
+                    "Failed",
+                    exc.code.value,
+                    str(exc),
+                )
+                row.phase, row.reason, row.message = "Failed", exc.code.value, str(exc)
+        _touch(row)
+        await _emit(session, row.project_id, row)
+
+
+class _ResultRejectedError(Exception):
+    def __init__(self, code: ReasonCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+async def _job(session: AsyncSession, operation: Operation) -> Evaluation | TrainingJob | None:
+    row: Evaluation | TrainingJob | None
+    if operation.kind == "evaluate":
+        row = await session.get(Evaluation, operation.target, with_for_update=True)
+    else:
+        row = await session.get(TrainingJob, operation.target, with_for_update=True)
+    return row if row is not None and row.operation_id == operation.id else None
+
+
+def _evaluation_report(row: Evaluation, result: dict[str, Any]) -> None:
+    report = result.get("evaluation")
+    kind = row.suite.get("kind")
+    if not isinstance(report, dict) or report.get("kind") != kind:
+        raise _ResultRejectedError(
+            ReasonCode.EVALUATION_REPORT_INVALID, f"the site reported no {kind} evaluation"
+        )
+    verdict = report.get("verdict")
+    row.report = report
+    row.verdict = verdict if verdict in VERDICTS else None
+
+
+async def _register_trained_model(
+    session: AsyncSession, operation: Operation, job: TrainingJob
+) -> None:
+    """Check what the site trained against what was asked, then register its artifact and
+    execution profile and add a candidate revision to the deployment."""
+    result = operation.result
+    base = await session.get(Revision, job.base_revision_id)
+    if base is None:
+        raise _ResultRejectedError(
+            ReasonCode.TRAINING_RESULT_REJECTED, "the base revision no longer exists"
+        )
+    rows = {
+        role: await session.get(ContractDocument, identifier)
+        for role, identifier in (
+            ("model_artifact", base.model_artifact_id),
+            ("robot_profile", base.robot_profile_id),
+            ("execution_profile", base.execution_profile_id),
+        )
+    }
+    documents = {role: parse_document(row.document) for role, row in rows.items() if row}
+    base_artifact, robot_profile, base_profile = (
+        documents["model_artifact"],
+        documents["robot_profile"],
+        documents["execution_profile"],
+    )
+
+    def reject(message: str) -> _ResultRejectedError:
+        return _ResultRejectedError(ReasonCode.TRAINING_RESULT_REJECTED, message)
+
+    reported = result.get("artifact"), result.get("execution_profile")
+    if not all(isinstance(document, dict) for document in reported):
+        raise reject("the site did not report a model artifact and an execution profile")
+    try:
+        artifact, profile = (parse_document(document) for document in reported)
+    except (ContractError, ValueError) as exc:
+        raise reject(f"the site's documents are not valid: {exc}") from exc
+    if not isinstance(artifact, ModelArtifact) or not isinstance(profile, ExecutionProfile):
+        raise reject("the site did not report a model artifact and an execution profile")
+    assert isinstance(base_artifact, ModelArtifact)
+    assert isinstance(base_profile, ExecutionProfile)
+    assert isinstance(robot_profile, RobotProfile)
+    digest = artifact.digest()
+    lineage = artifact.spec.lineage
+    dataset_digest = result.get("dataset_digest")
+    if digest != result.get("artifact_digest"):
+        raise reject("the artifact's digest is not the one reported")
+    if (artifact.metadata.name, artifact.metadata.version) != (
+        job.artifact_name,
+        job.artifact_version,
+    ):
+        raise reject(f"the artifact is not named {job.artifact_name} {job.artifact_version}")
+    if lineage is None or lineage.base_artifact != base_artifact.digest():
+        raise reject("the artifact does not name the base revision's artifact as its base")
+    if lineage.training.job_id != job.id:
+        raise reject("the artifact does not name this training job")
+    if not any(d.digest == dataset_digest for d in lineage.datasets):
+        raise reject("the artifact does not name the dataset it was reported trained on")
+    unchanged = {"weights", "evidence", "lineage"}
+    if artifact.spec.model_dump(exclude=unchanged) != base_artifact.spec.model_dump(
+        exclude=unchanged
+    ):
+        raise reject("a fine-tune changes the weights only; the artifact changes more")
+    served: dict[str, Any] = profile.model_dump(mode="json", exclude_none=True)["spec"]
+    served["binding"]["model_artifact"] = base_artifact.digest()
+    if (
+        profile.spec.binding.model_artifact != digest
+        or served != base_profile.model_dump(mode="json", exclude_none=True)["spec"]
+    ):
+        raise reject("the execution profile is not the base's, bound to the new artifact")
+    try:
+        signatures = signing.validate(digest, [result.get("artifact_signature") or {}])
+    except signing.SignatureError as exc:
+        raise reject(f"the artifact's signature is not valid: {exc}") from exc
+    report = check_compatibility(artifact, robot_profile, profile)
+    if not report.compatible:
+        raise reject("the new artifact is not compatible with the deployment's robots")
+
+    project = await session.get(Project, job.project_id)
+    assert project is not None
+    site = Principal(subject=f"site:{operation.site_id}", kind=PrincipalKind.SITE_AGENT)
+
+    async def audit(action: str, target: str) -> None:
+        await records.audit(
+            session,
+            principal=site,
+            organization_id=project.organization_id,
+            project_id=project.id,
+            action=action,
+            target=target,
+            request_id=operation.id,
+        )
+
+    async def register(
+        document: Any, kind: str, id_kind: Kind, action: str, signed: list[dict[str, str]]
+    ) -> ContractDocument:
+        existing = (
+            await session.scalars(
+                select(ContractDocument).where(
+                    ContractDocument.project_id == job.project_id,
+                    ContractDocument.kind == kind,
+                    ContractDocument.digest == document.digest(),
+                )
+            )
+        ).first()
+        if existing is not None:
+            merged = signing.validate(existing.digest, [*existing.signatures, *signed])
+            if merged != existing.signatures:
+                existing.signatures = merged
+                _touch(existing)
+                await audit(f"{action}.sign", existing.id)
+                await _emit(session, job.project_id, existing)
+            return existing
+        row = ContractDocument(
+            id=new_id(id_kind),
+            project_id=job.project_id,
+            kind=kind,
+            digest=document.digest(),
+            document=document.canonical_data(),
+            signatures=signed,
+            created_by=job.created_by,
+        )
+        session.add(row)
+        await session.flush()
+        await audit(f"{action}.register", row.id)
+        await _emit(session, job.project_id, row, "resource.created")
+        return row
+
+    artifact_row = await register(
+        artifact, "ModelArtifact", Kind.MODEL_ARTIFACT, "model_artifact", signatures
+    )
+    profile_row = await register(
+        profile, "ExecutionProfile", Kind.EXECUTION_PROFILE, "execution_profile", []
+    )
+    episodes = result.get("dataset_episodes")
+    revision = Revision(
+        id=new_id(Kind.REVISION),
+        project_id=job.project_id,
+        deployment_id=job.deployment_id,
+        model_artifact_id=artifact_row.id,
+        execution_profile_id=profile_row.id,
+        robot_profile_id=base.robot_profile_id,
+        notes=(
+            f"Fine-tuned by training job {job.id} from revision {base.id} on {episodes} "
+            f"episodes recorded at the site (dataset {dataset_digest})."
+        ),
+        revision_digest=revision_digest(report),
+        compatibility=report_json(report),
+        phase="Created",
+        created_by=job.created_by,
+    )
+    session.add(revision)
+    await session.flush()
+    await audit("revision.create", revision.id)
+    await _emit(session, job.project_id, revision, "resource.created")
+    training = result.get("training")
+    job.artifact_id = artifact_row.id
+    job.execution_profile_id = profile_row.id
+    job.candidate_revision_id = revision.id
+    job.dataset_digest = dataset_digest
+    job.dataset_episodes = episodes if isinstance(episodes, int) else None
+    job.metrics = _training_metrics(training) if isinstance(training, dict) else None
+
+
+def _training_metrics(reported: dict[str, Any]) -> dict[str, Any]:
+    """What a training report says about the run: the data and the loss."""
+    dataset = reported.get("dataset") or {}
+    training = reported.get("training") or {}
+    metrics = {
+        "episodes": dataset.get("episodes"),
+        "frames": dataset.get("frames"),
+        "episodes_skipped": dataset.get("skipped"),
+        "steps": training.get("steps"),
+        "seconds": training.get("seconds"),
+        "loss_first": training.get("loss_first"),
+        "loss_last": training.get("loss_last"),
+        "losses": training.get("losses"),
+    }
+    return {
+        k: v
+        for k, v in metrics.items()
+        if isinstance(v, int | float | list) and not isinstance(v, bool)
+    }
 
 
 async def set_active_revision(

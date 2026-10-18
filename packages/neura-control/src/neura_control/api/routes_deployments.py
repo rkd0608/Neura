@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from neura_contracts import ReasonCode, check_compatibility, content_digest
+from neura_contracts import ReasonCode, check_compatibility
 from neura_control.api import serializers
 from neura_control.api.auth import authenticate
 from neura_control.api.common import (
@@ -27,7 +27,7 @@ from neura_control.api.common import (
     resource_result,
     transaction,
 )
-from neura_control.api.routes_contracts import load_contract, report_json
+from neura_control.api.routes_contracts import load_contract
 from neura_control.api.routes_core import flush_unique, patched_spec
 from neura_control.api.schemas import (
     ActivationRequestCreate,
@@ -52,6 +52,8 @@ from neura_control.db.models import (
 from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
+from neura_control.services import release_gates
+from neura_control.services.revisions import report_json, revision_digest
 from neura_control.services.site_reports import update_operation
 
 router = APIRouter()
@@ -151,6 +153,7 @@ async def create_deployment(
             desired_revision_id=None,
             rollout=body.spec.rollout.model_dump(exclude_none=True),
             capture=body.spec.capture.model_dump(exclude_none=True),
+            release_gates=body.spec.release_gates.model_dump(),
             labels=body.spec.labels,
             observed={
                 "phase": "Pending",
@@ -207,6 +210,10 @@ async def update_deployment(
         if capture != row.capture:
             row.capture = capture
             await ctx.record(session, project, "deployment.set_capture", row.id)
+        gates = spec.release_gates.model_dump()
+        if gates != (row.release_gates or {"evaluations": []}):
+            row.release_gates = gates
+            await ctx.record(session, project, "deployment.set_release_gates", row.id)
         touch(row)
         await ctx.record(
             session,
@@ -308,13 +315,7 @@ async def create_revision(
             execution_profile_id=spec.execution_profile_id,
             robot_profile_id=spec.robot_profile_id,
             notes=spec.notes,
-            revision_digest=content_digest(
-                {
-                    "model_artifact": report.artifact_digest,
-                    "robot_profile": report.robot_profile_digest,
-                    "execution_profile": report.execution_profile_digest,
-                }
-            ),
+            revision_digest=revision_digest(report),
             compatibility=report_json(report),
             phase="Created",
             created_by=principal.subject,
@@ -348,7 +349,7 @@ async def get_revision(
         return resource_result(200, serializers.revision(row), row.version).response()
 
 
-async def _start_operation(
+async def start_operation(
     session: AsyncSession,
     ctx: Ctx,
     project: Project,
@@ -390,7 +391,7 @@ async def _start_operation(
     return operation
 
 
-def _accepted(operation: Operation) -> ApiResult:
+def accepted(operation: Operation) -> ApiResult:
     return ApiResult(
         202, serializers.operation(operation), {"Location": f"/v1/operations/{operation.id}"}
     )
@@ -409,7 +410,7 @@ async def upgrade_agent(
 
     async def work(session: AsyncSession) -> ApiResult:
         server, project = await ctx.owned(session, Server, server_id, Permission.ADMIN)
-        operation = await _start_operation(
+        operation = await start_operation(
             session,
             ctx,
             project,
@@ -424,7 +425,7 @@ async def upgrade_agent(
                 "bundle_sha256": body.bundle_sha256,
             },
         )
-        return _accepted(operation)
+        return accepted(operation)
 
     return await idempotent(request, principal, work)
 
@@ -443,7 +444,7 @@ async def prepare_revision(
             raise ProblemError(ReasonCode.API_CONFLICT, f"the revision is {revision.phase}")
         deployment = await session.get(Deployment, revision.deployment_id)
         assert deployment is not None
-        operation = await _start_operation(
+        operation = await start_operation(
             session,
             ctx,
             project,
@@ -459,7 +460,7 @@ async def prepare_revision(
         if revision.phase == "Created":
             revision.phase = "Preparing"
             touch(revision)
-        return _accepted(operation)
+        return accepted(operation)
 
     return await idempotent(request, principal, work)
 
@@ -520,7 +521,14 @@ async def request_activation(
         deployment, project = await ctx.owned(session, Deployment, deployment_id, Permission.DEPLOY)
         revision = await _deployment_revision(session, deployment, body.revision_id)
         robots = _target_robots(deployment, body.robot_ids)
-        operation = await _start_operation(
+        missing = await release_gates.unmet(session, deployment, revision.id, robots)
+        if missing:
+            raise ProblemError(
+                ReasonCode.API_RELEASE_GATE_UNMET,
+                "the deployment's release gates require " + "; ".join(missing),
+                errors=missing,
+            )
+        operation = await start_operation(
             session,
             ctx,
             project,
@@ -542,7 +550,7 @@ async def request_activation(
                 created_by=principal.subject,
             )
         )
-        return _accepted(operation)
+        return accepted(operation)
 
     return await idempotent(request, principal, work)
 
@@ -562,7 +570,7 @@ async def rollback(
             if body.robot_ids
             else list(deployment.robot_ids)
         )
-        operation = await _start_operation(
+        operation = await start_operation(
             session,
             ctx,
             project,
@@ -584,7 +592,7 @@ async def rollback(
                 created_by=principal.subject,
             )
         )
-        return _accepted(operation)
+        return accepted(operation)
 
     return await idempotent(request, principal, work)
 

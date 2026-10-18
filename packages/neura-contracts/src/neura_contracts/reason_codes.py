@@ -116,7 +116,9 @@ class ReasonCode(StrEnum):
     AGENT_JOB_TIMED_OUT = "AGENT_JOB_TIMED_OUT"
     AGENT_JOB_DEVICE_BUSY = "AGENT_JOB_DEVICE_BUSY"
     EVALUATION_INVALID = "EVALUATION_INVALID"
+    EVALUATION_REPORT_INVALID = "EVALUATION_REPORT_INVALID"
     TRAINING_INVALID = "TRAINING_INVALID"
+    TRAINING_RESULT_REJECTED = "TRAINING_RESULT_REJECTED"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
     API_FORBIDDEN = "API_FORBIDDEN"
     API_NOT_FOUND = "API_NOT_FOUND"
@@ -852,12 +854,26 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         retryable=False,
         message="The evaluation's suite is not one the site can run.",
     ),
+    ReasonCode.EVALUATION_REPORT_INVALID: ReasonCodeInfo(
+        code=ReasonCode.EVALUATION_REPORT_INVALID,
+        area="evaluation",
+        severity="error",
+        retryable=False,
+        message="The site's evaluation report could not be read; no verdict was recorded.",
+    ),
     ReasonCode.TRAINING_INVALID: ReasonCodeInfo(
         code=ReasonCode.TRAINING_INVALID,
         area="training",
         severity="error",
         retryable=False,
         message="The training job's recipe or episode filter is not valid.",
+    ),
+    ReasonCode.TRAINING_RESULT_REJECTED: ReasonCodeInfo(
+        code=ReasonCode.TRAINING_RESULT_REJECTED,
+        area="training",
+        severity="error",
+        retryable=False,
+        message="The site's trained model did not verify against its base, its dataset or its signature; nothing was registered.",
     ),
     ReasonCode.API_UNAUTHENTICATED: ReasonCodeInfo(
         code=ReasonCode.API_UNAUTHENTICATED,

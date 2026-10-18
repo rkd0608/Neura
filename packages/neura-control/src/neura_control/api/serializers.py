@@ -158,6 +158,7 @@ def deployment(row: models.Deployment) -> dict[str, Any]:
             "desired_revision_id": row.desired_revision_id,
             "rollout": rollout,
             "capture": capture_settings(row.capture),
+            "release_gates": {"evaluations": [], **(row.release_gates or {})},
             "labels": row.labels,
         },
         "status": {
@@ -211,6 +212,54 @@ def operation(row: models.Operation) -> dict[str, Any]:
         "started_at": iso(row.started_at),
         "finished_at": iso(row.finished_at),
         "result": row.result,
+    }
+
+
+def evaluation(row: models.Evaluation) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, project_id=row.project_id),
+        "deployment_id": row.deployment_id,
+        "spec": {
+            "candidate_revision_id": row.candidate_revision_id,
+            "baseline_revision_id": row.baseline_revision_id,
+            "suite": row.suite,
+        },
+        "status": {
+            "phase": row.phase,
+            "operation_id": row.operation_id,
+            "reason": row.reason,
+            "message": row.message,
+            "verdict": row.verdict,
+            "report": row.report,
+            "finished_at": iso(row.finished_at),
+        },
+    }
+
+
+def training_job(row: models.TrainingJob) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, project_id=row.project_id),
+        "deployment_id": row.deployment_id,
+        "spec": {
+            "base_revision_id": row.base_revision_id,
+            "episodes": row.episodes,
+            "recipe": row.recipe,
+            "artifact_name": row.artifact_name,
+            "artifact_version": row.artifact_version,
+        },
+        "status": {
+            "phase": row.phase,
+            "operation_id": row.operation_id,
+            "reason": row.reason,
+            "message": row.message,
+            "artifact_id": row.artifact_id,
+            "execution_profile_id": row.execution_profile_id,
+            "candidate_revision_id": row.candidate_revision_id,
+            "dataset_digest": row.dataset_digest,
+            "dataset_episodes": row.dataset_episodes,
+            "metrics": row.metrics,
+            "finished_at": iso(row.finished_at),
+        },
     }
 
 

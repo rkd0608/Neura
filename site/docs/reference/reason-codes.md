@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 117 codes.
+Catalog version 1, 119 codes.
 
 ## Contracts
 
@@ -154,12 +154,14 @@ Catalog version 1, 117 codes.
 | Code | Severity | Retryable | HTTP | Meaning |
 | --- | --- | --- | --- | --- |
 | `EVALUATION_INVALID` | error | no |  | The evaluation's suite is not one the site can run. |
+| `EVALUATION_REPORT_INVALID` | error | no |  | The site's evaluation report could not be read; no verdict was recorded. |
 
 ## Training
 
 | Code | Severity | Retryable | HTTP | Meaning |
 | --- | --- | --- | --- | --- |
 | `TRAINING_INVALID` | error | no |  | The training job's recipe or episode filter is not valid. |
+| `TRAINING_RESULT_REJECTED` | error | no |  | The site's trained model did not verify against its base, its dataset or its signature; nothing was registered. |
 
 ## Api
 

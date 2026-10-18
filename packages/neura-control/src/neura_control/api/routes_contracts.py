@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import (
-    CompatibilityReport,
     ContractError,
     ExecutionProfile,
     ReasonCode,
@@ -39,6 +38,7 @@ from neura_control.db.models import ContractDocument, Project
 from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
+from neura_control.services.revisions import report_json
 
 router = APIRouter()
 
@@ -54,18 +54,6 @@ COLLECTIONS: dict[str, tuple[str, Kind]] = {
     "model-artifacts": ("ModelArtifact", Kind.MODEL_ARTIFACT),
     "execution-profiles": ("ExecutionProfile", Kind.EXECUTION_PROFILE),
 }
-
-
-def report_json(report: CompatibilityReport) -> dict[str, Any]:
-    return {
-        "compatible": report.compatible,
-        "artifact_digest": report.artifact_digest,
-        "robot_profile_digest": report.robot_profile_digest,
-        "execution_profile_digest": report.execution_profile_digest,
-        "issues": [
-            {"code": i.code.value, "path": i.path, "message": i.message} for i in report.issues
-        ],
-    }
 
 
 async def load_contract(session: AsyncSession, project_id: str, identifier: str, kind: str) -> Any:

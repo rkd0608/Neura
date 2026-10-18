@@ -3,7 +3,9 @@
 **NucleiLabs builds infrastructure that makes robot AI easier to run.** Neura, our first product,
 lets robotics companies deploy their models across multiple robots using shared GPU servers. It
 coordinates inference around each robot's timing requirements and handles model updates, so teams
-can scale without rebuilding their serving infrastructure.
+can scale without rebuilding their serving infrastructure. It also records what deployed robots do,
+and fine-tunes and evaluates models on those recordings at the customer's site, so a better model
+reaches the robots through the same release flow, with evidence that it is no worse.
 
 Status: in development. Nothing here is a released product. See `docs/neura-design.md` for the
 design and the build plan (§16.1).
@@ -27,6 +29,7 @@ design and the build plan (§16.1).
 | `packages/neura-bench` | GPU-sharing benchmark: each sharing case against the dedicated baselines (`neura-bench`) |
 | `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, invariant monitor, `neura-sim-robots`, `neura-sim-soak`, `neura-chaos` |
 | `packages/neura-robots` | Real robots: the SO-101 arm over LeRobot, a servo bus emulator, `neura-arm` (serve an arm), `neura-qualify` (hardware fault suite, parity, closed-loop episodes) |
+| `packages/neura-learn` | Evaluation and fine-tuning at the site: simulation and replay suites, the paired non-inferiority verdict, LeRobot fine-tunes (`neura-learn`) |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
 | `landing/` | The NucleiLabs site: what Neura is, how it works, how to become a design partner (static) |

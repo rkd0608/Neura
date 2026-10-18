@@ -1,6 +1,6 @@
 # Neura: engineering design v0.1
 
-Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm; M9 (capture) implemented, M10–M12 (evaluate, improve, the loop) in progress (§28) · October 17, 2026
+Status: design in effect; M1 (foundation), M2 (data plane core), M3 (control plane), M4 (site agent) and M5 (web console) implemented; M6 (models and GPU sharing) built, its GPU reports in (an L4, with and without VLAs, §9.5); M7 (production hardening) implemented; M8 (physical validation) built and passing on the emulated arm, its hardware run awaiting the arm; M9 (capture), M10 (evaluate, except shadow serving) and M11 (improve) implemented, M12 (the loop: console and local tools) in progress (§28) · October 18, 2026
 Scope: Neura only (deployment and fleet serving of customer-owned robot policies). This is the single design document for Neura: architecture, connectivity, privacy, console, API, service levels, value and defensibility.
 Parent document: NucleiLabs platform and product technical blueprint v0.1.
 
@@ -690,9 +690,9 @@ Every layer exists from the first milestone and deepens with each one, so the en
 | **M7. Production hardening** ✅ | mTLS everywhere, artifact signing, customer-managed keys, outbound ledger (§18), Grafana dashboards, installer and upgrades, chaos and soak tests, docs site (§26) | Security review checklist complete; 72-hour soak with injected faults and no invariant violations. Done: §17.8, and three 72-hour soaks with no violation (§17.7, `soak/reports/`) |
 | **M8. Physical validation** (built; hardware run pending) | SO-101-class arms connected through the same platform: the SO-101 integration over LeRobot, a servo bus emulator, `neura-arm`, and `neura-qualify` (hardware fault suite, open-loop parity, closed-loop non-inferiority); implementation notes in §7.1 | Fault suite and parity pass on hardware. Built and passing on the emulated arm (`qualification/reports/`); the hardware report is produced by `neura-qualify` with the arm |
 | **M9. Capture** ✅ | Episode recording on the robot off the action path, the site's capture service and episode store, labels, dataset snapshots, retention, LeRobot export, deployment capture settings within the site's boundary (§28.2) | A recorded task reaches the site's store, verified and labeled, while the arm is served as usual (emulated SO-101); episodes never leave the site |
-| **M10. Evaluate** (planned) | Closed-loop simulation suites, replay on captured episodes, shadow serving, release gates (§28.3) | A candidate's evidence is computed at the site and required before activation |
-| **M11. Improve** (planned) | Fine-tuning jobs at the site, signed artifacts with lineage (§28.4) | A captured dataset fine-tunes a model at the site into a new, signed, traceable artifact |
-| **M12. The loop** (planned) | API, console and the end-to-end run (§28.5) | Capture, fine-tune, evaluate and activate, end to end, on the simulated cell |
+| **M10. Evaluate** (built; shadow serving planned) | Closed-loop simulation suites, replay on captured episodes, shadow serving, release gates (§28.3) | A candidate's evidence is computed at the site and required before activation |
+| **M11. Improve** (built) | Fine-tuning jobs at the site, signed artifacts with lineage (§28.4) | A captured dataset fine-tunes a model at the site into a new, signed, traceable artifact |
+| **M12. The loop** (in progress) | API, console and the end-to-end run (§28.5) | Capture, fine-tune, evaluate and activate, end to end, on the simulated cell |
 
 Engineering standards for every milestone: typed code, tests written with the code, CI gates that cannot be bypassed, architecture decisions recorded in this document, and no component on the action path depending on the cloud.
 
@@ -1813,23 +1813,150 @@ Not built yet: recording the operator's corrective motions during a takeover (it
 customer's teleoperation to feed Neura its commands), video encoding on the robot, and an episode
 viewer (§28.5).
 
-### 28.3 Evaluate (M10, planned)
+### 28.3 Evaluate (M10, built; shadow serving planned)
 
-Closed-loop suites in simulation (seeds, Wilson intervals, a paired non-inferiority verdict against
-the running model), replay on captured episodes, and shadow serving (a candidate sees live
-observations; its actions never reach a robot). Results attach to the candidate's revision as
-evidence, and a deployment can require them before activation.
+An evaluation compares a **candidate** revision with a **baseline**: by default the revision most
+of the deployment's robots run, the one the candidate would replace. Both run at the site, in the
+worker sandbox (`neura-learn evaluate`, `packages/neura-learn`), and never on a GPU that serves
+robots (§28.4, *Jobs at the site*). Two suites:
 
-### 28.4 Improve (M11, planned)
+- **Simulation.** Both models on the same seeded scenes of a task the site can simulate (ALOHA
+  transfer-cube and insertion, §25), in lockstep: the world waits for the policy, as LeRobot
+  evaluates its published policies, so the comparison measures the models and not the computer.
+  The verdict is a paired non-inferiority test on the success rates (`neura_learn.stats`): the
+  difference of paired proportions with a Newcombe hybrid-score interval, one-sided at 95%,
+  against a margin agreed before the run (0.10 by default):
+  - `superior`: the lower bound is above zero;
+  - `non_inferior`: the lower bound is above minus the margin;
+  - `inferior`: the upper bound is below minus the margin;
+  - `inconclusive`: anything else (too few scenes to tell).
 
-Fine-tuning jobs at the site: a dataset snapshot, a base artifact and a recipe produce a new
-checkpoint. The checkpoint is signed at the site as a new artifact with structured lineage (base
-artifact, dataset digest, recipe, code), then evaluated (§28.3) and rolled out through §13.
+  Each model's success rate comes with its Wilson interval, and every scene's seed and outcome is
+  in the report.
+- **Replay.** Both models on observations the site's robots recorded (§28.2). At every *n*-th
+  recorded frame each model predicts a chunk, compared with the actions the robot then executed,
+  in the model's units and normalized by each action's range. Errors are reported by episode
+  outcome. The candidate passes (`non_inferior`) when its mean error on successful episodes is at
+  most the baseline's × (1 + 0.25) + 0.01, and is `inconclusive` without successful episodes. A
+  replay is a regression check on real data: it can catch a candidate that drifts from behavior
+  that worked, but it cannot show a candidate is better, since the baseline produced those actions.
 
-### 28.5 The loop (M12, planned)
+**API** (tag *Improvement*). `POST /v1/deployments/{id}/evaluations` with the candidate, an
+optional baseline and the suite creates an `Evaluation` and an `Operation` (`kind: evaluate`), and
+sends the site a `RunEvaluation` command. A replay's episode filter is translated for the site:
+robots by the names the site knows them by, and only the deployment's own robots and revisions.
+The site snapshots the episodes it selects into a dataset (released when the evaluation ends, so
+it holds nothing from retention) and reports the verdict, the suite, both models' rates or errors,
+the comparison and, for a replay, counts and the dataset's digest. All of it is allowlisted
+(`catalog/outbound.yaml`, `evaluation.*`); no episode leaves the site. The control plane records a
+report only if it is of the kind asked for (`EVALUATION_REPORT_INVALID` otherwise).
 
-API resources and console screens for episodes, datasets, evaluations and training jobs; the
-end-to-end run on the simulated ALOHA cell: capture, fine-tune, evaluate, stage, activate.
+**Release gates.** A deployment's `release_gates.evaluations` lists the kinds of evaluation a
+revision needs before robots switch to it: for each robot targeted, a `Succeeded` evaluation of
+each kind, of the candidate against the revision that robot runs now, with a `superior` or
+`non_inferior` verdict. An activation request without it is refused (409,
+`API_RELEASE_GATE_UNMET`, naming what is missing). Robots that run nothing yet, or already run the
+candidate, need no evidence; neither does a rollback.
+
+**Evidence.**
+- Statistics tests: intervals stay within [0, 1] and contain the estimate, pairing is used, each
+  verdict, and the margin is a difference in success rate.
+- Replay tests on real LeRobot models (synthetic weights): a model that predicts what the robot
+  did, and one 10% of each action's range off, give the expected errors and verdicts.
+- A simulation suite run on the ALOHA scene with two checkpoints.
+- Agent tests: an evaluation of the site's own episodes, reported within the allowlist, its
+  dataset released; a job refused when every GPU serves robots (`AGENT_JOB_DEVICE_BUSY`).
+- Control-plane tests: the commands sent, the filter translated, the default baseline, reports of
+  the wrong kind refused, the gate refusing an `inferior` verdict and accepting `non_inferior`, a
+  first activation and a rollback passing without evidence.
+
+Not built yet: **shadow serving**, a candidate served on live observations whose actions never
+reach a robot, with divergence statistics against the running model.
+
+### 28.4 Improve (M11, built)
+
+A training job fine-tunes a revision's model on episodes its site recorded, at the site
+(`neura-learn train`).
+1. **Data.** The site snapshots the episodes the job's filter selects into a dataset (§28.2) and
+   exports it as a LeRobot dataset in the model's units.
+2. **Training.** LeRobot's own training loop (`lerobot_train.train`), called with a configuration
+   built from the base checkpoint and a recipe: steps, batch size, learning rate (the policy's own
+   preset by default), seed, data loader workers and logging. By default the fine-tune keeps the
+   base model's normalization statistics: a few hundred recorded episodes should adjust a policy,
+   not move every input it was trained on (`normalization: dataset` uses the new data's). Losses
+   are read from LeRobot's log and reported as progress.
+3. **A new artifact.** The new checkpoint becomes a `ModelArtifact`: the base's contract with the
+   new weight files and a `lineage`, part of the digest:
+   - the base artifact's digest;
+   - the dataset's digest and episode count, and the site it is at;
+   - the recipe, the steps, the job, and the software versions that trained it.
+
+   The base's evidence is dropped: it is not this model's. The weights go into the site's artifact
+   store and never leave the site. The artifact is signed with the site's training key
+   (`training-key.pem` in the agent's state directory), which the site trusts for its own models;
+   the key's creation and every job are in the site's audit log. The base's execution profile is bound to the new digest, so the
+   fine-tune is served as its base was.
+
+The training job's dataset stays pinned: the lineage names it.
+
+**The control plane** (`POST /v1/deployments/{id}/training-jobs`) sends `RunTraining` with the
+filter (translated as for a replay), the recipe and the new artifact's name and version. By
+default these are the base's name and `<version>-ft.<job>`; a name and version already registered,
+or claimed by a running job, is refused. On success it checks what the site sent before it
+registers anything:
+- the artifact's digest is the one reported and its name and version are the ones asked;
+- its lineage names the base revision's artifact, this job and the dataset reported;
+- it changes nothing but its weights, evidence and lineage;
+- the profile is the base's, bound to the new digest, and the three are compatible;
+- the site's signature is valid.
+
+It then registers the artifact (with the site's signature) and the profile, and adds a candidate
+revision to the deployment. That revision reaches the site in its manifest, to prepare, evaluate
+and activate like any other. A result that does not verify registers nothing and fails the
+operation (`TRAINING_RESULT_REJECTED`).
+
+**Jobs at the site** (`neura_agent.jobs`). Jobs run one at a time, as `python -m neura_learn`
+through the worker sandbox's launcher (a process, or the pinned worker image with entrypoint
+`neura-learn`), under a timeout (6 hours by default). They report progress as JSON lines every few
+seconds and can be cancelled with their operation. They take a GPU no worker serves on; a site
+whose GPUs all serve robots refuses the job unless its operator allows sharing
+(`NEURA_AGENT_JOB_SHARE_GPUS`), and `NEURA_AGENT_JOB_DEVICE` pins one. Remote evaluation and
+training are site operations its operator can turn off, like any other (§17.4).
+
+**Evidence.**
+- A fine-tune of a real LeRobot ACT model (synthetic weights) on recorded episodes produces a
+  checkpoint the serving adapter loads, with the base's normalization kept.
+- The agent's job, end to end: the artifact verifies, its lineage names its base and its
+  dataset, its signature is the site's and trusted there, and its weights are in the site's store.
+- Control-plane tests: every tampering is refused and registers nothing (another base, another
+  dataset, a changed profile, a changed adapter, a bad signature, missing documents); one name and
+  version names one model.
+- **The loop, end to end** (`packages/neura-control/tests/test_improvement_e2e.py`): a real agent
+  holds four recorded episodes. The control plane asks it to fine-tune the running model on the
+  three successful ones; the agent trains and reports. The control plane registers the signed
+  artifact and adds a candidate revision, which reaches the site. Activation is refused until a
+  replay evaluation of the candidate against the running model, on the site's episodes, returns
+  `non_inferior`; then it is accepted.
+
+### 28.5 The loop (M12, in progress)
+
+Built:
+- **API resources** for evaluations, training jobs and release gates (§28.3, §28.4), in the
+  generated SDK and the API reference.
+- **Console.** A deployment's *Improve* tab shows:
+  - the episodes its robots recorded, as counts by outcome;
+  - the fine-tuning jobs: base, new model, episodes trained on, loss, state and candidate revision;
+  - the evaluations: suite, candidate and baseline, the numbers behind the verdict, the verdict;
+  - the release gates, which can be changed there.
+
+  *Fine-tune* and *Evaluate* start a job; every value the site will use is sent explicitly.
+- **Docs.** The improvement-loop guide on the docs site: recording, labeling, fine-tuning,
+  evaluating and gating, what stays at the site, and the limits.
+- **The loop, end to end** through the control plane and a real agent on a synthetic-weight ACT
+  model (§28.4, *Evidence*).
+
+Not built yet: the same loop on the simulated ALOHA cell, from episodes the cell records (labeled
+by the simulator) to a simulation-suite verdict and an activation; an episode viewer at the site.
 
 ---
 

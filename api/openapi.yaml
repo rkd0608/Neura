@@ -145,6 +145,8 @@ paths:
           $ref: '#/components/responses/PreconditionFailed'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/IfMatchRequired'
         '429':
@@ -1021,6 +1023,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1300,6 +1304,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1835,6 +1841,8 @@ paths:
           $ref: '#/components/responses/PreconditionFailed'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/IfMatchRequired'
         '429':
@@ -1936,6 +1944,8 @@ paths:
           $ref: '#/components/responses/PreconditionFailed'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/IfMatchRequired'
         '429':
@@ -2116,6 +2126,8 @@ paths:
           $ref: '#/components/responses/PreconditionFailed'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/IfMatchRequired'
         '429':
@@ -2378,6 +2390,8 @@ paths:
           $ref: '#/components/responses/PreconditionFailed'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/IfMatchRequired'
         '429':
@@ -2578,7 +2592,6 @@ paths:
       - $ref: '#/components/parameters/DeploymentId'
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/PageSize'
-      - $ref: '#/components/parameters/LabelSelector'
       responses:
         '200':
           description: OK.
@@ -2688,7 +2701,6 @@ paths:
       - $ref: '#/components/parameters/DeploymentId'
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/PageSize'
-      - $ref: '#/components/parameters/LabelSelector'
       responses:
         '200':
           description: OK.
@@ -5361,17 +5373,16 @@ components:
       type: object
       required:
       - metadata
+      - deployment_id
       - spec
       - status
       properties:
         metadata:
           $ref: '#/components/schemas/Metadata'
+        deployment_id:
+          $ref: '#/components/schemas/DeploymentId'
         spec:
-          allOf:
-          - $ref: '#/components/schemas/EvaluationSpec'
-          properties:
-            deployment_id:
-              $ref: '#/components/schemas/DeploymentId'
+          $ref: '#/components/schemas/EvaluationSpec'
         status:
           type: object
           readOnly: true
@@ -5404,6 +5415,7 @@ components:
               type:
               - object
               - 'null'
+              additionalProperties: true
               description: 'The site''s report: success rates and their intervals, the paired comparison and
                 each scene, or replay errors by episode outcome.'
             finished_at:
@@ -5502,17 +5514,16 @@ components:
       type: object
       required:
       - metadata
+      - deployment_id
       - spec
       - status
       properties:
         metadata:
           $ref: '#/components/schemas/Metadata'
+        deployment_id:
+          $ref: '#/components/schemas/DeploymentId'
         spec:
-          allOf:
-          - $ref: '#/components/schemas/TrainingJobSpec'
-          properties:
-            deployment_id:
-              $ref: '#/components/schemas/DeploymentId'
+          $ref: '#/components/schemas/TrainingJobSpec'
         status:
           type: object
           readOnly: true
@@ -5555,6 +5566,7 @@ components:
               type:
               - object
               - 'null'
+              additionalProperties: true
               description: Episodes and frames trained on, steps, duration and loss.
             finished_at:
               oneOf:

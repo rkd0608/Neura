@@ -49,6 +49,7 @@ import {
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { shortId } from "../lib/format";
+import { ImprovePanel } from "./Improve";
 
 type Revision = Schemas["Revision"];
 
@@ -81,6 +82,7 @@ export function ReleasePage() {
     { id: "overview", label: "Overview" },
     { id: "revisions", label: "Revisions", count: revisions.data?.length ?? null },
     { id: "activations", label: "Activations", count: requests.data?.length ?? null },
+    { id: "improve", label: "Improve" },
     {
       id: "sessions",
       label: "Sessions",
@@ -421,6 +423,18 @@ export function ReleasePage() {
               </div>
             )}
           </Card>
+        </TabPanel>
+      ) : null}
+
+      {tab === "improve" ? (
+        <TabPanel label="Improve">
+          <ImprovePanel
+            deployment={d}
+            revisions={revisions.data ?? []}
+            projectId={projectId}
+            canDeploy={can.deploy}
+            onOperation={setTracking}
+          />
         </TabPanel>
       ) : null}
 

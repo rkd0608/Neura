@@ -17,23 +17,28 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M3. Control plane | Management API on PostgreSQL: organizations, projects, sites, robots, contracts, deployments, operations, events, audit, roles, sign-in, API tokens | Built |
 | M4. Site agent | Enrollment, signed desired state, preflight, local approval, task-boundary switches, offline authorization, local site API and CLI | Built |
 | M5. Web console | Onboarding to deployment in the browser, live sessions, faults, audit, settings; generated Python SDK | Built |
-| M6. Models and GPU sharing | ACT, SmolVLA and π0-class adapters, batching and multi-adapter batching, profiling, benchmark harness | Built; benchmark on a GPU pending |
+| M6. Models and GPU sharing | ACT, SmolVLA and π0-class adapters, batching and multi-adapter batching, profiling, benchmark harness | Built; benchmarked on an NVIDIA L4 |
 | M7. Production hardening | Mutual TLS, artifact signing, customer-managed keys, outbound ledger, dashboards, installer and signed upgrades, worker sandbox, supply-chain controls, chaos and soak testing, a security review, these docs | Built; 72-hour soaks with injected faults had no invariant violation |
 | M8. Physical validation | SO-101 class arms through the same platform: fault suite and parity on hardware | Built and passing on the emulated arm; the run on hardware is pending |
+| M9. Capture | Robots record what they see and do, episodes kept and labeled at the site, datasets, export to LeRobot | Built |
+| M10. Evaluate | A candidate model against the running one, at the site: simulation and replay suites, release gates | Built; shadow serving pending |
+| M11. Improve | Fine-tuning at the site on recorded episodes, signed artifacts with lineage, candidate revisions | Built |
+| M12. The loop | The loop in the console and these docs; capture, fine-tune, evaluate and activate on the simulated cell | In progress: console and docs built, the run on the simulated cell pending |
 
 ## Not yet on this site
 
 - **Installation guide.** The installer exists (`deploy/install/install.sh`, with signed agent
   upgrades and rollback); its page is added once it has been run on a clean machine from these
   docs alone.
-- **Benchmarks.** The harness runs and a report from a CPU development host exists; the page is
-  added with the GPU report, which states its commit, digests, hardware and command, losing cases
-  included.
+- **Benchmarks.** Reports from an NVIDIA L4, with and without vision-language-action models, are
+  in the repository (`bench/reports/`), each with its commit, digests, hardware and command,
+  losing cases included; their page is not written yet.
 
 ## Out of scope
 
-Training, evaluation as a product, simulators, teleoperation, safety certification, and sharing
-GPUs between different customers.
+Simulators, teleoperation, safety certification, and sharing GPUs between different customers.
+Training and evaluation were out of scope until October 2026; they now run at the customer's site,
+on its own data and hardware, and never in Neura's cloud by default.
 
 ## Status labels
 

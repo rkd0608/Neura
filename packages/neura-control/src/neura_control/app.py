@@ -31,6 +31,7 @@ from neura_control.api import (
     routes_contracts,
     routes_core,
     routes_deployments,
+    routes_improvement,
     routes_observe,
     routes_weights,
 )
@@ -328,6 +329,7 @@ def create_app(
         routes_core,
         routes_contracts,
         routes_deployments,
+        routes_improvement,
         routes_observe,
         routes_access,
         routes_weights,

@@ -220,6 +220,8 @@ class Deployment(Resource, Base):
     rollout: Mapped[dict[str, Any]] = mapped_column(nullable=False)
     # What the deployment's robots record (design §28.2); {"mode": "off"} records nothing.
     capture: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    # Evaluations a revision needs before it replaces the one robots run (design §28.3).
+    release_gates: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
 
@@ -284,6 +286,61 @@ class ActivationRequest(Resource, Base):
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="AwaitingLocalApproval")
     approved_by: Mapped[str | None] = mapped_column(String(256))
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class Evaluation(Resource, Base):
+    """A candidate revision evaluated against the one it would replace, at the site (§28.3)."""
+
+    __tablename__ = "evaluations"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    deployment_id: Mapped[str] = mapped_column(
+        ForeignKey("deployments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    candidate_revision_id: Mapped[str] = mapped_column(
+        ForeignKey("revisions.id"), nullable=False, index=True
+    )
+    baseline_revision_id: Mapped[str | None] = mapped_column(ForeignKey("revisions.id"))
+    suite: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    operation_id: Mapped[str | None] = mapped_column(ForeignKey("operations.id"))
+    phase: Mapped[str] = mapped_column(String(16), nullable=False, default="Pending")
+    reason: Mapped[str | None] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    verdict: Mapped[str | None] = mapped_column(String(16))
+    report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TrainingJob(Resource, Base):
+    """A fine-tune of a revision's model on episodes its site recorded (design §28.4)."""
+
+    __tablename__ = "training_jobs"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    deployment_id: Mapped[str] = mapped_column(
+        ForeignKey("deployments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    base_revision_id: Mapped[str] = mapped_column(ForeignKey("revisions.id"), nullable=False)
+    episodes: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    recipe: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    artifact_name: Mapped[str] = mapped_column(String(63), nullable=False)
+    artifact_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation_id: Mapped[str | None] = mapped_column(ForeignKey("operations.id"))
+    phase: Mapped[str] = mapped_column(String(16), nullable=False, default="Pending")
+    reason: Mapped[str | None] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # What the job produced, once the site's result verified.
+    artifact_id: Mapped[str | None] = mapped_column(ForeignKey("contract_documents.id"))
+    execution_profile_id: Mapped[str | None] = mapped_column(ForeignKey("contract_documents.id"))
+    candidate_revision_id: Mapped[str | None] = mapped_column(ForeignKey("revisions.id"))
+    dataset_digest: Mapped[str | None] = mapped_column(String(71))
+    dataset_episodes: Mapped[int | None] = mapped_column(Integer)
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SiteCommand(Base):

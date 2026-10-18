@@ -32,6 +32,8 @@ class Kind(StrEnum):
     SUPPORT_GRANT = "sgr"
     MEMBER = "mbr"
     ENROLLMENT_TOKEN = "enr"
+    EVALUATION = "evl"
+    TRAINING_JOB = "trn"
 
 
 _ID_RE = re.compile(rf"^([a-z]+)_({ULID_PATTERN})$")

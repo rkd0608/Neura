@@ -1848,9 +1848,8 @@ export interface components {
     };
     Evaluation: {
       metadata: components["schemas"]["Metadata"];
-      spec: {
-        deployment_id?: components["schemas"]["DeploymentId"];
-      } & components["schemas"]["EvaluationSpec"];
+      deployment_id: components["schemas"]["DeploymentId"];
+      spec: components["schemas"]["EvaluationSpec"];
       readonly status: {
         /** @enum {string} */
         phase: "Pending" | "Running" | "Succeeded" | "Failed" | "Cancelled";
@@ -1859,7 +1858,9 @@ export interface components {
         message?: string;
         verdict?: components["schemas"]["EvaluationVerdict"] | null;
         /** @description The site's report: success rates and their intervals, the paired comparison and each scene, or replay errors by episode outcome. */
-        report?: Record<string, never> | null;
+        report?: {
+          [key: string]: unknown;
+        } | null;
         finished_at?: components["schemas"]["Timestamp"] | null;
       };
     };
@@ -1905,9 +1906,8 @@ export interface components {
     };
     TrainingJob: {
       metadata: components["schemas"]["Metadata"];
-      spec: {
-        deployment_id?: components["schemas"]["DeploymentId"];
-      } & components["schemas"]["TrainingJobSpec"];
+      deployment_id: components["schemas"]["DeploymentId"];
+      spec: components["schemas"]["TrainingJobSpec"];
       readonly status: {
         /** @enum {string} */
         phase: "Pending" | "Running" | "Succeeded" | "Failed" | "Cancelled";
@@ -1920,7 +1920,9 @@ export interface components {
         dataset_digest?: components["schemas"]["Digest"] | null;
         dataset_episodes?: number | null;
         /** @description Episodes and frames trained on, steps, duration and loss. */
-        metrics?: Record<string, never> | null;
+        metrics?: {
+          [key: string]: unknown;
+        } | null;
         finished_at?: components["schemas"]["Timestamp"] | null;
       };
     };
@@ -2224,6 +2226,7 @@ export interface operations {
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -3038,6 +3041,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];
@@ -3307,6 +3311,7 @@ export interface operations {
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];
@@ -3854,6 +3859,7 @@ export interface operations {
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -3954,6 +3960,7 @@ export interface operations {
       404: components["responses"]["NotFound"];
       412: components["responses"]["PreconditionFailed"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -4123,6 +4130,7 @@ export interface operations {
       409: components["responses"]["Conflict"];
       412: components["responses"]["PreconditionFailed"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -4391,6 +4399,7 @@ export interface operations {
       };
       412: components["responses"]["PreconditionFailed"];
       413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
       428: components["responses"]["IfMatchRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -4547,8 +4556,6 @@ export interface operations {
       query?: {
         cursor?: components["parameters"]["Cursor"];
         page_size?: components["parameters"]["PageSize"];
-        /** @description Filter by label, `key=value`. Repeat to AND several labels. */
-        label?: components["parameters"]["LabelSelector"];
       };
       header?: never;
       path: {
@@ -4650,8 +4657,6 @@ export interface operations {
       query?: {
         cursor?: components["parameters"]["Cursor"];
         page_size?: components["parameters"]["PageSize"];
-        /** @description Filter by label, `key=value`. Repeat to AND several labels. */
-        label?: components["parameters"]["LabelSelector"];
       };
       header?: never;
       path: {

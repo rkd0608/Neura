@@ -8,7 +8,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 from neura_contracts.identifiers import ULID_PATTERN
 
@@ -129,6 +136,18 @@ class CaptureSettings(Strict):
     upload_mbps: float | None = Field(default=None, gt=0, le=100_000)
 
 
+class ReleaseGates(Strict):
+    """Evaluations a revision needs before it replaces the one robots run (design §28.3)."""
+
+    evaluations: list[Literal["simulation", "replay"]] = Field(default_factory=list, max_length=2)
+
+    @model_validator(mode="after")
+    def _unique(self) -> Self:
+        if len(set(self.evaluations)) != len(self.evaluations):
+            raise ValueError("evaluations must be unique")
+        return self
+
+
 class DeploymentSpec(Strict):
     name: Name
     display_name: DisplayName
@@ -137,6 +156,7 @@ class DeploymentSpec(Strict):
     desired_revision_id: RevisionId | None = None
     rollout: Rollout
     capture: CaptureSettings = Field(default_factory=CaptureSettings)
+    release_gates: ReleaseGates = Field(default_factory=ReleaseGates)
     labels: Labels = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -176,6 +196,97 @@ class RollbackCreate(Strict):
     to_revision_id: RevisionId
     robot_ids: list[RobotId] | None = None
     note: Annotated[str, StringConstraints(max_length=2000)] = ""
+
+
+# --- improvement (design §28.3, §28.4) ------------------------------------------------------
+
+
+def _unique_items(values: list[Any], name: str) -> None:
+    if len(set(values)) != len(values):
+        raise ValueError(f"{name} must be unique")
+
+
+class EpisodeFilter(Strict):
+    """Which recorded episodes. Every field narrows; lists are any-of."""
+
+    robot_names: list[Annotated[str, StringConstraints(min_length=1, max_length=128)]] = Field(
+        default_factory=list, max_length=100
+    )
+    revision_ids: list[RevisionId] = Field(default_factory=list, max_length=100)
+    outcomes: list[Literal["success", "failure", "unknown"]] = Field(default_factory=list)
+    end_reasons: list[
+        Literal["stopped", "takeover", "fault", "new_epoch", "max_duration", "disconnected"]
+    ] = Field(default_factory=list)
+    since: AwareDatetime | None = None
+    until: AwareDatetime | None = None
+    complete_only: bool = True
+    limit: int | None = Field(default=None, ge=1, le=100_000)
+
+    @model_validator(mode="after")
+    def _lists(self) -> Self:
+        _unique_items(self.outcomes, "outcomes")
+        _unique_items(self.end_reasons, "end_reasons")
+        if self.since is not None and self.until is not None and self.until <= self.since:
+            raise ValueError("until must be after since")
+        return self
+
+
+class SimulationSuite(Strict):
+    kind: Literal["simulation"]
+    scene: Literal["aloha_transfer_cube", "aloha_insertion"] = "aloha_transfer_cube"
+    episodes: int = Field(default=50, ge=1, le=10_000)
+    first_seed: int = Field(default=1000, ge=0, le=2**31 - 1)
+    max_steps: int = Field(default=400, ge=1, le=100_000)
+    margin: float = Field(default=0.1, ge=0, lt=1)
+
+
+class ReplaySuite(Strict):
+    kind: Literal["replay"]
+    filter: EpisodeFilter = Field(default_factory=EpisodeFilter)
+    horizon: int | None = Field(default=None, ge=1, le=10_000)
+    stride: int = Field(default=5, ge=1, le=10_000)
+    max_episodes: int = Field(default=200, ge=1, le=100_000)
+    relative: float = Field(default=0.25, ge=0, le=100)
+    absolute: float = Field(default=0.01, ge=0, le=1)
+    batch_size: int = Field(default=8, ge=1, le=1024)
+
+
+EvaluationSuite = Annotated[SimulationSuite | ReplaySuite, Field(discriminator="kind")]
+
+
+class EvaluationSpec(Strict):
+    candidate_revision_id: RevisionId
+    baseline_revision_id: RevisionId | None = None
+    suite: EvaluationSuite
+
+
+class EvaluationCreate(Strict):
+    spec: EvaluationSpec
+
+
+class TrainingRecipe(Strict):
+    steps: int = Field(default=2000, ge=1, le=10_000_000)
+    batch_size: int = Field(default=8, ge=1, le=4096)
+    learning_rate: float | None = Field(default=None, gt=0, lt=1)
+    seed: int = Field(default=1000, ge=0, le=2**31 - 1)
+    num_workers: int = Field(default=2, ge=0, le=64)
+    normalization: Literal["base", "dataset"] = "base"
+    log_every: int = Field(default=50, ge=1, le=1_000_000)
+
+
+ArtifactVersion = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")]
+
+
+class TrainingJobSpec(Strict):
+    base_revision_id: RevisionId
+    episodes: EpisodeFilter = Field(default_factory=EpisodeFilter)
+    recipe: TrainingRecipe = Field(default_factory=TrainingRecipe)
+    artifact_name: Name | None = None
+    artifact_version: ArtifactVersion | None = None
+
+
+class TrainingJobCreate(Strict):
+    spec: TrainingJobSpec
 
 
 Metric = Literal[
@@ -254,6 +365,6 @@ MUTABLE_FIELDS: dict[str, frozenset[str]] = {
     "server": frozenset({"display_name", "labels", "allocated_gpu_indexes"}),
     "robot": frozenset({"display_name", "labels", "robot_profile_id"}),
     "deployment": frozenset(
-        {"display_name", "labels", "robot_ids", "desired_revision_id", "capture"}
+        {"display_name", "labels", "robot_ids", "desired_revision_id", "capture", "release_gates"}
     ),
 }

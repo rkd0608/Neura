@@ -1052,6 +1052,7 @@ class EvaluationStatus(TypedDict):
 
 class Evaluation(TypedDict):
     metadata: Metadata
+    deployment_id: DeploymentId
     spec: EvaluationSpec
     status: EvaluationStatus
 
@@ -1104,6 +1105,7 @@ class TrainingJobStatus(TypedDict):
 
 class TrainingJob(TypedDict):
     metadata: Metadata
+    deployment_id: DeploymentId
     spec: TrainingJobSpec
     status: TrainingJobStatus
 

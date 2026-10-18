@@ -226,6 +226,38 @@ export const useActivationRequests = (projectId: string, deploymentId: string) =
     ),
   );
 
+// Evaluations and training jobs run at the site for minutes or hours: poll while any is open.
+const openJob = (items: { status: { phase: string } }[] | undefined) =>
+  items?.some((x) => x.status.phase === "Pending" || x.status.phase === "Running") ? 3000 : false;
+
+export const useEvaluations = (projectId: string, deploymentId: string) =>
+  useApiQuery(
+    ["p", projectId, "evaluations", deploymentId],
+    () =>
+      all(async (cursor) =>
+        unwrap(
+          await api.GET("/v1/deployments/{deployment_id}/evaluations", {
+            params: { path: { deployment_id: deploymentId }, query: { cursor, page_size: ALL } },
+          }),
+        ),
+      ),
+    { refetchInterval: (query) => openJob(query.state.data) },
+  );
+
+export const useTrainingJobs = (projectId: string, deploymentId: string) =>
+  useApiQuery(
+    ["p", projectId, "training-jobs", deploymentId],
+    () =>
+      all(async (cursor) =>
+        unwrap(
+          await api.GET("/v1/deployments/{deployment_id}/training-jobs", {
+            params: { path: { deployment_id: deploymentId }, query: { cursor, page_size: ALL } },
+          }),
+        ),
+      ),
+    { refetchInterval: (query) => openJob(query.state.data) },
+  );
+
 export const useOperation = (projectId: string, operationId: string | null) =>
   useApiQuery(
     ["p", projectId, "operation", operationId],

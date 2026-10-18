@@ -73,6 +73,8 @@ TABLES = [
     "robot_sessions",
     "site_commands",
     "activation_requests",
+    "evaluations",
+    "training_jobs",
     "operations",
     "revisions",
     "deployments",

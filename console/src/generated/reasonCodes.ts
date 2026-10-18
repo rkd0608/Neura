@@ -618,11 +618,23 @@ export const REASON_CODES: Readonly<Record<string, ReasonCodeInfo>> = {
     retryable: false,
     message: "The evaluation's suite is not one the site can run.",
   },
+  EVALUATION_REPORT_INVALID: {
+    area: "evaluation",
+    severity: "error",
+    retryable: false,
+    message: "The site's evaluation report could not be read; no verdict was recorded.",
+  },
   TRAINING_INVALID: {
     area: "training",
     severity: "error",
     retryable: false,
     message: "The training job's recipe or episode filter is not valid.",
+  },
+  TRAINING_RESULT_REJECTED: {
+    area: "training",
+    severity: "error",
+    retryable: false,
+    message: "The site's trained model did not verify against its base, its dataset or its signature; nothing was registered.",
   },
   API_UNAUTHENTICATED: {
     area: "api",

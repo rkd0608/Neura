@@ -1096,7 +1096,6 @@ class Operations:
         *,
         cursor: str | None = None,
         page_size: int | None = None,
-        label: list[str] | None = None,
     ) -> EvaluationPage:
         """
         List a deployment's evaluations. (``GET
@@ -1105,7 +1104,7 @@ class Operations:
         return self._call(  # type: ignore[no-any-return]
             "GET",
             f"/v1/deployments/{_segment(deployment_id)}/evaluations",
-            query={"cursor": cursor, "page_size": page_size, "label": label},
+            query={"cursor": cursor, "page_size": page_size},
         )
 
     def create_evaluation(
@@ -1143,7 +1142,6 @@ class Operations:
         *,
         cursor: str | None = None,
         page_size: int | None = None,
-        label: list[str] | None = None,
     ) -> TrainingJobPage:
         """
         List a deployment's training jobs. (``GET /v1/deployments/{deployment_id}/training-
@@ -1152,7 +1150,7 @@ class Operations:
         return self._call(  # type: ignore[no-any-return]
             "GET",
             f"/v1/deployments/{_segment(deployment_id)}/training-jobs",
-            query={"cursor": cursor, "page_size": page_size, "label": label},
+            query={"cursor": cursor, "page_size": page_size},
         )
 
     def create_training_job(

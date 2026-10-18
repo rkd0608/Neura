@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
-import { api, ifMatch, unwrap, type Schemas, idempotent } from "../api/client";
+import { api, ifMatch, unwrap, type Schemas, idempotent, specVersion } from "../api/client";
 import { useApiMutation, useRobots, useServers, useSite } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { BotIcon, BuildingIcon, ServerIcon } from "../components/Icons";
@@ -416,19 +416,17 @@ function ServerDetail({
   const dirty =
     allocated.length !== server.spec.allocated_gpu_indexes.length ||
     allocated.some((i) => !server.spec.allocated_gpu_indexes.includes(i));
-  const save = useApiMutation(
-    async () =>
-      unwrap(
-        await api.PATCH("/v1/servers/{server_id}", {
-          params: {
-            path: { server_id: server.metadata.id },
-            header: ifMatch(server.metadata.version),
-          },
-          body: { spec: { allocated_gpu_indexes: [...allocated].sort((a, b) => a - b) } },
-        }),
-      ),
-    [["p", projectId, "servers", siteId]],
-  );
+  const save = useApiMutation(async () => {
+    const path = { server_id: server.metadata.id };
+    const latest = unwrap(await api.GET("/v1/servers/{server_id}", { params: { path } }));
+    const version = await specVersion(latest, server.spec);
+    return unwrap(
+      await api.PATCH("/v1/servers/{server_id}", {
+        params: { path, header: ifMatch(version) },
+        body: { spec: { allocated_gpu_indexes: [...allocated].sort((a, b) => a - b) } },
+      }),
+    );
+  }, [["p", projectId, "servers", siteId]]);
   return (
     <section className="stack" aria-label={`Server ${server.spec.display_name}`}>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -526,16 +524,17 @@ function EditSite({
   const toasts = useToasts();
   const [name, setName] = useState(site.spec.display_name);
   const [hours, setHours] = useState(site.spec.offline_authorization_hours);
-  const save = useApiMutation(
-    async () =>
-      unwrap(
-        await api.PATCH("/v1/sites/{site_id}", {
-          params: { path: { site_id: site.metadata.id }, header: ifMatch(site.metadata.version) },
-          body: { spec: { display_name: name, offline_authorization_hours: hours } },
-        }),
-      ),
-    [["p", projectId]],
-  );
+  const save = useApiMutation(async () => {
+    const path = { site_id: site.metadata.id };
+    const latest = unwrap(await api.GET("/v1/sites/{site_id}", { params: { path } }));
+    const version = await specVersion(latest, site.spec);
+    return unwrap(
+      await api.PATCH("/v1/sites/{site_id}", {
+        params: { path, header: ifMatch(version) },
+        body: { spec: { display_name: name, offline_authorization_hours: hours } },
+      }),
+    );
+  }, [["p", projectId]]);
   return (
     <Dialog open={open} onClose={onClose} title="Edit site">
       <form

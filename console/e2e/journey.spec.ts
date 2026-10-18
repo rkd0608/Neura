@@ -1,8 +1,9 @@
 // The whole customer journey in the browser, against the real backend (design §16.1, M5):
 // sign in, create a project and site, connect a GPU server with the install command the console
 // shows, register contracts, check compatibility, add robots, create a deployment, prepare it at
-// the site, request activation, approve it at the site, and watch the robots run it. Every main screen
-// is checked for accessibility (WCAG 2.1 AA).
+// the site, request activation, approve it at the site, watch the robots run it, gate releases on
+// evidence and shadow a candidate on their live observations. Every main screen is checked for
+// accessibility (WCAG 2.1 AA).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
@@ -96,6 +97,12 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await expect(page.getByText(/enrolled$/)).toBeVisible();
     await expect(page.getByText("Every preflight check passed.")).toBeVisible();
     await expect(page.locator(".badge", { hasText: "Ready" }).first()).toBeVisible();
+    // Updates are merge patches with the version read: renaming the site saves.
+    await page.getByRole("button", { name: "Edit site" }).click();
+    const edit = page.getByRole("dialog", { name: "Edit site" });
+    await edit.getByLabel("Site name").fill("Warehouse 3 north");
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("heading", { name: "Warehouse 3 north" })).toBeVisible();
 
     // --- register contracts and check compatibility -------------------------------------------
     await nav(page, "Models & contracts");
@@ -199,6 +206,29 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
       "on 1 of 1 connected sites",
     );
     await expectAccessible(page, "overview");
+
+    // --- improve: a release gate, and a shadow on the robots' live observations ---------------
+    await nav(page, "Deployments");
+    await page.getByRole("main").getByRole("link", { name: "Pilot", exact: true }).click();
+    await tab(page, "Improve");
+    await expect(page.getByRole("heading", { name: "Recorded episodes" })).toBeVisible();
+    await page
+      .getByLabel("A shadow on live observations, close to the running revision's actions")
+      .check();
+    await expect(page.getByText("Release gates saved.")).toBeVisible();
+    await page.getByRole("button", { name: "Evaluate", exact: true }).click();
+    const evaluate = page.getByRole("dialog", { name: "Evaluate a candidate" });
+    await evaluate.getByLabel("Suite").selectOption("shadow");
+    await evaluate.getByLabel("Against").selectOption({ index: 1 }); // the revision the robots run
+    await evaluate.getByLabel("Minutes").fill("0.2");
+    await evaluate.getByLabel("Observations needed").fill("3");
+    await evaluate.getByRole("button", { name: "Start evaluation" }).click();
+    const evaluations = page.getByRole("region", { name: "Evaluations" });
+    await expect(evaluations.getByText("Shadow")).toBeVisible();
+    // The same model as its own candidate: its actions are the running model's.
+    await expect(evaluations.getByText("No worse")).toBeVisible({ timeout: 90_000 });
+    await expect(evaluations.getByText(/0\.0%/)).toBeVisible();
+    await expectAccessible(page, "improve");
 
     // --- capacity and audit --------------------------------------------------------------------
     await nav(page, "Capacity");

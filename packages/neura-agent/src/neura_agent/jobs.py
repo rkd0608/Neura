@@ -331,39 +331,52 @@ class SiteJobs:
             raise JobError(
                 ReasonCode.EVALUATION_INVALID, "a shadow compares with a revision robots run"
             )
-        candidate = await self._model(message.candidate_revision_id)
-        baseline = await self._model(message.baseline_revision_id)
-        why = comparable(candidate.binding, baseline.binding)
+        # Only real workers load the candidate's weights (the simulated backend, for development,
+        # serves a mock, as it does for robots); the baseline is served already.
+        workers = self.settings.gateway_backend == "workers"
+        candidate_id, baseline_id = message.candidate_revision_id, message.baseline_revision_id
+        checkpoint: Path | None = None
+        if workers:
+            model = await self._model(candidate_id)
+            documents, candidate_binding, checkpoint = (
+                model.documents,
+                model.binding,
+                model.checkpoint,
+            )
+        else:
+            documents, candidate_binding = self._verified(candidate_id)
+        _, baseline_binding = self._verified(baseline_id)
+        why = comparable(candidate_binding, baseline_binding)
         if why is not None:
             raise JobError(ReasonCode.EVALUATION_INVALID, why)
         served = {d["revision_id"]: d for d in self.core.gateway_config().get("deployments", [])}
-        if baseline.revision_id not in served:
+        if baseline_id not in served:
             raise JobError(
                 ReasonCode.EVALUATION_INVALID,
-                f"no robot at this site runs {baseline.revision_id}: prepare and activate it",
+                f"no robot at this site runs {baseline_id}: prepare and activate it",
             )
         from neura_agent.gateway import write_revision_documents
 
         paths = write_revision_documents(
             self.core.gateway_dir,
-            candidate.revision_id,
-            {role: {"document": doc} for role, doc in candidate.documents.items()},
+            candidate_id,
+            {role: {"document": doc} for role, doc in documents.items()},
         )
         entry: dict[str, Any] = {
-            "revision_id": candidate.revision_id,
-            "of_revision_id": baseline.revision_id,
+            "revision_id": candidate_id,
+            "of_revision_id": baseline_id,
             "artifact": str(paths["model_artifact"]),
             "robot_profile": str(paths["robot_profile"]),
             "execution_profile": str(paths["execution_profile"]),
             "every_nth": suite.every_nth,
         }
-        if self.settings.gateway_backend == "workers":
+        if workers:
             entry["device"] = self.device()
-            entry["checkpoint"] = str(candidate.checkpoint)
-            adapter = served[baseline.revision_id].get("adapter")
+            entry["checkpoint"] = str(checkpoint)
+            adapter = served[baseline_id].get("adapter")
             if adapter is not None:  # a development override applies to both models
                 entry["adapter"] = adapter
-        self.shadows[candidate.revision_id] = entry
+        self.shadows[candidate_id] = entry
         started = time.monotonic()
         stats: dict[str, Any] = {}
         try:
@@ -372,7 +385,7 @@ class SiteJobs:
             while time.monotonic() - started < suite.duration_s:
                 await asyncio.sleep(min(PROGRESS_INTERVAL_S, suite.duration_s))
                 status = await self.core.gateway.status() or {}
-                stats = status.get("shadows", {}).get(candidate.revision_id, stats)
+                stats = status.get("shadows", {}).get(candidate_id, stats)
                 compared = int(stats.get("compared", 0))
                 report(
                     command_id,
@@ -383,7 +396,7 @@ class SiteJobs:
                 if suite.max_samples is not None and compared >= suite.max_samples:
                     break
         finally:
-            self.shadows.pop(candidate.revision_id, None)
+            self.shadows.pop(candidate_id, None)
             with contextlib.suppress(Exception):
                 await self.core.reconcile()
         verdict, why = shadow_verdict(
@@ -411,7 +424,7 @@ class SiteJobs:
         self.core.audit.write(
             "evaluation.finished",
             evaluation=message.evaluation_id,
-            candidate=candidate.revision_id,
+            candidate=candidate_id,
             verdict=verdict,
         )
         report(command_id, operation_id, "Succeeded", message=why, result={"evaluation": result})
@@ -425,7 +438,8 @@ class SiteJobs:
         work.mkdir(parents=True)
         return work
 
-    async def _model(self, revision_id: str) -> _Model:
+    def _verified(self, revision_id: str) -> tuple[dict[str, Any], ExecutionBinding]:
+        """A revision of the committed manifest, verified: its documents and their binding."""
         from neura_agent.core import RevisionError
 
         try:
@@ -436,6 +450,11 @@ class SiteJobs:
             role: revision["documents"][role]["document"]
             for role in ("model_artifact", "robot_profile", "execution_profile")
         }
+        return documents, binding
+
+    async def _model(self, revision_id: str) -> _Model:
+        """A verified revision and its weights, checked out of the site's artifact store."""
+        documents, binding = self._verified(revision_id)
         from neura_agent.artifacts import ArtifactError
 
         try:

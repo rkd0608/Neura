@@ -62,6 +62,10 @@ const auth: Middleware = {
     if (request.method === "POST" && !request.headers.has("Idempotency-Key")) {
       request.headers.set("Idempotency-Key", newIdempotencyKey());
     }
+    // Every update in the API is a JSON merge patch (RFC 7396), and says so.
+    if (request.method === "PATCH") {
+      request.headers.set("Content-Type", "application/merge-patch+json");
+    }
     return request;
   },
   async onResponse({ response }) {
@@ -93,6 +97,23 @@ export function idempotent(): { "Idempotency-Key": string } {
 }
 
 /** If-Match for a resource version (design §20.4). */
+/** The version to send with If-Match when updating a resource's spec, read just before the
+ *  update: its latest, if its spec is still the one the edit started from. A site's status
+ *  reports move a resource's version without touching what a person edits, and are no conflict;
+ *  a spec someone else changed is, and the update is refused. */
+export async function specVersion(
+  latest: { metadata: { version: string }; spec: unknown },
+  editedFrom: unknown,
+): Promise<string> {
+  if (JSON.stringify(latest.spec) !== JSON.stringify(editedFrom)) {
+    throw new ApiError(412, {
+      reason: "API_PRECONDITION_FAILED",
+      detail: "Someone else changed it since you opened it. Close this and try again.",
+    });
+  }
+  return Promise.resolve(latest.metadata.version);
+}
+
 export function ifMatch(version: string): { "If-Match": string } {
   return { "If-Match": `"${version}"` };
 }

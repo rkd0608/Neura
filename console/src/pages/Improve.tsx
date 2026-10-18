@@ -3,7 +3,7 @@
 // what the robots run, and the release gates that hold a candidate back until it has passed.
 import { useState } from "react";
 
-import { api, idempotent, ifMatch, unwrap, type Schemas } from "../api/client";
+import { api, idempotent, ifMatch, specVersion, unwrap, type Schemas } from "../api/client";
 import { useApiMutation, useEvaluations, useTrainingJobs } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { CpuIcon, GaugeIcon, PlusIcon } from "../components/Icons";
@@ -56,7 +56,7 @@ const SIMULATION = {
   first_seed: 1000,
   max_steps: 400,
 } as const;
-const SHADOW = { kind: "shadow", min_samples: 200, every_nth: 1, tolerance: 0.05 } as const;
+const SHADOW = { kind: "shadow", every_nth: 1, tolerance: 0.05 } as const;
 
 type SuiteKind = "replay" | "simulation" | "shadow";
 
@@ -432,21 +432,29 @@ function ReleaseGates({
   const toasts = useToasts();
   const required = deployment.spec.release_gates?.evaluations ?? [];
   const save = useApiMutation(
-    async (evaluations: SuiteKind[]) =>
-      unwrap(
+    async (evaluations: SuiteKind[]) => {
+      const path = { deployment_id: deployment.metadata.id };
+      const latest = unwrap(await api.GET("/v1/deployments/{deployment_id}", { params: { path } }));
+      const version = await specVersion(latest, deployment.spec);
+      return unwrap(
         await api.PATCH("/v1/deployments/{deployment_id}", {
-          params: {
-            path: { deployment_id: deployment.metadata.id },
-            header: ifMatch(deployment.metadata.version),
-          },
+          params: { path, header: ifMatch(version) },
           body: { spec: { release_gates: { evaluations } } },
         }),
-      ),
+      );
+    },
     [["p", projectId]],
   );
+  // What was asked for shows at once; the saved deployment replaces it once it is back.
+  const [draft, setDraft] = useState<SuiteKind[] | null>(null);
+  const shown = draft ?? required;
   const toggle = (kind: SuiteKind) => {
-    const next = required.includes(kind) ? required.filter((k) => k !== kind) : [...required, kind];
-    save.mutate(next, { onSuccess: () => toasts.info("Release gates saved.") });
+    const next = shown.includes(kind) ? shown.filter((k) => k !== kind) : [...shown, kind];
+    setDraft(next);
+    save.mutate(next, {
+      onSuccess: () => toasts.info("Release gates saved."),
+      onSettled: () => setDraft(null),
+    });
   };
   return (
     <Card
@@ -464,7 +472,7 @@ function ReleaseGates({
           <label key={kind} className="row" style={{ gap: 8 }}>
             <input
               type="checkbox"
-              checked={required.includes(kind)}
+              checked={shown.includes(kind)}
               disabled={!canDeploy || save.isPending}
               onChange={() => toggle(kind)}
             />
@@ -656,6 +664,7 @@ function Evaluate({
   const [baseline, setBaseline] = useState("");
   const [kind, setKind] = useState<SuiteKind>("replay");
   const [minutes, setMinutes] = useState(10);
+  const [observations, setObservations] = useState(200);
   const [scenes, setScenes] = useState(50);
   const [margin, setMargin] = useState(0.1);
   const evaluate = useApiMutation(
@@ -671,7 +680,11 @@ function Evaluate({
                 kind === "replay"
                   ? { ...REPLAY }
                   : kind === "shadow"
-                    ? { ...SHADOW, duration_s: minutes * 60 }
+                    ? {
+                        ...SHADOW,
+                        duration_s: Math.round(minutes * 60),
+                        min_samples: observations,
+                      }
                     : { ...SIMULATION, episodes: scenes, margin },
             },
           },
@@ -743,10 +756,25 @@ function Evaluate({
                 <input
                   id="ev-minutes"
                   type="number"
-                  min={1}
+                  min={0.1}
                   max={10_080}
+                  step={0.1}
                   value={minutes}
                   onChange={(e) => setMinutes(Number(e.target.value))}
+                />
+              </Field>
+              <Field
+                id="ev-observations"
+                label="Observations needed"
+                hint="Fewer compared than this is inconclusive."
+              >
+                <input
+                  id="ev-observations"
+                  type="number"
+                  min={1}
+                  max={10_000_000}
+                  value={observations}
+                  onChange={(e) => setObservations(Number(e.target.value))}
                 />
               </Field>
               <p className="muted small">

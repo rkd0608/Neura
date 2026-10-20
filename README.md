@@ -179,14 +179,15 @@ new release is not healthy (design §17.7).
 
 ## Deploying the cloud side
 
-The control plane, console and NucleiLabs site run on Google Cloud: one VM, Cloud SQL, Secret
-Manager and Artifact Registry, about $30–35 a month (design §20.10). With `gcloud` signed in as a
-project owner, Docker and uv:
+The control plane, console and NucleiLabs site run on Google Cloud: one e2-micro VM with Postgres in
+a container (Cloud SQL with `NEURA_DATABASE=cloudsql`), Secret Manager and Artifact Registry, about
+$8–15 a month (design §20.10). With `gcloud` signed in as a project owner, Docker and uv:
 
 ```bash
 NEURA_GCP_PROJECT=<project-id> NEURA_DOMAIN=<domain> deploy/gcp/deploy.sh up
 deploy/gcp/deploy.sh admin-token    # the first admin API token, to sign in to the console
 deploy/gcp/deploy.sh release        # later: ship the current commit
+deploy/gcp/deploy.sh pause          # stop the VMs and Cloud SQL; data kept (resume starts Neura)
 ```
 
 From GitHub instead: add the service account's JSON key as the `GCP_SA_KEY` secret (environment

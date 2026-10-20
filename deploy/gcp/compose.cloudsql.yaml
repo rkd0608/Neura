@@ -1,0 +1,7 @@
+# The database for deploy/gcp/compose.yaml with NEURA_DATABASE=cloudsql: Cloud SQL over the Admin
+# API's mutual TLS, through the proxy, with the VM's service account.
+services:
+  db:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
+    command: ["--address=0.0.0.0", "--port=5432", "${SQL_INSTANCE:?}"]
+    restart: unless-stopped

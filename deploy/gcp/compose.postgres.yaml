@@ -1,0 +1,22 @@
+# The database for deploy/gcp/compose.yaml with NEURA_DATABASE=postgres (the default): Postgres in a
+# container, its data on the VM's data disk (snapshotted daily), listening only on the containers'
+# network. Sized for an e2-micro VM.
+services:
+  db:
+    image: mirror.gcr.io/library/postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50"]
+    environment:
+      POSTGRES_USER: neura
+      POSTGRES_DB: neura
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+    volumes:
+      - /srv/neura/data/postgres:/var/lib/postgresql/data
+      - /run/neura/db-password:/run/secrets/db-password:ro
+    shm_size: 128mb
+    healthcheck:
+      # Over TCP: while the image initializes a new database it listens on its socket only.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "neura", "-d", "neura"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped

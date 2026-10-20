@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# Deploy Neura's cloud side to Google Cloud: one Compute Engine VM running the containers, Cloud SQL
-# for Postgres, Secret Manager for the keys, Artifact Registry for the images (design §20.10).
+# Deploy Neura's cloud side to Google Cloud: one Compute Engine VM running the containers and
+# Postgres (or Cloud SQL), Secret Manager for the keys, Artifact Registry for the images (design
+# §20.10).
 #
-#   deploy/gcp/deploy.sh up            create or update everything, then release this commit
-#   deploy/gcp/deploy.sh release       build and push the images of this commit, then roll the VM
-#   deploy/gcp/deploy.sh admin-token   print the first admin API token (created by `up`)
-#   deploy/gcp/deploy.sh status        what is running, and whether the public endpoints answer
-#   deploy/gcp/deploy.sh ssh [CMD]     a shell on the VM (through IAP)
+#   deploy/gcp/deploy.sh up               create or update everything, then release this commit
+#   deploy/gcp/deploy.sh release          build and push the images of this commit, then roll the VM
+#   deploy/gcp/deploy.sh admin-token      print the first admin API token (created by `up`)
+#   deploy/gcp/deploy.sh status           what is running, and whether the public endpoints answer
+#   deploy/gcp/deploy.sh ssh [CMD]        a shell on the VM (through IAP)
+#   deploy/gcp/deploy.sh pause            stop what costs by the hour: the VM, Cloud SQL and the
+#                                         staging site's VM (their disks, the address, secrets and
+#                                         images are kept, so `resume` brings Neura back), and
+#                                         delete any GPU benchmark VM (bench.sh makes new ones)
+#   deploy/gcp/deploy.sh resume           start Neura again (on NEURA_MACHINE_TYPE), not the others
+#   deploy/gcp/deploy.sh delete-cloudsql  after a move to the Postgres container, delete Cloud SQL
 #
 # Settings (environment):
 #   GCP_SA_KEY           a service account's JSON key (its contents), instead of `gcloud auth login`
@@ -17,8 +24,13 @@
 #                        address `up` prints before the certificate is requested.
 #   NEURA_ACME_EMAIL     Let's Encrypt expiry notices (optional)
 #   NEURA_ORGANIZATION   the first organization's name (default NucleiLabs)
-#   NEURA_MACHINE_TYPE   default e2-small (the stack uses ~200 MB; e2-micro is in the free tier)
-#   NEURA_SQL_TIER       default db-f1-micro
+#   NEURA_DATABASE       postgres: a Postgres container on the VM, its data on the data disk
+#                        (snapshotted daily); cloudsql: Cloud SQL. Default: the one deployed, else
+#                        postgres. Releasing postgres over a cloudsql deployment moves the database:
+#                        the VM copies Cloud SQL's into the container once, then `delete-cloudsql`.
+#   NEURA_MACHINE_TYPE   default e2-micro (the stack uses ~300 MB with Postgres; e2-micro is in the
+#                        free tier in us-central1, us-east1 and us-west1). `resume` applies it.
+#   NEURA_SQL_TIER       default db-f1-micro (cloudsql only)
 #   NEURA_CONTACT_URL    the site's contact link (default mailto:hello@nucleilabs.ai)
 #   NEURA_BUILD_CA_BUNDLE  CA bundle for image builds behind a TLS-intercepting proxy
 #
@@ -27,7 +39,7 @@
 set -euo pipefail
 
 case "${1:-}" in
-up | release | admin-token | status | ssh) ;;
+up | release | admin-token | status | ssh | pause | resume | delete-cloudsql) ;;
 *)
     sed -n '2,/^set -euo/{/^set -euo/!p}' "$0"
     exit 2
@@ -37,7 +49,9 @@ esac
 cd "$(dirname "$0")/../.."
 HERE=deploy/gcp
 
-for tool in gcloud docker uv openssl; do
+tools=(gcloud)
+[[ $1 != up && $1 != release ]] || tools+=(docker uv openssl)
+for tool in "${tools[@]}"; do
     command -v "$tool" >/dev/null || {
         echo "deploy.sh needs $tool on PATH" >&2
         exit 2
@@ -76,7 +90,7 @@ PROJECT=${NEURA_GCP_PROJECT:-$(gcloud config get-value project 2>/dev/null || tr
 }
 REGION=${NEURA_GCP_REGION:-us-central1}
 ZONE=${NEURA_GCP_ZONE:-$REGION-a}
-MACHINE_TYPE=${NEURA_MACHINE_TYPE:-e2-small}
+MACHINE_TYPE=${NEURA_MACHINE_TYPE:-e2-micro}
 SQL_TIER=${NEURA_SQL_TIER:-db-f1-micro}
 ORGANIZATION=${NEURA_ORGANIZATION:-NucleiLabs}
 CONTACT_URL=${NEURA_CONTACT_URL:-mailto:hello@nucleilabs.ai}
@@ -104,6 +118,40 @@ bind() {
     return 1
 }
 
+# A value of the release deployed now (its neura-config metadata), or nothing.
+deployed() {
+    g compute instances describe "$VM" --zone "$ZONE" \
+        --format='value(metadata.items.neura-config)' 2>/dev/null | sed -n "s/^$1=//p" || true
+}
+
+# The database the release uses: NEURA_DATABASE, else the deployed one (a release from before the
+# choice existed used Cloud SQL), else postgres.
+database() {
+    if [[ -n ${NEURA_DATABASE:-} ]]; then
+        [[ $NEURA_DATABASE == postgres || $NEURA_DATABASE == cloudsql ]] || {
+            echo "NEURA_DATABASE is postgres or cloudsql" >&2
+            return 2
+        }
+        echo "$NEURA_DATABASE"
+    elif [[ -n $(deployed DATABASE) ]]; then
+        deployed DATABASE
+    elif [[ -n $(deployed SQL_INSTANCE) ]]; then
+        echo cloudsql
+    else
+        echo postgres
+    fi
+}
+
+sql_state() { g sql instances describe "$SQL" --format='value(settings.activationPolicy)' 2>/dev/null || true; }
+
+# Cloud SQL runs only while its activation policy is ALWAYS (`pause` sets NEVER).
+sql_activate() {
+    if [[ -n $(sql_state) && $(sql_state) != ALWAYS ]]; then
+        step "starting Cloud SQL $SQL"
+        g sql instances patch "$SQL" --activation-policy=ALWAYS >/dev/null
+    fi
+}
+
 address() { g compute addresses describe "$VM-ip" --region "$REGION" --format='value(address)'; }
 
 domain() {
@@ -113,9 +161,7 @@ domain() {
     fi
     # Keep the domain a previous release used, so a release without NEURA_DOMAIN does not move it.
     local current
-    current=$(g compute instances describe "$VM" --zone "$ZONE" \
-        --format='value(metadata.items.neura-config)' 2>/dev/null |
-        sed -n 's/^DOMAIN=//p' || true)
+    current=$(deployed DOMAIN)
     if [[ -n $current ]]; then
         echo "$current"
     else
@@ -193,21 +239,6 @@ infrastructure() {
     bind secrets add-iam-policy-binding neura-admin-token --member="serviceAccount:$SA" \
         --role=roles/secretmanager.secretVersionAdder
 
-    step "Cloud SQL $SQL (a first create takes several minutes)"
-    if ! exists sql instances describe "$SQL"; then
-        g sql instances create "$SQL" --database-version=POSTGRES_17 --edition=enterprise \
-            --tier="$SQL_TIER" --region="$REGION" --storage-type=SSD --storage-size=10 \
-            --storage-auto-increase --backup-start-time=03:00 --enable-point-in-time-recovery \
-            --retained-backups-count=14 --deletion-protection \
-            --ssl-mode=TRUSTED_CLIENT_CERTIFICATE_REQUIRED
-    fi
-    exists sql databases describe neura --instance "$SQL" ||
-        g sql databases create neura --instance "$SQL"
-    if ! exists sql users describe neura --instance "$SQL"; then
-        g sql users create neura --instance "$SQL" \
-            --password="$(g secrets versions access latest --secret=neura-db-password)"
-    fi
-
     step "network"
     # Projects whose organization skips the default network get one like it.
     exists compute networks describe default ||
@@ -230,6 +261,23 @@ infrastructure() {
     if ! exists compute disks describe neura-data --zone "$ZONE"; then
         g compute disks create neura-data --zone "$ZONE" --size=20GB --type=pd-balanced \
             --resource-policies=neura-daily
+    fi
+
+    if [[ $DATABASE == cloudsql ]]; then
+        step "Cloud SQL $SQL (a first create takes several minutes)"
+        if ! exists sql instances describe "$SQL"; then
+            g sql instances create "$SQL" --database-version=POSTGRES_17 --edition=enterprise \
+                --tier="$SQL_TIER" --region="$REGION" --storage-type=SSD --storage-size=10 \
+                --storage-auto-increase --backup-start-time=03:00 --enable-point-in-time-recovery \
+                --retained-backups-count=14 --deletion-protection \
+                --ssl-mode=TRUSTED_CLIENT_CERTIFICATE_REQUIRED
+        fi
+        exists sql databases describe neura --instance "$SQL" ||
+            g sql databases create neura --instance "$SQL"
+        if ! exists sql users describe neura --instance "$SQL"; then
+            g sql users create neura --instance "$SQL" \
+                --password="$(g secrets versions access latest --secret=neura-db-password)"
+        fi
     fi
 }
 
@@ -254,7 +302,20 @@ build_images() {
 pinned() { docker image inspect --format '{{index .RepoDigests 0}}' "$REGISTRY/$1:$2"; }
 
 release() {
-    local tag domain config startup
+    local tag domain config startup import=""
+    local state
+    state=$(g compute instances describe "$VM" --zone "$ZONE" --format='value(status)' 2>/dev/null || true)
+    if [[ -n $state && $state != RUNNING ]]; then
+        echo "$VM is $state: run deploy/gcp/deploy.sh resume first" >&2
+        return 1
+    fi
+    # Moving to the Postgres container: the VM imports Cloud SQL's database on its first start, so
+    # Cloud SQL must run. Kept in later releases until it is done (the VM imports only once).
+    if [[ $DATABASE == postgres && -n $(sql_state) ]] &&
+        [[ $(deployed DATABASE) != postgres || -n $(deployed IMPORT_SQL_INSTANCE) ]]; then
+        import=$PROJECT:$REGION:$SQL
+        sql_activate
+    fi
     tag=$(git rev-parse --short=12 HEAD)
     [[ -z $(git status --porcelain) ]] || tag="$tag-dirty-$(date -u +%Y%m%d%H%M%S)"
     domain=$(domain)
@@ -267,7 +328,9 @@ PROJECT=$PROJECT
 DOMAIN=$domain
 ACME_EMAIL=${NEURA_ACME_EMAIL:-}
 REGISTRY_HOST=$REGISTRY_HOST
-SQL_INSTANCE=$PROJECT:$REGION:$SQL
+DATABASE=$DATABASE
+SQL_INSTANCE=$([[ $DATABASE != cloudsql ]] || echo "$PROJECT:$REGION:$SQL")
+IMPORT_SQL_INSTANCE=$import
 CONTROL_IMAGE=$(pinned neura-control "$tag")
 CONSOLE_IMAGE=$(pinned neura-console "$tag")
 LANDING_IMAGE=$(pinned neura-landing "$tag")
@@ -284,7 +347,7 @@ exec /usr/local/sbin/neura-apply boot
 EOF
     local files="startup-script=$startup,neura-apply=$HERE/neura-apply.sh"
     files+=",neura-compose=$HERE/compose.yaml,neura-edge=$HERE/edge.conf.template"
-    files+=",neura-config=$config"
+    files+=",neura-compose-db=$HERE/compose.$DATABASE.yaml,neura-config=$config"
 
     if exists compute instances describe "$VM" --zone "$ZONE"; then
         step "rolling $VM to $tag"
@@ -363,6 +426,90 @@ Neura is deployed in $PROJECT.
 EOF
 }
 
+# --- pause and resume -----------------------------------------------------------------------------
+
+# Instances of this project that deploy.sh, site.sh and bench.sh made, still running.
+running() {
+    g compute instances list --filter='name ~ ^neura AND status = RUNNING' \
+        --format='value(name,zone.basename())'
+}
+
+pause() {
+    local name zone
+    # GPU benchmark VMs are made for one run; stopped, their 100 GB disks would still cost.
+    while read -r name zone; do
+        [[ -n $name ]] || continue
+        step "deleting the benchmark VM $name ($zone)"
+        g compute instances delete "$name" --zone "$zone" --delete-disks=all >/dev/null
+    done < <(g compute instances list --filter='labels.neura-bench=true' \
+        --format='value(name,zone.basename())')
+    while read -r name zone; do
+        [[ -n $name ]] || continue
+        step "stopping $name ($zone)"
+        g compute instances stop "$name" --zone "$zone" >/dev/null
+    done < <(running)
+    if [[ -n $(sql_state) && $(sql_state) != NEVER ]]; then
+        step "stopping Cloud SQL $SQL"
+        g sql instances patch "$SQL" --activation-policy=NEVER >/dev/null
+    fi
+    cat <<EOF
+
+Paused: no VM or database runs. Still billed while paused, about \$15 a month: the VMs' disks
+(Neura's 40 GB, the staging site's 40 GB), the reserved address $VM-ip (about \$7 a month while
+unattached), disk snapshots, Cloud SQL's storage and backups if it exists, and the images in
+Artifact Registry. To pay less: deploy/gcp/site.sh delete (the site's VM and disk), and move off
+Cloud SQL then deploy/gcp/deploy.sh delete-cloudsql. deploy/gcp/deploy.sh resume starts Neura again.
+EOF
+}
+
+resume() {
+    # Cloud SQL runs while Neura uses it, or has yet to import from it.
+    [[ $DATABASE != cloudsql && -z $(deployed IMPORT_SQL_INSTANCE) ]] || sql_activate
+    local current
+    current=$(g compute instances describe "$VM" --zone "$ZONE" --format='value(machineType.basename())')
+    if [[ $current != "$MACHINE_TYPE" ]]; then
+        if [[ $(g compute instances describe "$VM" --zone "$ZONE" --format='value(status)') == RUNNING ]]; then
+            step "stopping $VM to change its machine type"
+            g compute instances stop "$VM" --zone "$ZONE" >/dev/null
+        fi
+        step "$VM: $current -> $MACHINE_TYPE"
+        g compute instances set-machine-type "$VM" --zone "$ZONE" --machine-type="$MACHINE_TYPE"
+    fi
+    step "starting $VM"
+    g compute instances start "$VM" --zone "$ZONE" >/dev/null
+    local domain _
+    domain=$(domain)
+    step "waiting for https://console.$domain"
+    for _ in $(seq 60); do
+        curl -fsS --max-time 10 "https://console.$domain/v1/meta" 2>/dev/null && echo && return 0
+        sleep 10
+    done
+    echo "Neura did not answer in 10 minutes; see deploy/gcp/deploy.sh ssh 'sudo journalctl -u neura-watch'" >&2
+    return 1
+}
+
+delete_cloudsql() {
+    [[ -n $(sql_state) ]] || {
+        echo "there is no Cloud SQL instance $SQL" >&2
+        return 0
+    }
+    local image
+    image=$(deployed CONTROL_IMAGE)
+    if [[ $(deployed DATABASE) != postgres || -z $image || $(guest release) != "$image" ||
+        $(guest state) != ok ]]; then
+        echo "Neura does not run on the Postgres container yet: release with NEURA_DATABASE=postgres" \
+            "first, and keep the VM running until it has applied the release" >&2
+        return 1
+    fi
+    step "deleting Cloud SQL $SQL (its backups go with it; the data disk's snapshots stay)"
+    g sql instances patch "$SQL" --no-deletion-protection >/dev/null
+    g sql instances delete "$SQL"
+}
+
+case "${1:-}" in
+up | release | resume) DATABASE=$(database) ;;
+esac
+
 case "${1:-}" in
 up)
     infrastructure
@@ -381,7 +528,9 @@ release)
 admin-token) g secrets versions access latest --secret=neura-admin-token && echo ;;
 status)
     domain=$(domain)
-    g compute instances describe "$VM" --zone "$ZONE" --format='value(status)'
+    g compute instances describe "$VM" --zone "$ZONE" --format='value(status,machineType.basename())'
+    echo "database: $(database)$([[ -z $(sql_state) ]] || echo ", Cloud SQL $SQL: $(sql_state)")"
+    echo "running: $(running | awk '{ print $1 }' | paste -sd ' ' -)"
     curl -fsS --max-time 5 "https://console.$domain/v1/meta" && echo
     curl -fsS --max-time 5 -o /dev/null -w "site: HTTP %{http_code}\n" "https://$domain/"
     ;;
@@ -389,4 +538,7 @@ ssh)
     shift
     g compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap ${1:+--command="$*"}
     ;;
+pause) pause ;;
+resume) resume ;;
+delete-cloudsql) delete_cloudsql ;;
 esac

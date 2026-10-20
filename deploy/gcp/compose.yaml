@@ -5,13 +5,14 @@
 #                    name without decrypting agents.<domain> and enroll.<domain>, so the control
 #                    plane checks site agents' client certificates itself; it terminates TLS for
 #                    <domain> (the site) and console.<domain> (console and API).
-# - cloudsql-proxy:  Cloud SQL over the Admin API's mutual TLS, with the VM's service account
+# - db:              Postgres, from compose.postgres.yaml (a container whose data is on the data disk)
+#                    or compose.cloudsql.yaml (the Cloud SQL proxy); deploy.sh publishes one of them
 # - control-plane:   management API and the site-agent listeners
 # - console:         the web console, which also proxies the API under /v1
 # - landing:         the NucleiLabs site
 #
-# Values come from release.env (images pinned by digest, domain, Cloud SQL instance) and the
-# secrets neura-apply reads from Secret Manager into /run/neura (tmpfs).
+# Values come from release.env (images pinned by digest, domain, database) and the secrets
+# neura-apply reads from Secret Manager into /run/neura (tmpfs).
 name: neura
 
 x-control-plane: &control-plane
@@ -20,7 +21,8 @@ x-control-plane: &control-plane
   environment:
     NEURA_CONTROL_ENVIRONMENT: production
     NEURA_CONTROL_PUBLIC_URL: https://console.${DOMAIN:?}
-    # The Cloud SQL proxy does the TLS, and it runs on this host.
+    # The database is on this host's container network: the Cloud SQL proxy does the TLS to Cloud
+    # SQL, and a Postgres container is reachable from nothing else.
     NEURA_CONTROL_DATABASE_TLS_LOCAL: "true"
     NEURA_CONTROL_FORWARDED_ALLOW_IPS: 172.30.0.0/24
     NEURA_CONTROL_AGENT_GRPC_LISTEN: 0.0.0.0:8081
@@ -34,19 +36,14 @@ x-control-plane: &control-plane
     NEURA_CONTROL_SEALED_WEIGHTS_DIR: /var/lib/neura/sealed-weights
 
 services:
-  cloudsql-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
-    command: ["--address=0.0.0.0", "--port=5432", "${SQL_INSTANCE:?}"]
-    restart: unless-stopped
-
   migrate:
     <<: *control-plane
-    # Cloud SQL can take a moment to accept connections after the proxy starts.
+    # The database can take a moment to accept connections after it starts.
     command:
       - sh
       - -c
       - for i in $$(seq 30); do neura-control migrate && exit 0; sleep 2; done; exit 1
-    depends_on: [cloudsql-proxy]
+    depends_on: [db]
     restart: "no"
 
   control-plane:

@@ -18,7 +18,9 @@ SECRETS=/run/neura
 SELF=/usr/local/sbin/neura-apply
 DISK=/dev/disk/by-id/google-neura-data
 CERTBOT=mirror.gcr.io/certbot/certbot:v3.0.1@sha256:4d8875e85a2af373262914e15c0a149e1985c5bbd05ac433fe4763f465020fcf
+CLOUDSQL_PROXY=gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
 CONTROL_UID=10001 # the neura user in the images (deploy/docker/Dockerfile)
+POSTGRES_UID=70   # the postgres user in the Alpine Postgres image
 
 log() { echo "neura-apply: $*" >&2; }
 die() {
@@ -29,7 +31,7 @@ die() {
 attr() { curl -fsS -H Metadata-Flavor:Google "$MD/instance/attributes/$1"; }
 compose() {
     docker compose --project-name neura --project-directory "$ROOT" \
-        -f "$ROOT/compose.yaml" --env-file "$ROOT/release.env" "$@"
+        -f "$ROOT/compose.yaml" -f "$ROOT/compose.db.yaml" --env-file "$ROOT/release.env" "$@"
 }
 # Progress for deploy.sh, as guest attributes (neura/attempt, neura/state, neura/release).
 report() {
@@ -67,6 +69,22 @@ install_docker() {
     fi
 }
 
+# A small VM (e2-micro has 1 GB) gets a swap file, so pulling images or a migration cannot run it
+# out of memory.
+ensure_swap() {
+    local memory_kb
+    memory_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+    [[ $memory_kb -lt 2000000 ]] || return 0
+    if [[ ! -e /swapfile ]]; then
+        log "adding a 1 GB swap file"
+        fallocate -l 1G /swapfile
+        chmod 0600 /swapfile
+        mkswap /swapfile >/dev/null
+    fi
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+    swapon --show=NAME --noheadings | grep -qx /swapfile || swapon /swapfile
+}
+
 mount_data() {
     [[ -e $DISK ]] || die "the data disk (device name neura-data) is not attached"
     if ! blkid "$DISK" >/dev/null 2>&1; then
@@ -80,6 +98,7 @@ mount_data() {
     mountpoint -q "$DATA" || mount "$DATA"
     install -d -m 0755 "$DATA/letsencrypt" "$DATA/acme" "$DATA/tls"
     install -d -m 0750 -o "$CONTROL_UID" -g "$CONTROL_UID" "$DATA/sealed-weights"
+    install -d -m 0700 -o "$POSTGRES_UID" -g "$POSTGRES_UID" "$DATA/postgres"
 }
 
 install_units() {
@@ -129,7 +148,9 @@ fetch_release() {
     attr neura-compose >"$ROOT/compose.yaml.new"
     attr neura-edge >"$ROOT/edge.conf.template.new"
     attr neura-config >"$ROOT/release.env.new"
+    attr neura-compose-db >"$ROOT/compose.db.yaml.new"
     mv "$ROOT/compose.yaml.new" "$ROOT/compose.yaml"
+    mv "$ROOT/compose.db.yaml.new" "$ROOT/compose.db.yaml"
     mv "$ROOT/edge.conf.template.new" "$ROOT/edge.conf.template"
     mv "$ROOT/release.env.new" "$ROOT/release.env"
     set -a
@@ -138,6 +159,7 @@ fetch_release() {
     set +a
     [[ ${DOMAIN:-} =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || die "invalid DOMAIN: ${DOMAIN:-}"
     [[ -n ${PROJECT:-} && -n ${REGISTRY_HOST:-} ]] || die "release.env lacks PROJECT/REGISTRY_HOST"
+    [[ ${DATABASE:-} == postgres || ${DATABASE:-} == cloudsql ]] || die "invalid DATABASE: ${DATABASE:-}"
 }
 
 secret() { gcloud secrets versions access latest --secret="$1" --project="$PROJECT"; }
@@ -149,14 +171,46 @@ fetch_secrets() {
     signing=$(secret neura-manifest-signing-key)
     (
         umask 077
-        printf 'NEURA_CONTROL_DATABASE_URL=postgresql://neura:%s@cloudsql-proxy:5432/neura\n' \
+        printf 'NEURA_CONTROL_DATABASE_URL=postgresql://neura:%s@db:5432/neura\n' \
             "$password" >"$SECRETS/control-plane.env"
+        printf '%s' "$password" >"$SECRETS/db-password"
         printf 'NEURA_CONTROL_MANIFEST_SIGNING_KEY=%s\n' "$signing" >>"$SECRETS/control-plane.env"
         secret neura-agent-ca-cert >"$SECRETS/agent-ca.crt"
         secret neura-agent-ca-key >"$SECRETS/agent-ca.key"
     )
     chown "$CONTROL_UID:$CONTROL_UID" "$SECRETS/agent-ca.crt" "$SECRETS/agent-ca.key"
-    chmod 0400 "$SECRETS/agent-ca.crt" "$SECRETS/agent-ca.key"
+    chown "$POSTGRES_UID:$POSTGRES_UID" "$SECRETS/db-password"
+    chmod 0400 "$SECRETS/agent-ca.crt" "$SECRETS/agent-ca.key" "$SECRETS/db-password"
+}
+
+# Moving from Cloud SQL to the Postgres container: once, into the new empty database, before any
+# migration runs, copy Cloud SQL's database through a temporary proxy, in one transaction.
+import_database() {
+    [[ $DATABASE == postgres && -n ${IMPORT_SQL_INSTANCE:-} && ! -e $DATA/.database-imported ]] ||
+        return 0
+    compose up -d --wait db
+    local tables
+    tables=$(compose exec -T db psql -U neura -d neura -tAc \
+        "select count(*) from information_schema.tables where table_schema = 'public'")
+    if [[ $tables != 0 ]]; then
+        die "the Postgres container already has tables: not importing $IMPORT_SQL_INSTANCE over them"
+    fi
+    log "importing the database from Cloud SQL $IMPORT_SQL_INSTANCE"
+    docker rm -f neura-import-proxy >/dev/null 2>&1 || true
+    docker run -d --rm --name neura-import-proxy --network neura_default "$CLOUDSQL_PROXY" \
+        --address=0.0.0.0 --port=5432 "$IMPORT_SQL_INSTANCE" >/dev/null
+    local status=0
+    # shellcheck disable=SC2016 # expanded in the container
+    compose exec -T db sh -c 'for i in $(seq 30); do
+            pg_isready -q -h neura-import-proxy -U neura -d neura && break; sleep 2; done
+        PGPASSWORD=$(cat /run/secrets/db-password) pg_dump -h neura-import-proxy -U neura -d neura \
+            --no-owner --no-privileges' |
+        compose exec -T db psql -q -U neura -d neura -v ON_ERROR_STOP=1 --single-transaction \
+            >/dev/null || status=$?
+    docker rm -f neura-import-proxy >/dev/null 2>&1 || true
+    [[ $status == 0 ]] || die "the import from Cloud SQL failed; nothing was imported"
+    date -u >"$DATA/.database-imported"
+    log "imported the database from Cloud SQL"
 }
 
 install_certificate() {
@@ -221,6 +275,7 @@ apply() {
     gcloud auth configure-docker "$REGISTRY_HOST" --quiet >/dev/null 2>&1
     ensure_certificate
     compose pull --quiet
+    import_database
     compose up -d --remove-orphans --wait
     compose exec -T edge nginx -s reload
     bootstrap
@@ -273,6 +328,7 @@ watch() {
 case "${1:-}" in
 boot)
     install_docker
+    ensure_swap
     mount_data
     install_units
     "$SELF" apply || log "apply failed; it runs again on the next release"

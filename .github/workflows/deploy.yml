@@ -13,10 +13,22 @@ on:
   workflow_dispatch:
     inputs:
       command:
-        description: "up: create or update the infrastructure, then release. release: ship this commit."
+        description: >-
+          up: create or update the infrastructure, then release. release: ship this commit. pause: stop
+          the VMs and Cloud SQL (disks and data kept). resume: start Neura again. delete-cloudsql:
+          after a move to the Postgres container.
         type: choice
-        options: [up, release]
+        options: [up, release, pause, resume, delete-cloudsql]
         default: up
+      database:
+        description: "Database (default: the one deployed, else postgres). postgres over a Cloud SQL deployment moves it."
+        type: choice
+        options: ["", postgres, cloudsql]
+        default: ""
+      machine_type:
+        description: "VM machine type for up and resume (default e2-micro)"
+        type: string
+        required: false
       domain:
         description: "Domain (default: the NEURA_DOMAIN variable, else the one already deployed, else <ip>.sslip.io)"
         type: string
@@ -52,6 +64,8 @@ jobs:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           COMMAND: ${{ inputs.command }}
           NEURA_DOMAIN: ${{ inputs.domain || vars.NEURA_DOMAIN }}
+          NEURA_DATABASE: ${{ inputs.database }}
+          NEURA_MACHINE_TYPE: ${{ inputs.machine_type }}
           NEURA_ACME_EMAIL: ${{ vars.NEURA_ACME_EMAIL }}
           NEURA_CONTACT_URL: ${{ vars.NEURA_CONTACT_URL }}
         shell: bash
@@ -60,4 +74,7 @@ jobs:
             echo "::error::Add the GCP_SA_KEY secret: Settings → Environments → production → Add secret"
             exit 1
           fi
+          # Empty inputs mean the script's defaults.
+          [ -n "$NEURA_DATABASE" ] || unset NEURA_DATABASE
+          [ -n "$NEURA_MACHINE_TYPE" ] || unset NEURA_MACHINE_TYPE
           deploy/gcp/deploy.sh "$COMMAND" | tee -a "$GITHUB_STEP_SUMMARY"

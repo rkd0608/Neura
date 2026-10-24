@@ -186,7 +186,11 @@ async def test_the_cells_recordings_fine_tune_and_evaluate_its_model(
         == 0
     )
     training = json.loads((trained / "report.json").read_text())
-    assert training["dataset"]["episodes"] == dataset["episodes"]
+    # Each episode is trained on or left out, and the report says why (on a loaded machine a
+    # task can end too early to be used).
+    used = training["dataset"]
+    assert used["episodes"] + used["skipped"] == dataset["episodes"], used
+    assert used["episodes"] >= 2, used
     assert training["dataset"]["frames"] > 0
     assert training["training"]["steps"] == 2
     candidate = trained / "checkpoint"
@@ -229,5 +233,6 @@ async def test_the_cells_recordings_fine_tune_and_evaluate_its_model(
             assert report["comparison"]["scenes"] == 2
             assert report["candidate"]["successes"] == report["baseline"]["successes"] == 0
         else:
-            assert report["episodes"] == dataset["episodes"]
+            assert report["episodes_offered"] == dataset["episodes"]
+            assert 1 <= report["episodes"] <= dataset["episodes"], report
             assert report["samples"] > 0

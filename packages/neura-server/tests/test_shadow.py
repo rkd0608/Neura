@@ -11,10 +11,18 @@ from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
 from neura_adapters import MockPolicy, PolicyError
+from neura_adapters.base import blank_inputs
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.gateway import GatewayCore
-from neura_server.shadow import PAIR_TIMEOUT_US, ShadowDeployment, comparable, shadow_verdict
+from neura_server.shadow import (
+    ACTIVE_US,
+    PAIR_TIMEOUT_US,
+    ShadowDeployment,
+    ShadowTracker,
+    comparable,
+    shadow_verdict,
+)
 from neura_server.testing import GW0, MS, Robot, make_core
 
 
@@ -140,6 +148,36 @@ def test_a_busy_candidate_skips_observations_and_never_delays_the_robot(make_bin
     )
     stats = core.status()["shadows"]["rev_2"]
     assert (stats["failed"], stats["skipped"]["unavailable"]) == (1, 1)
+
+
+def test_robots_that_send_in_step_are_all_sampled(make_binding: Any) -> None:
+    # Robots served in one batch send their next observations together, in the same order. The
+    # candidate frees up just before them each time, and would take only the first robot's.
+    candidate = candidate_binding(make_binding)
+    tracker = ShadowTracker(
+        ShadowDeployment("rev_2", "rev_1", candidate, frozenset({"r1", "r2", "r3"}))
+    )
+    inputs = blank_inputs(candidate)
+    taken = []
+    now = 0
+    for sequence in range(9):
+        now += 40 * MS
+        for robot in ("r1", "r2", "r3"):
+            tracker.offer(f"s-{robot}", robot, sequence, inputs, now)
+        request = tracker.take()
+        assert request is not None
+        taken.append(request.robot_id)
+        tracker.skip(request, "done")
+    assert taken == ["r1", "r2", "r3"] * 3
+    # A robot that stops sending is not waited for.
+    now += ACTIVE_US + 1
+    for sequence in range(9, 11):
+        now += 40 * MS
+        tracker.offer("s-r1", "r1", sequence, inputs, now)
+        request = tracker.take()
+        assert request is not None
+        assert request.robot_id == "r1"
+        tracker.skip(request, "done")
 
 
 def test_sampling_invalid_outputs_and_lost_pairs(make_binding: Any) -> None:

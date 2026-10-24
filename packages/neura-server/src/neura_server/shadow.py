@@ -6,7 +6,9 @@ chunk; a dispatcher of its own runs the candidate. The running model always come
 - the candidate runs in a batch group (and worker) of its own, never in a robot's scheduler;
 - it has at most one request in flight per shadow: an observation offered while it is busy is
   skipped and counted, never queued;
-- its results have no deadline, since no robot waits for them.
+- its results have no deadline, since no robot waits for them;
+- its samples are spread over the robots it shadows: robots served in one batch send in step, and
+  the first of them would otherwise take every sample.
 
 Both chunks are compared in robot command units, each through its own execution profile, over
 the actions a robot executes between refills, as a share of each command's declared range. The
@@ -33,6 +35,8 @@ WINDOW = 10_000
 # A primary result that has not arrived after this many seconds is not coming (dropped,
 # superseded, expired): its candidate result is discarded.
 PAIR_TIMEOUT_US = 10_000_000
+# A robot whose observations reached the shadow this recently is one it is sampling now.
+ACTIVE_US = 2_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +143,8 @@ class ShadowTracker:
         self.in_flight: ShadowRequest | None = None
         self._pairs: dict[tuple[str, int], _Pair] = {}
         self._seen: Counter[str] = Counter()
+        self._taken: Counter[str] = Counter()  # by robot
+        self._last_offer_us: dict[str, int] = {}  # by robot, its last usable observation
 
     @property
     def busy(self) -> bool:
@@ -164,13 +170,27 @@ class ShadowTracker:
         if invalid or inputs is None:
             self.stats.skipped["invalid_input"] += 1
             return False
+        self._last_offer_us[robot_id] = now_us
         if self.busy:
             self.stats.skipped["busy"] += 1
             return False
+        if self._ahead(robot_id, now_us):
+            self.stats.skipped["balance"] += 1  # left free for a robot with fewer samples
+            return False
+        self._taken[robot_id] += 1
         key = (session_id, sequence)
         self.pending = ShadowRequest(key, robot_id, inputs, now_us)
         self._pairs[key] = _Pair(now_us, robot_id)
         return True
+
+    def _ahead(self, robot_id: str, now_us: int) -> bool:
+        """Whether another robot sending now has had fewer of its observations taken."""
+        taken = self._taken[robot_id]
+        return any(
+            self._taken[other] < taken
+            for other, at in self._last_offer_us.items()
+            if other != robot_id and now_us - at <= ACTIVE_US
+        )
 
     def take(self) -> ShadowRequest | None:
         """The request for the candidate to run now, if any."""

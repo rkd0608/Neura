@@ -346,8 +346,8 @@ test("the four pages: a site finds its arm, a pushed policy is deployed and appr
     await expect(connect.getByLabel("A workstation or bench")).toHaveText(
       /^neura site join lab-line --control-plane \S+ --token \S+$/,
     );
-    const command =
-      (await connect.getByLabel("A server with the agent installed").textContent()) ?? "";
+    // This stack offers no agent release, so a production server's command is the enroll one.
+    const command = (await connect.getByLabel("A production server").textContent()) ?? "";
     await connect.getByRole("button", { name: "Done" }).click();
     expect(site.enroll(command)).toContain("enrolled server");
     await expect(card.getByText("Connected", { exact: true })).toBeVisible();

@@ -186,6 +186,76 @@ def test_the_installer_refuses_bundles_not_signed_by_the_release_keys(
     assert not (tmp_path / "root" / "opt" / "neura" / "agent" / "current").exists()
 
 
+def one_line_installer(bundle: Path, digest: str, public: Path, tmp_path: Path) -> Path:
+    """The script `GET /install.sh` serves, for this release."""
+    from neura_control import installer
+    from neura_control.settings import ControlPlaneSettings
+
+    settings = ControlPlaneSettings(
+        public_url="https://neura.example",
+        agent_enroll_endpoint="enroll.neura.example:443",
+        agent_release_version="9.9.1",
+        agent_release_url=bundle.resolve().as_uri(),  # https:// outside development
+        agent_release_sha256=digest,
+        agent_release_keys_file=public,
+    )
+    script = tmp_path / "install.sh"
+    script.write_text(installer.script(settings))
+    return script
+
+
+def test_the_one_line_installer_checks_the_download_then_installs_and_enrolls(
+    tmp_path: Path, keys: tuple[Path, Path]
+) -> None:
+    private, public = keys
+    bundle, digest = release(tmp_path, "9.9.1", private)
+    script = one_line_installer(bundle, digest, public, tmp_path)
+    root = tmp_path / "root"
+    args = ["--prefix", str(root), "--no-systemd", "--python", PYTHON, "--token", "nen_example"]
+    trust = ["--bench", "--trust", "ab" * 32, "--env", "NEURA_AGENT_WORKER_SANDBOX=container"]
+    # As the console shows it: piped into sh, with its arguments after `-s --`.
+    done = subprocess.run(
+        ["sh", "-s", "--", *args, *trust],
+        input=script.read_text(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    assert "verified neura-agent 9.9.1" in done.stdout
+    enrolled = json.loads(next(line for line in done.stdout.splitlines() if line.startswith("{")))
+    assert enrolled["argv"] == [
+        "enroll",
+        "--control-plane",
+        "enroll.neura.example:443",
+        "--token",
+        "nen_example",
+    ]
+    assert Installation(root / "opt" / "neura" / "agent").current_version() == "9.9.1"
+    assert (root / "etc" / "neura" / "release-keys.pem").read_text().strip() == (
+        public.read_text().strip()
+    )
+    env = (root / "etc" / "neura" / "agent.env").read_text().splitlines()
+    assert "NEURA_AGENT_BENCH=true" in env
+    assert f"NEURA_AGENT_TRUSTED_PUBLISHER_KEYS='[\"{'ab' * 32}\"]'" in env
+    assert "NEURA_AGENT_WORKER_SANDBOX=container" in env
+
+    # Anything but the release it pins is refused before anything is installed: another build
+    # of the same version, signed by the same key.
+    other, _ = release(tmp_path / "other", "9.9.1", private)
+    bundle.write_bytes(other.read_bytes())
+    again = tmp_path / "again"
+    done = subprocess.run(
+        ["sh", str(script), "--prefix", str(again), "--no-systemd", "--token", "nen_example"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode != 0
+    assert "is not neura-agent 9.9.1" in done.stderr
+    assert not again.exists()
+
+
 # --- upgrades ---------------------------------------------------------------------------------
 
 

@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from neura.v1 import common_pb2
 from neura_contracts import API_VERSION as CONTRACTS_API_VERSION
 from neura_contracts import ReasonCode
+from neura_control import installer
 from neura_control.api import (
     routes_access,
     routes_contracts,
@@ -338,6 +339,17 @@ def create_app(
     @app.get("/v1/openapi.yaml", include_in_schema=False)
     async def openapi_document() -> Response:
         return Response(spec_text, media_type="application/yaml")
+
+    @app.get("/install.sh", include_in_schema=False)
+    async def install_script() -> Response:
+        """The one-line installer for production servers (design §29.2)."""
+        if not installer.available(settings):
+            raise ProblemError(
+                ReasonCode.API_NOT_FOUND,
+                "this Neura offers no agent release to install: install the signed bundle with"
+                " deploy/install/install.sh",
+            )
+        return Response(installer.script(settings), media_type="text/x-shellscript")
 
     @app.get("/", include_in_schema=False)
     async def root() -> JSONResponse:

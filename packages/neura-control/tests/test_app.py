@@ -84,7 +84,7 @@ def test_implemented_routes_are_in_the_published_spec() -> None:
     """Spec-first: every public route the service exposes must be declared in api/openapi.yaml."""
     app = create_app(ControlPlaneSettings(environment="test"))
     spec = yaml.safe_load(ControlPlaneSettings().openapi_path.read_text(encoding="utf-8"))
-    operational = {"/", "/healthz", "/readyz", "/v1/openapi.yaml"}
+    operational = {"/", "/healthz", "/readyz", "/v1/openapi.yaml", "/install.sh"}
     served = [(m, p) for m, p in iter_routes(app) if p not in operational]
     assert len(served) > 50
     for method, path in served:

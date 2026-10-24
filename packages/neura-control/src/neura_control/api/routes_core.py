@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
+from neura_control import installer
 from neura_control.api import serializers
 from neura_control.api.auth import authenticate
 from neura_control.api.common import (
@@ -343,9 +344,14 @@ async def create_enrollment_token(
                 "site_id": site.id,
                 "secret": token,
                 "expires_at": iso(expires_at),
-                # A server with the signed agent installed (deploy/install/install.sh), run by
-                # its administrator.
-                "install_command": enroll,
+                # A production server, run by its administrator: the one-line installer when this
+                # control plane offers an agent release, else enrolling an agent installed with
+                # deploy/install/install.sh.
+                "install_command": installer.command(
+                    settings, token, bench=site.kind == "bench", trust=list(keys)
+                )
+                if installer.available(settings)
+                else enroll,
                 # A workstation or a test bench: the agent for the current user, in the
                 # current Python environment (neura site join).
                 "join_command": (

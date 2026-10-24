@@ -3,9 +3,10 @@ rolled back automatically.
 
 A release bundle is a tar holding ``release.json`` (name, version, and the SHA-256 of every
 file), ``release.sig`` (an Ed25519 signature over the exact bytes of ``release.json``, by a Neura
-release key), ``wheels/`` (the agent and its dependencies) and ``bin/neura-agent-launch``. The
-installer pins the release keys on the server (``/etc/neura/release-keys.pem``); neither the
-control plane nor anyone else can make a site run agent code that is not signed with them.
+release key), ``wheels/`` (the agent and its dependencies), ``bin/neura-agent-launch`` and the
+installer, ``bin/install.sh``, which the one-line installer runs. The installer pins the release
+keys on the server (``/etc/neura/release-keys.pem``); neither the control plane nor anyone else
+can make a site run agent code that is not signed with them.
 ``openssl pkeyutl -verify -rawin`` checks the same signature, which is how the installer verifies
 a bundle before anything is installed.
 
@@ -45,6 +46,7 @@ from neura_agent.identity import atomic_write
 
 RELEASE_TYPE = "neura-agent-release"
 LAUNCHER = "bin/neura-agent-launch"
+INSTALLER = "bin/install.sh"
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]+)?$")
 UPGRADE_FILE = "upgrade.json"
 
@@ -113,9 +115,9 @@ def verify_bundle(directory: Path, keys: list[Ed25519PublicKey]) -> Release:
         raise ReleaseError(f"invalid release version {version!r}")
     files: dict[str, str] = manifest.get("files", {})
     if LAUNCHER not in files or not all(
-        name.startswith("wheels/") or name == LAUNCHER for name in files
+        name.startswith("wheels/") or name in (LAUNCHER, INSTALLER) for name in files
     ):
-        raise ReleaseError(f"a release holds wheels/ and {LAUNCHER}")
+        raise ReleaseError(f"a release holds wheels/, {LAUNCHER} and {INSTALLER}")
     for name, digest in files.items():
         path = (directory / name).resolve()
         if directory.resolve() not in path.parents:

@@ -184,7 +184,16 @@ The same run is a test: `packages/neura-control/tests/test_neura_cli.py`.
 ## Installing a site agent
 
 On a GPU server (Linux, Python 3.13+, openssl 3; Docker and the NVIDIA container toolkit for the
-worker sandbox), with a signed release bundle and an enrollment token from the console:
+worker sandbox), the console's "Add a server" gives one line with a single-use token:
+
+```bash
+curl -fsSL https://<neura>/install.sh | sudo sh -s -- --token <nen_...>
+```
+
+It works when the control plane offers an agent release (`NEURA_CONTROL_AGENT_RELEASE_VERSION`,
+`_URL`, `_SHA256` and `_KEYS_FILE`): the script pins the bundle's SHA-256 and the release keys,
+and runs the installer the signed bundle carries. Without one, install a signed release bundle
+by hand:
 
 ```bash
 sudo deploy/install/install.sh --bundle neura-agent-<version>.tar \

@@ -2063,9 +2063,26 @@ the person's credentials.
 `neura site join` makes this machine a development bench. The agent runs as the current user
 (`~/.local/share/neura/sites/<site>/`): enrolled with a single-use token, started detached, with
 its own operator credential. It listens on loopback only, runs policy workers as processes, and
-trusts this machine's publisher key. Production sites run the agent as a system service, installed
-with `deploy/install/install.sh`. A one-line installer served by the control plane is not built
-yet.
+trusts this machine's publisher key.
+
+Production sites run the agent as a system service. Its administrator installs it with one line,
+which the console shows with a single-use token:
+
+```
+curl -fsSL https://<neura>/install.sh | sudo sh -s -- --token nen_...
+```
+
+`GET /install.sh` serves a short script with the agent release this control plane offers pinned
+in it (`NEURA_CONTROL_AGENT_RELEASE_*`): the bundle's address and SHA-256, and the release keys.
+- The script downloads the bundle and refuses it unless its SHA-256 matches.
+- It runs the installer the bundle carries (`bin/install.sh`, signed with the release). That
+  installer verifies the signature against the pinned keys before installing anything, then
+  enrolls the server.
+- A bench gets `NEURA_AGENT_BENCH=true`. The workspace's publisher keys are trusted, as with
+  `neura site join`.
+
+A control plane with no release configured shows the enroll command for an agent installed with
+`deploy/install/install.sh`, and `/install.sh` answers 404.
 
 ### 29.3 Policy sources, one declaration
 
@@ -2180,11 +2197,12 @@ Tests:
 - The rollout driver: deploy to live, shadow and rollback, an inferior shadow, a failed prepare,
   timing that does not fit, overlap and cancel.
 - Robot discovery and self-signup.
+- The one-line installer, piped into `sh` as the console shows it: a real signed release
+  downloaded, checked, installed and enrolled; another build of the same version refused.
 - The console's four pages, end to end in a browser: a production site with a simulated arm, a
   version pushed with the CLI, deployed from Policies, approved at the site, and live.
 
 Not built yet:
-- the one-line installer;
 - stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED);
 - a ROS 2 bridge.
 

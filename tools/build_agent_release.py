@@ -4,10 +4,11 @@
     uv run python tools/build_agent_release.py build --key release.pem --out dist/
 
 `build` makes the workspace's wheels (uv build), downloads the agent's dependencies as wheels
-(pip download; or takes every wheel from --wheels-from, for offline builds), adds the launcher,
-writes release.json with every file's SHA-256, signs its exact bytes with the Ed25519 release key,
-and packs neura-agent-<version>.tar. It prints the bundle's SHA-256, which an upgrade command
-carries. Sites verify the signature against the release keys the installer pinned.
+(pip download; or takes every wheel from --wheels-from, for offline builds), adds the launcher
+and the installer, writes release.json with every file's SHA-256, signs its exact bytes with the
+Ed25519 release key, and packs neura-agent-<version>.tar. It prints the bundle's SHA-256, which
+an upgrade command and the one-line installer carry. Sites verify the signature against the
+release keys the installer pinned.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER = ROOT / "packages" / "neura-agent" / "src" / "neura_agent" / "launch.py"
+INSTALLER = ROOT / "deploy" / "install" / "install.sh"
 
 
 def keygen(out: Path) -> None:
@@ -119,6 +121,8 @@ def build(key_path: Path, out: Path, version: str, wheels_from: Path | None) -> 
         launcher = bundle / "bin" / "neura-agent-launch"
         launcher.write_text("#!/usr/bin/env python3\n" + LAUNCHER.read_text())
         launcher.chmod(0o755)
+        # The release carries its installer, signed with it: the one-line installer runs it.
+        shutil.copy2(INSTALLER, bundle / "bin" / "install.sh")
         files = {
             p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(bundle.rglob("*"))

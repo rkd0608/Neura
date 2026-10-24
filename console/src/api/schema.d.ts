@@ -1478,7 +1478,7 @@ export interface components {
       site_id: components["schemas"]["SiteId"];
       secret: string;
       expires_at: components["schemas"]["Timestamp"];
-      /** @description Enrolls a server where the signed agent is installed (run by its administrator). */
+      /** @description What a production server's administrator runs. The one-line installer (curl ... /install.sh | sudo sh) when this Neura offers an agent release; else the enroll command for a server where the signed agent is installed. */
       install_command: string;
       /** @description Enrolls this machine and runs the agent for the current user, in the current Python environment (a workstation or test bench). */
       join_command?: string;

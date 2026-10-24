@@ -7,6 +7,7 @@ api/openapi.yaml by the conformance client.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -425,6 +426,39 @@ def test_nothing_to_roll_back_to(bench: Fleet) -> None:
     )
     assert response.status_code == 409
     assert "no version to go back to" in response.text
+
+
+def test_production_servers_install_with_one_line(
+    make_api: AppFactory, settings: Any, tmp_path: Path
+) -> None:
+    # Without an agent release to offer, there is no one-line installer.
+    plain, _ = make_api()
+    assert plain.get("/install.sh", token=False).status_code == 404
+    keys = tmp_path / "release-keys.pem"
+    keys.write_text(
+        "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAexample\n-----END PUBLIC KEY-----\n"
+    )
+    client, org = make_api(
+        settings_overrides={
+            "public_url": "https://neura.example",
+            "agent_release_version": "1.2.3",
+            "agent_release_url": "https://releases.neura.example/neura-agent-1.2.3.tar",
+            "agent_release_sha256": "ab" * 32,
+            "agent_release_keys_file": keys,
+        }
+    )
+    script = client.get("/install.sh", token=False)  # before anyone signs in
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("text/x-shellscript")
+    assert f"BUNDLE_SHA256={'ab' * 32}" in script.text
+    assert "BUNDLE_URL=https://releases.neura.example/neura-agent-1.2.3.tar" in script.text
+    assert "MCowBQYDK2VwAyEAexample" in script.text
+    fleet = Fleet(client, org, str(settings.database_url), "production")
+    token = client.post(f"/v1/sites/{fleet.site}/enrollment-tokens", {}).json()
+    assert token["install_command"] == (
+        f"curl -fsSL https://neura.example/install.sh | sudo sh -s -- --token {token['secret']}"
+    )
+    assert token["enroll_command"].startswith("neura-agent enroll --control-plane ")
 
 
 def test_install_commands_trust_the_workspaces_keys(bench: Fleet) -> None:

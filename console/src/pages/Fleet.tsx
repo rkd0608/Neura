@@ -314,7 +314,7 @@ function ConnectServer({
             {token.join_command ? (
               <CopyField value={token.join_command} label="A workstation or bench" />
             ) : null}
-            <CopyField value={token.install_command} label="A server with the agent installed" />
+            <CopyField value={token.install_command} label="A production server" />
             <p className="muted small">
               Expires <Time iso={token.expires_at} />. It is shown only now.
             </p>

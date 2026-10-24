@@ -228,6 +228,20 @@ $ uv run neura logs -n 20
 Every command takes `--json`, which prints the API's objects for scripts. The console shows the
 same objects on four pages: Fleet, Policies, Rollouts and Settings.
 
+## A production server
+
+On a production site, connect a server with the line the console's "Add a server" shows. It
+carries a single-use token:
+
+```bash
+curl -fsSL https://<neura>/install.sh | sudo sh -s -- --token nen_...
+```
+
+It downloads the agent release your Neura offers, and refuses it unless its SHA-256 is the one
+pinned in the script. The installer inside checks the release's signature before installing
+anything, then installs the agent as a system service and enrolls the server. Rollouts to its
+robots then wait for a person at the site to run `neura approve`.
+
 ## Next
 
 - [Bring your policy](./policies.md): LeRobot checkpoints, your own Python models, and

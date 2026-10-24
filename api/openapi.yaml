@@ -4629,8 +4629,9 @@ components:
           $ref: '#/components/schemas/Timestamp'
         install_command:
           type: string
-          description: Enrolls a server where the signed agent is installed (run by its
-            administrator).
+          description: What a production server's administrator runs. The one-line installer
+            (curl ... /install.sh | sudo sh) when this Neura offers an agent release; else the
+            enroll command for a server where the signed agent is installed.
         join_command:
           type: string
           description: Enrolls this machine and runs the agent for the current user, in the current

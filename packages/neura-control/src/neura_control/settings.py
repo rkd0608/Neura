@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import parse_qs, urlsplit
@@ -106,6 +107,15 @@ class ControlPlaneSettings(BaseSettings):
     sealed_weights_dir: Path | None = None
     sealed_weights_max_bytes: int = Field(default=64 << 30, ge=1)
 
+    # The site-agent release new servers install (design §29.2). `GET /install.sh` serves a
+    # script that downloads this bundle (built by tools/build_agent_release.py), checks its
+    # SHA-256 and installs it with these release keys (PEM) pinned. Unset: no one-line installer,
+    # and the console's install command is the agent's enroll command.
+    agent_release_version: str | None = None
+    agent_release_url: str | None = None
+    agent_release_sha256: str | None = None
+    agent_release_keys_file: Path | None = None
+
     # Development only: on startup, ensure an organization "dev" and an admin API token with this
     # exact value exist. Refused outside development.
     dev_bootstrap_token: str | None = None
@@ -163,6 +173,27 @@ class ControlPlaneSettings(BaseSettings):
                 "staging and production connect to Postgres with sslmode=verify-full (or set"
                 " database_tls_local for a Unix socket or a local TLS proxy)"
             )
+        release = [
+            self.agent_release_version,
+            self.agent_release_url,
+            self.agent_release_sha256,
+            self.agent_release_keys_file,
+        ]
+        if any(v is not None for v in release) and not all(v is not None for v in release):
+            raise ValueError(
+                "set all of agent_release_version, agent_release_url, agent_release_sha256 and"
+                " agent_release_keys_file, or none"
+            )
+        if self.agent_release_sha256 is not None and not re.fullmatch(
+            r"[0-9a-f]{64}", self.agent_release_sha256
+        ):
+            raise ValueError("agent_release_sha256 is the bundle's SHA-256, 64 lowercase hex")
+        if (
+            self.agent_release_url is not None
+            and not self.agent_release_url.startswith("https://")
+            and self.environment in ("staging", "production")
+        ):
+            raise ValueError("agent_release_url is an https:// address in staging and production")
         if self.dev_bootstrap_token and self.environment != "development":
             raise ValueError("dev_bootstrap_token is only allowed in the development environment")
         return self

@@ -1,96 +1,275 @@
-# Neura
+<div align="center">
 
-**NucleiLabs builds infrastructure that makes robot AI easier to run.** Neura, our first product,
-lets robotics companies deploy their models across multiple robots using shared GPU servers. It
-coordinates inference around each robot's timing requirements and handles model updates, so teams
-can scale without rebuilding their serving infrastructure. It also records what deployed robots do,
-and fine-tunes and evaluates models on those recordings at the customer's site, so a better model
-reaches the robots through the same release flow, with evidence that it is no worse.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
+  <img alt="Neura by NucleiLabs: run your robot policies across your fleet, on your GPUs." src=".github/assets/banner-dark.svg" width="100%">
+</picture>
 
-Status: in development. Nothing here is a released product. See `docs/neura-design.md` for the
-design and the build plan (§16.1).
+<p>
+  <a href="https://github.com/rkd0608/neura/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rkd0608/neura/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-7c63ff?logo=python&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/console-React%20%2B%20TypeScript-7c63ff?logo=typescript&logoColor=white">
+  <img alt="LeRobot" src="https://img.shields.io/badge/policies-LeRobot%20%C2%B7%20Python%20%C2%B7%20containers-7c63ff">
+  <img alt="Status" src="https://img.shields.io/badge/status-in%20development-f2b84b">
+</p>
 
-## Repository layout
+<p>
+  <a href="#-the-60-second-tour"><b>Tour</b></a> ·
+  <a href="#-how-it-works"><b>How it works</b></a> ·
+  <a href="#-quickstart"><b>Quickstart</b></a> ·
+  <a href="#-whats-inside"><b>What's inside</b></a> ·
+  <a href="site/docs"><b>Docs</b></a> ·
+  <a href="docs/neura-design.md"><b>Design</b></a>
+</p>
 
-| Path | What it is |
-| --- | --- |
-| `docs/neura-design.md` | The engineering design (internal) |
-| `proto/neura/v1/` | Protocol schema: robot ↔ gateway data plane, control plane ↔ site agent |
-| `api/openapi.yaml` | Public management API (spec-first) |
-| `catalog/reason_codes.yaml` | Every reason code used by every component |
-| `schemas/` | Generated JSON Schemas for contract documents |
-| `packages/neura-contracts` | Model artifact, robot profile and execution profile contracts; compatibility check; CLI |
-| `packages/neura-proto` | Generated protobuf and gRPC bindings (`from neura.v1 import ...`) |
-| `packages/neura-control` | Cloud control plane: management API on Postgres, migrations, auth, audit, events (`neura-control`) |
-| `packages/neura-agent` | Site agent on customer GPU servers: enrollment, signed desired state, local approval, supervised data plane, local site API (`neura-agent`) |
-| `packages/neura-runtime` | Robot runtime: action queue, chunk merging, fencing, state machine, session and gRPC clients |
-| `packages/neura-server` | Site data plane: gateway, leases, admission, scheduler, policy worker processes (`neura-gateway`, `neura-worker`) |
-| `packages/neura-adapters` | Model adapters: LeRobot ACT, SmolVLA, π0, π0.5 and Diffusion Policy, a mock, synthetic checkpoints, profiler, multi-adapter (LoRA) batching |
-| `packages/neura-bench` | GPU-sharing benchmark: each sharing case against the dedicated baselines (`neura-bench`) |
-| `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, invariant monitor, `neura-sim-robots`, `neura-sim-soak`, `neura-chaos` |
-| `packages/neura-robots` | Real robots: the SO-101 arm over LeRobot, a servo bus emulator, `neura-arm` (serve an arm), `neura-qualify` (hardware fault suite, parity, closed-loop episodes) |
-| `packages/neura-learn` | Evaluation and fine-tuning at the site: simulation and replay suites, the paired non-inferiority verdict, LeRobot fine-tunes (`neura-learn`) |
-| `packages/neura` | The `neura` command (sign in, sites, robots, push, deploy, approve, rollback) and `@neura.policy` for bringing any model |
-| `packages/neura-sdk` | Python client for the management API, generated from the spec |
-| `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
-| `landing/` | The NucleiLabs site: what Neura is, how it works, how to become a design partner (static) |
-| `site/` | Public developer docs (Docusaurus): every page labeled, references generated from the sources |
-| `examples/contracts/` | Example contracts for an SO-101-class arm with ACT and SmolVLA |
-| `examples/site/` | A development gateway configuration, used by the docs quickstart |
-| `examples/robots/` | A `neura-arm` configuration for an SO-101 arm |
-| `bench/reports/` | Benchmark reports, one directory per device |
-| `soak/reports/` | 72-hour soak reports with injected faults, and how to reproduce them |
-| `qualification/reports/` | Hardware qualification reports (the emulated arm until hardware runs) |
-| `deploy/` | Container images, the local Compose stack, and the Google Cloud deployment (`deploy/gcp`) |
-| `tools/` | Code generators and checks |
+</div>
 
-## Getting started
+---
 
-Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Node 22 with pnpm (console), Docker
-with Compose.
+**NucleiLabs builds infrastructure that makes robot AI easier to run.** **Neura**, our first
+product, deploys trained robot policies to many robots from shared GPU servers at the customer's
+own site. It times inference around each robot's control loop, makes every model change a safe,
+reviewable rollout, and records what robots do, so a better model can be trained, tested against
+the running one, and released through the same flow.
 
-```bash
-make setup     # install the workspace into .venv
-make check     # lint, strict type checks, generated-file checks, tests
-make dev       # start Postgres, control plane, site agent (with its data plane), 4 simulated
-               # robots, and the web console on http://127.0.0.1:3000
-make smoke     # build, start, run a whole pilot end to end, stop
+> [!NOTE]
+> Neura is in development. Nothing here is a released product. Every claim below links to the
+> test, benchmark or report that backs it.
 
-make console-setup   # pnpm install
-make console-check   # format, lint (incl. accessibility), strict types, unit tests
-make console-e2e     # the whole journey in Chromium against the real backend
+## ✨ Why Neura
 
-make landing-setup   # the NucleiLabs site (landing/): pnpm install
-make landing-dev     # site dev server on http://127.0.0.1:5174; make landing-check: lint, types, build
+<table>
+<tr>
+<td width="33%" valign="top">
 
-make models-setup    # also install PyTorch and LeRobot (about 5 GB), for real models
-make test-models     # LeRobot adapters, real worker processes, a smoke run of the benchmark
-make bench           # the GPU-sharing benchmark on a GPU; report in bench/reports/<gpu>/
+### 🚀 Deploy like software
+Push a policy, and Neura checks it fits the robot, the site times it on its own GPU, a shadow
+test compares it with what runs today, and robots switch **between tasks**. Roll back in one
+command.
 
-make docs-setup      # the developer docs site (site/, Docusaurus)
-make docs            # docs dev server; make docs-check: labels, wording, build
+</td>
+<td width="33%" valign="top">
 
-make soak            # 72 simulated hours of the site with injected faults (about 2 hours)
-make chaos           # faults in a real gateway, its workers and the network (5 minutes)
-make qualify-emulated  # the hardware fault suite and parity on the emulated SO-101 arm
+### 🛡️ Safe by construction
+**No cloud credential can start motion.** A person at the site approves every activation. Each
+robot checks every action chunk before anything moves, and the site keeps running when the cloud
+is unreachable.
+
+</td>
+<td width="33%" valign="top">
+
+### 🧠 Any policy
+**LeRobot** checkpoints (ACT, Diffusion Policy, SmolVLA, π0, π0.5), your own **Python** class with
+`@neura.policy`, or a proprietary stack in a **container**. One declaration describes them all.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⚡ Share the GPU
+Batching, LoRA multi-adapter batching and co-located fine-tunes serve many robots per device,
+inside each robot's deadline. On one NVIDIA L4, 32 to 96 robots per device met the SLO, against
+one GPU per robot ([report](bench/reports/nvidia-l4/README.md), losing cases included).
+
+</td>
+<td valign="top">
+
+### 🏭 Your data stays home
+Camera frames, robot state, actions and weights stay at the site. The cloud holds records only,
+and everything a site sends is in a hash-chained outbound ledger. Weights can be sealed with your
+own key.
+
+</td>
+<td valign="top">
+
+### 🔁 Gets better
+Robots record episodes at the site, fine-tunes run on the site's GPUs, and a candidate must be
+**no worse** than the running model in simulation, replay and shadow before it may replace it.
+
+</td>
+</tr>
+</table>
+
+## ⏱ The 60-second tour
+
+From a fresh workspace to a simulated arm running your policy, a new version and a rollback:
+
+```console
+$ neura login                                   # browser sign-in, or a token for CI
+$ neura site create lab --bench
+$ neura site join lab --simulate 1              # this machine becomes the site's server
+
+$ neura policy push hold.py --name hold
+
+  Pushing hold
+
+  ✓ Fits so101-follower         reads state; returns 10 actions
+  ✓ Signed                      ed25519:a1d97c56847be359
+  ✓ Files at lab                2 added, 0 already there (this machine)
+
+  hold v1  python · 560 B
+
+$ neura try hold --on sim-1
+
+  Trying hold v1 on sim-1
+
+  ✓ Fits the robots       fits 1 so101-follower robot: 30 Hz, 10-action chunks
+  ✓ At the site           weights verified; under 1 ms per pass (measured); next chunk asked 3 actions early
+  – Shadow test           not asked for
+  ✓ Approval              approved by the bench site's agent
+  ✓ Switch                sim-1 switched
+
+  Live  hold v1
+
+$ neura deploy hold --to sim-1                  # v2: check, prepare, shadow, approve, switch
+$ neura rollback sim-1                          # back to v1, between tasks
 ```
 
-`make setup` installs the default environment only; run `make models-setup` again after it to
-keep PyTorch and LeRobot.
+The policy is any class with `act(observation)`:
 
-The dev stack bootstraps an organization and an admin API token (development only; see
-`deploy/compose/compose.yaml`). Sign in to the console with that token. The site agent starts unenrolled and the robots wait for an
-assignment. `uv run python tools/smoke_api.py` then runs a pilot the way a customer would:
+```python
+import numpy as np
+import neura
 
-1. Onboard through the API: project, site, contracts, robots, deployment, revision.
-2. Enroll the agent with the install command the API returns.
-3. Prepare the revision at the site.
-4. Request activation and approve it locally (`neura-agent approve`).
-5. Check that the robots run the revision.
-6. Stop the control plane and check that the site keeps operating, then start it and check that
-   the site reconnects.
 
-On the "server" (the `site-agent` container), the operator uses the agent CLI:
+@neura.policy(chunk_length=10, cameras={})
+class Hold:
+    """Holds the arm where it is."""
+
+    def act(self, observation):
+        return np.tile(observation["observation.state"], (10, 1))
+```
+
+The same run is a test against a live control plane and a real site agent:
+[`test_neura_cli.py`](packages/neura-control/tests/test_neura_cli.py). Production servers install
+the agent with one line, which the console shows with a single-use token:
+
+```bash
+curl -fsSL https://<your-neura>/install.sh | sudo sh -s -- --token nen_...
+```
+
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+    subgraph cloud["☁️ Neura cloud: records only"]
+        API["Control plane<br/>API · audit · rollouts"]
+        UI["Console<br/>Fleet · Policies · Rollouts · Settings"]
+        CLI["neura CLI"]
+    end
+    subgraph site["🏭 Customer site: on the action path"]
+        AGENT["Site agent<br/>signed desired state · local approval"]
+        GW["Gateway<br/>leases · admission · deadline scheduler"]
+        W1["Policy worker<br/>GPU 0"]
+        W2["Policy worker<br/>GPU 1"]
+    end
+    subgraph robots["🤖 Robots"]
+        R1["Robot runtime<br/>action queue · fencing · fault response"]
+        R2["Robot runtime"]
+    end
+    UI --> API
+    CLI --> API
+    API <-->|"mTLS, outbound from the site"| AGENT
+    AGENT --> GW
+    GW <--> W1
+    GW <--> W2
+    R1 <-->|"observations ⇄ action chunks"| GW
+    R2 <--> GW
+```
+
+- **Four things to know.** A **site** is where robots are: a *bench* for trying things, or
+  *production*. Its server finds the **robots**. A **policy** has numbered versions. A **rollout**
+  changes what robots run.
+- **The cloud is never on the action path.** Robots talk to the gateway on the site's own network.
+  The control plane holds desired state and history; the site keeps serving within limits the
+  customer sets if the cloud goes away.
+- **The robot decides what it executes.** Every chunk must be fresh, for the current task and from
+  the robot's own session, or the robot holds and faults safely.
+- **Every rollout has the same steps:** fits the robots → prepared and timed at the site → shadow
+  test → approval at the site → switch at the next task boundary.
+
+## 🚀 Quickstart
+
+You need Python 3.13, [uv](https://docs.astral.sh/uv/), Node 22 with pnpm, and Docker with Compose.
+
+```bash
+git clone https://github.com/rkd0608/neura.git && cd neura
+make setup     # the Python workspace, into .venv
+make dev       # Postgres, control plane, site agent, simulated robots, console on :3000
+```
+
+Then sign in with the development token and run the tour against your local stack:
+
+```bash
+grep -o 'ntk_tok_[A-Za-z0-9_-]*' deploy/compose/compose.yaml \
+  | uv run neura login --api http://127.0.0.1:8080 --with-token
+uv run neura site create lab --bench
+uv run neura site join lab --simulate 1 --mock-policies --control-plane 127.0.0.1:8081
+uv run neura policy push ./my_policy.py --name pick
+uv run neura try pick --on sim-1
+```
+
+The full walkthrough is in the docs: [Deploy a policy](site/docs/deploy-a-policy.md) and
+[Bring your policy](site/docs/policies.md).
+
+## 📦 What's inside
+
+<table>
+<tr><th align="left">Product</th><th align="left"></th></tr>
+<tr><td><a href="packages/neura"><code>packages/neura</code></a></td><td>The <code>neura</code> command and <code>@neura.policy</code>: sign in, sites, robots, push, deploy, approve, rollback</td></tr>
+<tr><td><a href="console"><code>console/</code></a></td><td>Web console: React + TypeScript, client generated from the API spec, end-to-end tests in Chromium</td></tr>
+<tr><td><a href="landing"><code>landing/</code></a> · <a href="site"><code>site/</code></a></td><td>The NucleiLabs website, and the developer docs it serves at <code>/docs/</code></td></tr>
+<tr><th align="left">Cloud</th><th></th></tr>
+<tr><td><a href="packages/neura-control"><code>neura-control</code></a></td><td>Control plane: management API on Postgres, auth and SSO, workspaces, rollouts, audit, events</td></tr>
+<tr><td><a href="packages/neura-sdk"><code>neura-sdk</code></a></td><td>Python client for the management API, generated from <a href="api/openapi.yaml"><code>api/openapi.yaml</code></a></td></tr>
+<tr><th align="left">Site</th><th></th></tr>
+<tr><td><a href="packages/neura-agent"><code>neura-agent</code></a></td><td>Site agent: enrollment, signed desired state, local approval, weights, upgrades, robot discovery</td></tr>
+<tr><td><a href="packages/neura-server"><code>neura-server</code></a></td><td>Data plane: gateway, leases, admission control, deadline scheduler, policy workers, shadow serving, capture</td></tr>
+<tr><td><a href="packages/neura-adapters"><code>neura-adapters</code></a></td><td>Model adapters: LeRobot ACT, Diffusion, SmolVLA, π0, π0.5; Python and container policies; LoRA batching; profiler</td></tr>
+<tr><td><a href="packages/neura-learn"><code>neura-learn</code></a></td><td>At-site evaluation and fine-tuning: simulation, replay and shadow suites, non-inferiority verdicts</td></tr>
+<tr><th align="left">Robot</th><th></th></tr>
+<tr><td><a href="packages/neura-runtime"><code>neura-runtime</code></a></td><td>Robot runtime: action queue, chunk merging, fencing, the robot's state machine</td></tr>
+<tr><td><a href="packages/neura-robots"><code>neura-robots</code></a></td><td>Real arms: SO-101 over LeRobot, a servo-bus emulator, <code>neura-arm</code>, <code>neura-qualify</code></td></tr>
+<tr><th align="left">Foundations</th><th></th></tr>
+<tr><td><a href="packages/neura-contracts"><code>neura-contracts</code></a></td><td>Model, robot and execution-profile contracts, the compatibility check, signing</td></tr>
+<tr><td><a href="proto/neura/v1"><code>proto/</code></a> · <a href="packages/neura-proto"><code>neura-proto</code></a></td><td>The wire protocol (robot ⇄ gateway, site ⇄ cloud, gateway ⇄ worker) and its bindings</td></tr>
+<tr><td><a href="packages/neura-sim"><code>neura-sim</code></a> · <a href="packages/neura-bench"><code>neura-bench</code></a></td><td>Simulated sites, soak and chaos with an invariant monitor; the GPU-sharing benchmark</td></tr>
+<tr><td><a href="deploy"><code>deploy/</code></a></td><td>Container images, the local Compose stack, the installer, Google Cloud deployment, a customer site kit</td></tr>
+</table>
+
+## 📊 Evidence
+
+| What | Result | Where |
+| --- | --- | --- |
+| GPU sharing, NVIDIA L4 | 32 robots on one shared policy, 96 on different fine-tunes, inside the deadline SLO; on this device, plain co-location matched or beat batching | [bench/reports/nvidia-l4](bench/reports/nvidia-l4/README.md) |
+| Vision-language-action models | SmolVLA and π0 measured on the same device, including where sharing does not pay | [bench/reports/nvidia-l4-vla](bench/reports/nvidia-l4-vla/README.md) |
+| Soak | 72 simulated hours with injected faults, no invariant violated | [soak/reports](soak/reports) |
+| Hardware qualification | The SO-101 fault suite and parity on the emulated arm (real hardware pending) | [qualification/reports](qualification/reports) |
+| End to end | The CLI tour, the console's four pages, onboarding to approval, all in CI | [CI](.github/workflows/ci.yml) |
+
+## 🛠 Development
+
+```bash
+make check            # lint, strict types, generated files, tests: what CI runs
+make console-check    # the console: format, lint, types, unit tests
+make console-e2e      # the console's journeys in Chromium, against the real backend
+make docs             # the docs on http://127.0.0.1:3000/docs/
+make landing-dev      # the website on http://127.0.0.1:5174
+make models-setup     # PyTorch and LeRobot (about 5 GB), for real models
+make test-models      # adapters, real workers, the benchmark, the SO-101 integration
+make soak             # 72 simulated hours with injected faults
+make chaos            # faults in a real gateway, its workers and the network
+```
+
+Control-plane tests need Postgres: `docker compose -f deploy/compose/compose.yaml up -d postgres`,
+then `NEURA_TEST_DATABASE_URL=postgresql://neura:neura@127.0.0.1:5432/neura make test`.
+
+<details>
+<summary><b>Operating a site by hand</b>: the agent CLI, weights, signing, sealing, telemetry</summary>
+
+On the server (the `site-agent` container in the dev stack), the operator uses the agent CLI:
 
 ```bash
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent status
@@ -100,136 +279,86 @@ docker compose -f deploy/compose/compose.yaml exec \
   site-agent neura-agent approve <command-id> --operator you@site
 ```
 
-Control-plane tests need PostgreSQL: `docker compose -f deploy/compose/compose.yaml up -d postgres`
-then `NEURA_TEST_DATABASE_URL=postgresql://neura:neura@127.0.0.1:5432/neura make test`.
-
-Check a model, robot and execution profile against each other:
-
-```bash
-uv run neura-contracts check \
-  --artifact examples/contracts/act-so101.artifact.yaml \
-  --robot examples/contracts/so101.robot.yaml \
-  --profile examples/contracts/act-so101-30hz.profile.yaml
-```
-
-The dev stack runs the mock policy with simulated GPU latency. A real site runs one policy worker
-process per model on its GPU (the agent's default). Model weights stay at the site: copy a
-checkpoint onto the server and import it, and `prepare` loads it on the GPU and measures it there:
+Weights stay at the site. Import a checkpoint, and `prepare` loads and measures it on the GPU:
 
 ```bash
 neura-agent import-weights /path/to/checkpoint --artifact my-model.artifact.yaml
 ```
 
-A site runs an artifact only if a publisher key its operator trusts signed it (design §17.7). The
-customer's release process signs, and the site operator trusts the key on the server:
+A site runs an artifact only if a publisher key its operator trusts signed it:
 
 ```bash
-uv run neura-contracts publisher-key --out release.pem      # once; prints the public key
-uv run neura-contracts sign my-model.artifact.yaml --key release.pem   # register with this
+uv run neura-contracts publisher-key --out release.pem
+uv run neura-contracts sign my-model.artifact.yaml --key release.pem
 neura-agent trust-publisher <public key>                     # on the server
 ```
 
-To keep weights in a store you do not fully control (a shared bucket, or Neura's registry), seal
-them with your own key first; only the site, holding that key, can open them:
+To keep weights in a store you do not fully control, seal them with your own key first:
 
 ```bash
 uv run neura-contracts key-file --out weights.kek
 uv run neura-contracts seal /path/to/checkpoint --out sealed/ --key-file weights.kek
 ```
 
-Watch the simulated robots being served:
-
-```bash
-curl -s http://127.0.0.1:8091/v1/local/dataplane | python3 -m json.tool
-```
-
-Every component serves Prometheus metrics. To run Prometheus and Grafana with Neura's dashboards
-(http://127.0.0.1:3001):
-
-```bash
-docker compose -f deploy/compose/compose.yaml --profile observability up -d
-```
-
-Everything the site sends to Neura is in its outbound ledger, hash-chained (design §17.7). Set
-`NEURA_AGENT_TELEMETRY_MODE=minimal` to send only health, versions, identifiers and states:
+Everything a site sends is in its hash-chained outbound ledger. `NEURA_AGENT_TELEMETRY_MODE=minimal`
+sends only health, versions, identifiers and states:
 
 ```bash
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --summary
 docker compose -f deploy/compose/compose.yaml exec site-agent neura-agent outbound --verify
 ```
 
-Both `make soak` and `make chaos` are watched by an independent invariant monitor: any stale,
-duplicated or unauthorized action accepted, any action out of order or range, and any latched
-fault cleared without a reset fails the run (design §17.7). `neura-sim-soak --help` and
-`neura-chaos --help` list the faults; `--seed` reproduces a run.
-
-## The `neura` command
-
-From a fresh workspace to a simulated arm running your policy, on one machine (design §29):
+Prometheus and Grafana with Neura's dashboards (http://127.0.0.1:3001):
 
 ```bash
-# `make dev`'s control plane, with its development admin token
-grep -o 'ntk_tok_[A-Za-z0-9_-]*' deploy/compose/compose.yaml \
-  | uv run neura login --api http://127.0.0.1:8080 --with-token
-uv run neura site create lab --bench
-uv run neura site join lab --simulate 1 --mock-policies --control-plane 127.0.0.1:8081
-uv run neura policy push ./my_policy.py --name pick   # a @neura.policy class, a LeRobot checkpoint,
-                                                     # or an image@sha256:... with --declare
-uv run neura try pick --on sim-1
-uv run neura status
+docker compose -f deploy/compose/compose.yaml --profile observability up -d
 ```
 
-The same run is a test: `packages/neura-control/tests/test_neura_cli.py`.
+</details>
 
-## Installing a site agent
+<details>
+<summary><b>Installing the agent without the one-liner</b></summary>
 
 On a GPU server (Linux, Python 3.13+, openssl 3; Docker and the NVIDIA container toolkit for the
-worker sandbox), the console's "Add a server" gives one line with a single-use token:
-
-```bash
-curl -fsSL https://<neura>/install.sh | sudo sh -s -- --token <nen_...>
-```
-
-It works when the control plane offers an agent release (`NEURA_CONTROL_AGENT_RELEASE_VERSION`,
-`_URL`, `_SHA256` and `_KEYS_FILE`): the script pins the bundle's SHA-256 and the release keys,
-and runs the installer the signed bundle carries. Without one, install a signed release bundle
-by hand:
+worker sandbox), with a signed release bundle and an enrollment token from the console:
 
 ```bash
 sudo deploy/install/install.sh --bundle neura-agent-<version>.tar \
   --release-keys release-keys.pem --control-plane <host:port> --token <nen_...>
 ```
 
-Release bundles are built and signed with `tools/build_agent_release.py`; the installer verifies
-them before installing anything. Later upgrades arrive signed through the control plane, if the
-site operator allows them (`NEURA_AGENT_ALLOWED_OPERATIONS`), and roll back by themselves when the
-new release is not healthy (design §17.7).
+Bundles are built and signed with `tools/build_agent_release.py`, and verified before anything is
+installed. The one-line installer runs when the control plane offers a release
+(`NEURA_CONTROL_AGENT_RELEASE_VERSION`, `_URL`, `_SHA256`, `_KEYS_FILE`). Later upgrades arrive
+signed through the control plane, if the site allows them, and roll back by themselves when the
+new release is not healthy.
 
-## Deploying the cloud side
+</details>
 
-The control plane, console and NucleiLabs site run on Google Cloud: one e2-micro VM with Postgres in
-a container (Cloud SQL with `NEURA_DATABASE=cloudsql`), Secret Manager and Artifact Registry, about
-$8–15 a month (design §20.10). With `gcloud` signed in as a project owner, Docker and uv:
+<details>
+<summary><b>Deploying the cloud side</b> on Google Cloud</summary>
+
+The control plane, console, website and docs run on one e2-micro VM with Postgres in a container
+(or Cloud SQL), Secret Manager and Artifact Registry, about $8–15 a month:
 
 ```bash
 NEURA_GCP_PROJECT=<project-id> NEURA_DOMAIN=<domain> deploy/gcp/deploy.sh up
-deploy/gcp/deploy.sh admin-token    # the first admin API token, to sign in to the console
-deploy/gcp/deploy.sh release        # later: ship the current commit
-deploy/gcp/deploy.sh pause          # stop the VMs and Cloud SQL; data kept (resume starts Neura)
+deploy/gcp/deploy.sh admin-token    # the first admin API token
+deploy/gcp/deploy.sh release        # ship the current commit
+deploy/gcp/deploy.sh pause          # stop the VMs; data kept
 ```
 
-From GitHub instead: add the service account's JSON key as the `GCP_SA_KEY` secret (environment
-`production`), then run Actions → Deploy (`.github/workflows/deploy.yml`, manual only).
+Or run Actions → Deploy with the service account key as the `GCP_SA_KEY` secret. Point the domain
+and its `console.`, `agents.` and `enroll.` names at the address `up` prints.
 
-Without `NEURA_DOMAIN` the stack is served at `<ip>.sslip.io`. With a domain, point it and its
-`console.`, `agents.` and `enroll.` names at the address `up` prints.
+</details>
 
-## Being the customer: the site kit
+<details>
+<summary><b>Being the customer</b>: the site kit</summary>
 
-`deploy/site-demo` runs a customer's site on any machine with Docker, CPU only, connected to your
-Neura: a site server and two simulated ALOHA robots running LeRobot's published ACT policy, with
-a page at `http://127.0.0.1:8095` to watch them. Publish the model, add the site and robots in the
-console, connect, then prepare, activate and approve:
+[`deploy/site-demo`](deploy/site-demo/README.md) runs a customer's site on any machine with
+Docker, CPU only, connected to your Neura: a server and two simulated ALOHA robots running
+LeRobot's published ACT policy, with a page at `http://127.0.0.1:8095` to watch them.
 
 ```bash
 cd deploy/site-demo
@@ -237,18 +366,25 @@ cd deploy/site-demo
 ./site.sh connect '<the install command from the console>'
 ```
 
-The walkthrough is in [deploy/site-demo/README.md](deploy/site-demo/README.md) (design §20.11).
+`deploy/gcp/site.sh test` runs the same flow from a server in its own network and region, with
+latency, loss and a partition on the site's uplink.
 
-For staging, `deploy/gcp/site.sh up` puts the same site on a server in its own network and
-region of the Google Cloud project, and `deploy/gcp/site.sh test` runs the customer's whole flow
-against the deployed Neura over the internet, with latency, loss and a partition on the site's
-uplink (Actions → Staging site; design §20.12).
+</details>
 
-## Conventions
+## 📐 Conventions
 
 - **Generated files are committed and checked.** Edit the source (`proto/`, `catalog/`, contract
   models), run `make gen`, commit both. CI fails on stale output.
-- **Spec-first API.** `api/openapi.yaml` is the contract; the service must not expose routes the
-  spec does not declare.
-- **Reason codes come from the catalog.** Never invent a code inline.
+- **Spec-first API.** [`api/openapi.yaml`](api/openapi.yaml) is the contract; the service exposes
+  no route the spec does not declare.
+- **Reason codes come from the catalog.** Every refusal and fault has a stable code from
+  [`catalog/reason_codes.yaml`](catalog/reason_codes.yaml).
 - **Nothing on the robot action path depends on the cloud.**
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to work on Neura and [SECURITY.md](SECURITY.md) to report a
+vulnerability. The engineering design, with the build plan and every decision, is
+[docs/neura-design.md](docs/neura-design.md).
+
+<div align="center">
+<sub>Built by <b>NucleiLabs</b> · infrastructure that makes robot AI easier to run</sub>
+</div>

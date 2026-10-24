@@ -2082,12 +2082,18 @@ Three sources fill it in:
   (and optionally `act_batch`, `reset`). The file's directory ships with the version. A generated
   `neura-policy.json` names the class and its weights; the site's `python` adapter imports it in
   the worker sandbox.
-- **Container**: an image pinned by digest that answers Neura's policy interface, plus a
-  declaration file.
+- **Container**: an image pinned by digest, built from Neura's worker image with the customer's
+  package installed. Its declaration file names the class (`entry: acme.policy:Picker`); the
+  site's `container` adapter imports it from the image. Proprietary code and weights stay in the
+  customer's registry.
 
 From the declaration and the robot's profile Neura writes the model artifact: inputs in the robot's
 order and units, outputs as the robot's commands. A policy that does not fit is refused with the
-reason ("the policy reads camera 'top'; arm-1 has front, wrist").
+reason ("the policy reads camera 'top'; arm-1 has front, wrist"). Cameras are read at the robot's
+size: sites pass frames as robots send them, and a policy that wants smaller images resizes them
+itself. The worker checks every chunk: its shape (chunk length × the robot's commands) and that
+every value is a finite number. `--image` runs a Python version in a worker image with the team's
+dependencies added.
 
 A version is named by its content (`sha-<12 hex>`), so pushing the same files again returns the same
 version. It is signed with the pushing machine's publisher key, which is registered with the
@@ -2143,7 +2149,8 @@ people by their verified email and tokens by their name.
 
 Tests:
 - The quickstart runs end to end against a live control plane and a real agent started by the CLI
-  (join, push, try, deploy, rollback, logs, doctor).
+  (join, push, try, deploy, rollback, logs, doctor). Its pushed `@neura.policy` class runs in a
+  real policy worker, which the site times.
 - The browser sign-in.
 - The rollout driver: deploy to live, shadow and rollback, an inferior shadow, a failed prepare,
   timing that does not fit, overlap and cancel.
@@ -2152,7 +2159,7 @@ Tests:
 Not built yet:
 - the one-line installer;
 - the console's four pages;
-- the `python` and `container` adapters at the site, and stateful policies;
+- stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED);
 - a ROS 2 bridge.
 
 ---

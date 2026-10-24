@@ -289,6 +289,14 @@ def declared_artifact(
                 + (", ".join(sorted(robot_cameras)) if robot_cameras else "no cameras")
             )
             continue
+        size = (int(camera["width"]), int(camera["height"]))
+        if (width, height) != size:
+            # Sites pass camera frames as the robot sends them; they never resize.
+            problems.append(
+                f"the policy reads camera {role!r} at {width}x{height}; {robot_name}'s is "
+                f"{size[0]}x{size[1]}: declare its size and resize inside the policy"
+            )
+            continue
         inputs.append(
             {
                 "kind": "image",
@@ -451,8 +459,9 @@ class Limits:
 
     def summary(self) -> str:
         source = "measured" if self.measured else "estimated"
+        per_pass = "under 1 ms" if self.pass_p99_us < 1000 else f"{self.pass_p99_us / 1000:.0f} ms"
         return (
-            f"{self.pass_p99_us / 1000:.0f} ms per pass ({source}); next chunk asked "
+            f"{per_pass} per pass ({source}); next chunk asked "
             f"{self.refill_threshold_actions} actions early"
         )
 

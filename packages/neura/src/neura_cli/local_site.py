@@ -207,8 +207,8 @@ class LocalSite:
         return pid
 
     def start(self) -> int:
-        """Start the agent in its own session, detached from this terminal, writing to its
-        log. It keeps running after this command ends."""
+        """Start the agent in its own process group, out of this terminal's reach (Ctrl-C
+        here does not stop it), writing to its log. It keeps running after this command ends."""
         running = self.pid()
         if running is not None:
             return running
@@ -225,7 +225,7 @@ class LocalSite:
                     (os.POSIX_SPAWN_DUP2, log, 1),
                     (os.POSIX_SPAWN_DUP2, log, 2),
                 ],
-                setsid=True,
+                setpgroup=0,  # its own group: `stop` ends it and its children together
             )
         finally:
             os.close(log)
@@ -249,7 +249,7 @@ class LocalSite:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline and self.pid() is not None:
             time.sleep(0.2)
-        # Whatever is left of its session (the agent's own children included) goes too.
+        # Whatever is left of its process group (the agent's own children included) goes too.
         for sent in (signal.SIGTERM, signal.SIGKILL):
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(pid, sent)

@@ -29,7 +29,7 @@ import numpy as np
 import neura
 
 
-@neura.policy(chunk_length=10, cameras={"front": (64, 48)}, weights="weights")
+@neura.policy(chunk_length=10, cameras={"front": (640, 480)}, weights="weights")
 class Hold:
     """Holds the arm where it is, plus an offset read from its weights."""
 
@@ -37,7 +37,7 @@ class Hold:
         self.offset = float((weights / "offset.txt").read_text())
 
     def act(self, observation):
-        assert observation["observation.images.front"].shape == (48, 64, 3)
+        assert observation["observation.images.front"].shape == (480, 640, 3)
         return np.tile(observation["observation.state"] + self.offset, (10, 1))
 '''
 
@@ -110,7 +110,13 @@ def test_a_python_policy_ships_its_code_and_weights_with_how_to_run_it(
     assert isinstance(artifact, ModelArtifact)
     assert artifact.spec.adapter.name == "python"
     images = [i for i in artifact.spec.inputs if i.kind == "image"]
-    assert [(i.camera_role, i.width, i.height) for i in images] == [("front", 64, 48)]
+    assert [(i.camera_role, i.width, i.height) for i in images] == [("front", 640, 480)]
+    pinned = "registry.acme.example/neura-worker-torch@sha256:" + "c" * 64
+    with_image = sources.load(str(path), robot, image=pinned)
+    assert with_image.artifact(robot, "hold")["spec"]["runtime_image"]["reference"] == pinned
+    assert with_image.version() != source.version()  # another image is another version
+    with pytest.raises(CliError, match="not an image pinned by digest"):
+        sources.load(str(path), robot, image="acme/worker:latest")
     # The same files are the same version; a change is a new one.
     assert sources.load(str(path), robot).version() == source.version()
     (tmp_path / "hold" / "weights" / "offset.txt").write_text("0.7", encoding="utf-8")
@@ -137,7 +143,7 @@ def test_python_sources_name_the_class_when_a_file_has_several(
 def test_a_policy_that_does_not_fit_the_robot_says_why(
     tmp_path: Path, robot: dict[str, Any]
 ) -> None:
-    wrong = HOLD.replace('cameras={"front": (64, 48)}', 'cameras={"top": (64, 48)}')
+    wrong = HOLD.replace('cameras={"front": (640, 480)}', 'cameras={"top": (640, 480)}')
     path = python_policy(tmp_path / "wrong", wrong)
     with pytest.raises(CliError) as unfit:
         sources.load(str(path), robot).artifact(robot, "wrong")
@@ -169,7 +175,20 @@ def test_a_container_is_an_image_pinned_by_digest_with_a_declaration(
         sources.load(image, robot)
     declaration = tmp_path / "picker.yaml"
     declaration.write_text(
-        yaml.safe_dump({"chunk_length": 20, "cameras": {"wrist": [224, 224]}, "language": True}),
+        yaml.safe_dump({"chunk_length": 20, "cameras": {"wrist": [640, 480]}, "language": True}),
+        encoding="utf-8",
+    )
+    with pytest.raises(CliError, match="names no entry"):
+        sources.load(image, robot, declare=declaration)
+    declaration.write_text(
+        yaml.safe_dump(
+            {
+                "entry": "acme_picker.policy:Picker",
+                "chunk_length": 20,
+                "cameras": {"wrist": [640, 480]},
+                "language": True,
+            }
+        ),
         encoding="utf-8",
     )
     source = sources.load(image, robot, declare=declaration)
@@ -179,7 +198,15 @@ def test_a_container_is_an_image_pinned_by_digest_with_a_declaration(
     assert artifact["spec"]["runtime_image"]["reference"] == image
     assert artifact["spec"]["adapter"]["name"] == "container"
     assert [i["kind"] for i in artifact["spec"]["inputs"]] == ["state", "image", "language"]
-    declaration.write_text(yaml.safe_dump({"chunk_length": 20, "colour": "red"}), encoding="utf-8")
+    entry = json.loads(source.files[0].source.read_text(encoding="utf-8"))
+    assert (entry["kind"], entry["entry"], entry["image"]) == (
+        "container",
+        "acme_picker.policy:Picker",
+        image,
+    )
+    declaration.write_text(
+        yaml.safe_dump({"entry": "a:B", "chunk_length": 20, "colour": "red"}), encoding="utf-8"
+    )
     with pytest.raises(CliError, match="unknown fields: colour"):
         sources.load(image, robot, declare=declaration)
     with pytest.raises(CliError, match="not a policy Neura can read"):
@@ -240,7 +267,7 @@ def test_neura_check_runs_a_python_policy_once(
     assert main(["check", str(path), "--profile", str(profile), "--run"]) == 0
     printed = capsys.readouterr().out
     assert "Fits so101-follower" in printed
-    assert "reads state, front 64x48; returns 10 actions" in printed
+    assert "reads state, front 640x480; returns 10 actions" in printed
     assert "Ran on this machine" in printed
     assert "Keeps up (measured on this machine)" in printed
 

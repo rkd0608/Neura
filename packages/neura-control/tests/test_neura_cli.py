@@ -135,7 +135,7 @@ def test_the_quickstart_from_a_fresh_workspace_to_a_moving_arm(
             "manifest_signing_key": "x" * 43,
         }
     )
-    # Sign in with a token, as CI does.
+    # Sign in with a token, as CI does. The bench runs real policy workers (as processes).
     stdin = io.StringIO(api.token + "\n")
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr("sys.stdin", stdin)
@@ -145,7 +145,7 @@ def test_the_quickstart_from_a_fresh_workspace_to_a_moving_arm(
 
     # A bench, and this machine as its server with one simulated arm.
     assert "Created bench site lab" in neura(capsys, "site", "create", "lab", "--bench")
-    joined = neura(capsys, "site", "join", "lab", "--simulate", "1", "--mock-policies")
+    joined = neura(capsys, "site", "join", "lab", "--simulate", "1")
     assert "Enrolled this machine" in joined
     assert "Agent running" in joined
     robots = wait_for(lambda: neura_json(capsys, "robots"), what="the arm to be found")
@@ -172,6 +172,8 @@ def test_the_quickstart_from_a_fresh_workspace_to_a_moving_arm(
     tried = neura(capsys, "try", "hold", "--on", "sim-1", "--timeout", "120")
     assert "Live" in tried
     assert "approved by the bench site's agent" in tried
+    # A real policy worker ran the class at the site, and the site timed it.
+    assert "per pass (measured)" in tried
 
     def running(version: int) -> Any:
         robot = neura_json(capsys, "robots")[0]

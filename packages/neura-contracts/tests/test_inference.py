@@ -202,3 +202,10 @@ def test_declaration_names_missing_cameras(robot_data: Data) -> None:
     declaration = PolicyDeclaration(adapter="container", chunk_length=10, cameras={"top": (64, 64)})
     with pytest.raises(InferenceError, match="reads camera 'top'"):
         declared_artifact(declaration, robot_data, name="x", version="v1", weights=WEIGHTS)
+
+
+def test_declaration_reads_cameras_at_their_size(robot_data: Data) -> None:
+    """Sites pass frames as robots send them: a policy that wants smaller images resizes them."""
+    declaration = PolicyDeclaration(adapter="python", chunk_length=10, cameras={"front": (64, 48)})
+    with pytest.raises(InferenceError, match="at 64x48; so101-follower's is 640x480"):
+        declared_artifact(declaration, robot_data, name="x", version="v1", weights=WEIGHTS)

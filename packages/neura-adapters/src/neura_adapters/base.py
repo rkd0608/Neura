@@ -121,6 +121,9 @@ _REGISTRY: dict[str, str] = {
     "lerobot-pi0": "neura_adapters.lerobot:load",
     "lerobot-pi05": "neura_adapters.lerobot:load",
     "lerobot-diffusion": "neura_adapters.lerobot:load",
+    # @neura.policy classes: shipped with the version, or installed in its runtime image.
+    "python": "neura_adapters.python:load",
+    "container": "neura_adapters.python:load",
 }
 
 

@@ -147,15 +147,20 @@ def load(
     robot: Mapping[str, Any],
     *,
     declare: Path | None = None,
+    image: str | None = None,
 ) -> Source:
     kind = kind_of(reference)
     if kind == "container":
+        if image is not None:
+            raise CliError("A container is its own image: --image is for the other sources.")
         return _container(reference, declare)
     if declare is not None:
         raise CliError("--declare is for container images; other sources declare themselves.")
-    if kind == "python":
-        return _python(reference)
-    return _lerobot(reference, robot)
+    if image is not None and not IMAGE.match(image):
+        raise CliError(f"{image} is not an image pinned by digest (name@sha256:<64 hex>).")
+    source = _python(reference) if kind == "python" else _lerobot(reference, robot)
+    source.runtime_image = image
+    return source
 
 
 # --- LeRobot -----------------------------------------------------------------------------------
@@ -314,7 +319,12 @@ def _tree(root: Path) -> Iterator[File]:
 # --- container ---------------------------------------------------------------------------------
 
 
-def read_declaration(path: Path, adapter: str) -> PolicyDeclaration:
+ENTRY = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
+
+
+def read_declaration(path: Path) -> tuple[PolicyDeclaration, str]:
+    """A container's declaration file: what its policy reads and returns, and the class
+    (``entry: package.module:Class``) installed in the image."""
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -322,14 +332,20 @@ def read_declaration(path: Path, adapter: str) -> PolicyDeclaration:
     if not isinstance(data, dict) or "chunk_length" not in data:
         raise CliError(
             f"{path} is not a declaration.",
-            "It needs at least chunk_length, and says what the policy reads: state, cameras, "
-            "language.",
+            "It needs at least entry and chunk_length, and says what the policy reads: state, "
+            "cameras, language.",
+        )
+    entry = data.pop("entry", None)
+    if not isinstance(entry, str) or not ENTRY.match(entry):
+        raise CliError(
+            f"{path} names no entry.",
+            "Name the @neura.policy class installed in the image: entry: package.module:Class",
         )
     unknown = set(data) - set(PolicyDeclaration.__dataclass_fields__) - {"adapter"}
     if unknown:
         raise CliError(f"{path} has unknown fields: {', '.join(sorted(unknown))}.")
     try:
-        return PolicyDeclaration.from_json({**data, "adapter": adapter})
+        return PolicyDeclaration.from_json({**data, "adapter": "container"}), entry
     except (TypeError, ValueError, IndexError) as error:
         raise CliError(f"{path} is not a declaration.", str(error)) from error
 
@@ -340,12 +356,12 @@ def _container(image: str, declare: Path | None) -> Source:
         if not default.is_file():
             raise CliError(
                 "A container declares what it reads and returns.",
-                "Write it in a file (chunk_length, cameras, state, language) and pass "
+                "Write it in a file (entry, chunk_length, cameras, state, language) and pass "
                 "--declare FILE.",
             )
         declare = default
-    declaration = read_declaration(declare, "container")
-    entry = authoring.entry_document(kind="container", declaration=declaration)
+    declaration, class_name = read_declaration(declare)
+    entry = authoring.entry_document(kind="container", declaration=declaration, entry=class_name)
     return Source(
         "container",
         image,

@@ -73,6 +73,11 @@ def _source_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--for", dest="robot", help="a robot or robot profile (default: the one)")
     parser.add_argument("--declare", type=Path, help="a container's declaration (YAML)")
     parser.add_argument("--profile", type=Path, help="a robot profile file, instead of --for")
+    parser.add_argument(
+        "--image",
+        help="the worker image it runs in, pinned by digest (name@sha256:...): Neura's, with "
+        "your dependencies added (default: Neura's worker image)",
+    )
 
 
 def _profile(ctx: Context, args: argparse.Namespace) -> dict[str, Any]:
@@ -118,7 +123,7 @@ def run_push(args: argparse.Namespace, ctx: Context) -> int:
     robot = _profile(ctx, args)
     robot_name = robot["metadata"]["name"]
     out.header(f"Pushing {args.name}")
-    source = sources.load(args.path, robot, declare=args.declare)
+    source = sources.load(args.path, robot, declare=args.declare, image=args.image)
     artifact = source.artifact(robot, args.name)
     digest = parse_document(artifact).digest()
     out.ok(f"Fits {robot_name}", _describe(source))
@@ -260,7 +265,7 @@ def run_check(args: argparse.Namespace, ctx: Context) -> int:
     robot = _profile(ctx, args)
     robot_name = robot["metadata"]["name"]
     out.header(f"Checking {args.path}")
-    source = sources.load(args.path, robot, declare=args.declare)
+    source = sources.load(args.path, robot, declare=args.declare, image=args.image)
     artifact = source.artifact(robot, "check")
     out.ok(f"Fits {robot_name}", _describe(source))
     ok = True

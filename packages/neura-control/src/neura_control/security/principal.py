@@ -57,6 +57,12 @@ class Principal:
     grants: dict[str, frozenset[Permission]] = field(default_factory=dict)
     # For API tokens restricted to some projects; None means every project in the organization.
     project_ids: frozenset[str] | None = None
+    # What people read in activity: a person's verified email, an API token's name.
+    name: str | None = None
+
+    @property
+    def display(self) -> str:
+        return self.name or self.subject
 
     def permissions(
         self, organization_id: str, project_id: str | None = None

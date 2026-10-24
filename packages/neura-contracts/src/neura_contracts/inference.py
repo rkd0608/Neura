@@ -409,6 +409,33 @@ def nominal_timing(adapter: str, device: str) -> Timing:
     return Timing({1: p99}, measured=False)
 
 
+def provisional_timing(
+    artifact: Mapping[str, Any],
+    robot: Mapping[str, Any],
+    *,
+    device: str,
+    robots: int = 1,
+    executed_actions: int | None = None,
+) -> Timing:
+    """The timing a rollout prepares with before the site has measured anything: the nominal
+    estimate for the policy's type or, when that would not fit, the slowest pass that would. An
+    estimate never refuses a policy; the site's measurement decides (``derive_limits``)."""
+    adapter = str(_spec(artifact)["adapter"]["name"])
+    timing = nominal_timing(adapter, device)
+    try:
+        derive_limits(artifact, robot, timing, robots=robots, executed_actions=executed_actions)
+    except InferenceError:
+        period = int(_spec(robot)["control_period_us"])
+        chunk = int(_spec(artifact)["outputs"]["chunk_length"])
+        per_chunk = min(chunk, executed_actions or chunk)
+        # refill = ceil((2 * pass + rtt + margin) / period) + 1 must stay below per_chunk.
+        fitting = ((per_chunk - 2) * period - timing.rtt_p99_us - MARGIN_US) // 2 - 1
+        if fitting // robots < 1:
+            raise
+        return Timing({1: fitting // robots}, measured=False)
+    return timing
+
+
 @dataclass(frozen=True, slots=True)
 class Limits:
     """The timing limits of an execution profile, and how they were derived."""

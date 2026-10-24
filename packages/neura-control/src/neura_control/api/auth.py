@@ -24,7 +24,7 @@ from neura_control.security.principal import (
     Role,
 )
 from neura_control.security.tokens import API_TOKEN_PREFIX, parse_token, verify_secret
-from neura_control.services import records
+from neura_control.services import records, workspace
 
 # Avoid a write on every request: record token use at most this often.
 LAST_USED_RESOLUTION = timedelta(minutes=1)
@@ -68,6 +68,7 @@ async def _api_token_principal(request: Request, credential: str) -> Principal:
             kind=PrincipalKind.API_TOKEN,
             grants={token.organization_id: permissions},
             project_ids=frozenset(token.project_ids) if token.project_ids else None,
+            name=token.display_name,
         )
 
 
@@ -80,14 +81,27 @@ async def _oidc_principal(request: Request, credential: str) -> Principal:
         identity = await asyncio.to_thread(verifier.identity, credential)
     except TokenInvalidError as exc:
         raise ProblemError(ReasonCode.API_UNAUTHENTICATED) from exc
+    settings = request.app.state.settings
     async with transaction(request) as session:
         if identity.email is not None:
             await _accept_invitations(session, identity.subject, identity.email)
         memberships = (
             await session.scalars(select(Membership).where(Membership.subject == identity.subject))
         ).all()
+        if not memberships and settings.self_signup:
+            # Someone on their own, signing in for the first time: their own workspace.
+            await workspace.create_personal(
+                session, subject=identity.subject, email=identity.email, name=None
+            )
+            memberships = (
+                await session.scalars(
+                    select(Membership).where(Membership.subject == identity.subject)
+                )
+            ).all()
     grants = {m.organization_id: ROLE_PERMISSIONS[Role(m.role)] for m in memberships}
-    return Principal(subject=identity.subject, kind=PrincipalKind.USER, grants=grants)
+    return Principal(
+        subject=identity.subject, kind=PrincipalKind.USER, grants=grants, name=identity.email
+    )
 
 
 async def _accept_invitations(session: AsyncSession, subject: str, email: str) -> None:

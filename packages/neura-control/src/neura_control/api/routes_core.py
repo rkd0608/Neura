@@ -348,10 +348,10 @@ async def create_enrollment_token(
                     f"curl -fsSL {public}/install.sh | sudo sh -s -- --control-plane "
                     f"{endpoint} --token {token}{flags}"
                 ),
-                # A workstation or a test bench: the agent in the current Python environment,
-                # in the foreground (neura site join).
+                # A workstation or a test bench: the agent for the current user, in the
+                # current Python environment (neura site join).
                 "join_command": (
-                    f"neura site join --control-plane {endpoint} --token {token}{flags}"
+                    f"neura site join {site.name} --control-plane {endpoint} --token {token}{flags}"
                 ),
                 # The agent alone, for scripts that install it themselves.
                 "enroll_command": f"neura-agent enroll --control-plane {endpoint} --token {token}",

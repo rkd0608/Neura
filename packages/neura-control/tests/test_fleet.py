@@ -445,7 +445,7 @@ def test_install_commands_trust_the_workspaces_keys(bench: Fleet) -> None:
     assert token["install_command"].startswith("curl -fsSL http://127.0.0.1:8080/install.sh | ")
     assert f"--trust {public}" in token["install_command"]
     assert token["install_command"].endswith(" --bench")
-    assert token["join_command"].startswith("neura site join --control-plane ")
+    assert token["join_command"].startswith("neura site join plant-1 --control-plane ")
     assert token["enroll_command"].startswith("neura-agent enroll --control-plane ")
 
 
@@ -579,3 +579,27 @@ def test_robots_a_site_finds_are_registered_and_kept(bench: Fleet) -> None:
         for r in bench.c.get(f"/v1/projects/{bench.project}/robots").json()["items"]
     }
     assert "lab-sim-1" in names
+
+
+def test_people_on_their_own_get_a_workspace_only_when_self_signup_is_on(
+    make_api: AppFactory,
+) -> None:
+    issuer = OidcIssuer()
+
+    def grace() -> str:
+        return issuer.token("grace", email="Grace@Example.com", email_verified=True)
+
+    # A company's deployment: SSO alone gets no one in; an admin adds people.
+    closed, _ = make_api(oidc_verifier=issuer.verifier)
+    assert closed.as_token(grace()).get("/v1/workspace").status_code != 200
+
+    # Neura's cloud for individuals: the first sign-in makes a workspace they administer.
+    open_, _ = make_api(oidc_verifier=issuer.verifier, settings_overrides={"self_signup": True})
+    first = open_.as_token(grace()).get("/v1/workspace")
+    assert first.status_code == 200, first.text
+    assert first.json()["display_name"] == "grace's workspace"
+    assert set(first.json()["permissions"]) == {"admin", "deploy", "read"}
+    again = open_.as_token(grace()).get("/v1/workspace").json()
+    assert again["organization_id"] == first.json()["organization_id"]  # once, not per sign-in
+    me = open_.as_token(grace()).get("/v1/me").json()
+    assert [o["id"] for o in me["organizations"]] == [first.json()["organization_id"]]

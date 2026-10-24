@@ -24,6 +24,7 @@ neura-adapters = { workspace = true }
 neura-bench = { workspace = true }
 neura-robots = { workspace = true }
 neura-learn = { workspace = true }
+neura = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -39,6 +40,7 @@ dev = [
     "neura-bench",
     "neura-robots",
     "neura-learn",
+    "neura",
     "grpcio-tools==1.84.0",
     "httpx2>=0.1",
     "hypothesis>=6.169",
@@ -87,6 +89,7 @@ known-first-party = [
     "neura_adapters",
     "neura_agent",
     "neura_bench",
+    "neura_cli",
     "neura_contracts",
     "neura_control",
     "neura_robots",
@@ -104,7 +107,7 @@ python_version = "3.13"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:packages/neura-sdk/src:packages/neura-adapters/src:packages/neura-bench/src:tools"
+mypy_path = "packages/neura/src:packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:packages/neura-sdk/src:packages/neura-adapters/src:packages/neura-bench/src:tools"
 explicit_package_bases = true
 exclude = ["packages/neura-proto/src/neura/"]
 

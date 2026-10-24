@@ -4633,8 +4633,8 @@ components:
             administrator).
         join_command:
           type: string
-          description: Runs the agent in the current Python environment and enrolls it (a workstation
-            or test bench).
+          description: Enrolls this machine and runs the agent for the current user, in the current
+            Python environment (a workstation or test bench).
         enroll_command:
           type: string
           description: Enrolls an agent that is already installed.

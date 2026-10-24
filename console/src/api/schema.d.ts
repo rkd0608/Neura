@@ -905,6 +905,276 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/workspace": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The caller's workspace: its organization and the project it works in.
+     * @description A workspace is an organization and its default project, which people and tools never have to choose (design §29). With one organization the caller's own is used; with several, name one.
+     */
+    get: operations["getWorkspace"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/projects/{project_id}/policies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List policies. */
+    get: operations["listPolicies"];
+    put?: never;
+    /** Create a policy. */
+    post: operations["createPolicy"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/policies/{policy_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a policy. */
+    get: operations["getPolicy"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update a policy's display name, description or labels. */
+    patch: operations["updatePolicy"];
+    trace?: never;
+  };
+  "/v1/policies/{policy_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a policy's versions, newest first. */
+    get: operations["listPolicyVersions"];
+    put?: never;
+    /**
+     * Add a version: its model artifact and where it came from.
+     * @description The artifact is registered (or found by its digest) with its publisher signatures. Pushing an artifact the policy already has returns that version with 200. Weights never pass through this call: the site fetches them from the customer's storage, or from Neura's registry sealed with the customer's key.
+     */
+    post: operations["createPolicyVersion"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/policy-versions/{policy_version_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a policy version. */
+    get: operations["getPolicyVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/projects/{project_id}/rollouts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List rollouts, newest first. */
+    get: operations["listRollouts"];
+    put?: never;
+    /**
+     * Deploy a policy version to robots, try one on a bench robot, or roll robots back.
+     * @description The rollout's steps then advance with the site's reports (design §29.4): it checks the version fits the robots, the site prepares and times it on its GPU, it runs beside the current version on live observations when asked, a person at the site approves, and the robots switch at their next task boundary. No credential in the cloud can approve: only the site does.
+     */
+    post: operations["createRollout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/rollouts/{rollout_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a rollout and its steps. */
+    get: operations["getRollout"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/rollouts/{rollout_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel a rollout before its robots switch.
+     * @description A pending approval at the site is withdrawn. Robots that already switched keep what they run: roll back to undo that.
+     */
+    post: operations["cancelRollout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/projects/{project_id}/activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * What happened, newest first, one sentence each.
+     * @description The same events stream live, with their summaries, from `/v1/projects/{project_id}/events`.
+     */
+    get: operations["listActivity"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/organizations/{organization_id}/publisher-keys": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the keys this workspace signs artifacts with. */
+    get: operations["listPublisherKeys"];
+    put?: never;
+    /**
+     * Register the public part of a signing key.
+     * @description New sites' install commands trust it. A site installed before trusts it only once its operator says so locally: the cloud can never make a site trust a key.
+     */
+    post: operations["createPublisherKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/publisher-keys/{publisher_key_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Forget a signing key (sites that trust it keep trusting it). */
+    delete: operations["deletePublisherKey"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/login-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start signing a CLI in through the browser.
+     * @description Returns a short code to approve in the console and a secret only the CLI holds (device authorization, after RFC 8628). No credential is needed.
+     */
+    post: operations["createLoginSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/login-sessions/{login_session_id}/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Exchange an approved sign-in for an API token.
+     * @description 409 with `API_LOGIN_PENDING` until someone approves the code; poll at the session's interval. A token is issued once.
+     */
+    post: operations["exchangeLoginSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/login-approvals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve a CLI's sign-in code for one of your workspaces.
+     * @description Only a signed-in person can approve. The CLI gets a token with that person's permissions in the workspace, for 30 days.
+     */
+    post: operations["approveLogin"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1208,7 +1478,12 @@ export interface components {
       site_id: components["schemas"]["SiteId"];
       secret: string;
       expires_at: components["schemas"]["Timestamp"];
+      /** @description Installs the signed agent as a service on a server and enrolls it (run by its administrator). */
       install_command: string;
+      /** @description Enrolls this machine and runs the agent for the current user, in the current Python environment (a workstation or test bench). */
+      join_command?: string;
+      /** @description Enrolls an agent that is already installed. */
+      enroll_command?: string;
     };
     EnrollmentTokenCreate: {
       /** @default 60 */
@@ -1234,6 +1509,13 @@ export interface components {
       resource: string;
       resource_version?: string;
       occurred_at: components["schemas"]["Timestamp"];
+      /** @description One sentence for a person, when the event is activity. */
+      summary?: string | null;
+      /** @enum {string|null} */
+      level?: "info" | "warning" | "error" | null;
+      site_id?: string | null;
+      robot_id?: string | null;
+      rollout_id?: string | null;
     };
     /** @description An immutable, registered ExecutionProfile document. Changes are new documents. */
     ExecutionProfile: {
@@ -1533,6 +1815,13 @@ export interface components {
         active_revision_id?: components["schemas"]["RevisionId"] | null;
         lease_holder_session_id?: components["schemas"]["SessionId"] | null;
         task_epoch?: number | null;
+        /** @description Whether the site's agent found the robot (rather than an API call). */
+        discovered?: boolean;
+        /** @description What the agent found, e.g. its driver and port. */
+        hardware?: Record<string, never> | null;
+        policy_version_id?: components["schemas"]["PolicyVersionId"] | null;
+        policy_name?: string | null;
+        policy_version?: number | null;
       } & components["schemas"]["ObservedStatus"];
     };
     RobotCreate: {
@@ -1739,6 +2028,12 @@ export interface components {
       labels?: components["schemas"]["Labels"];
       /** @description How long the site keeps operating on its committed configuration without reaching the control plane (design §13). */
       offline_authorization_hours: number;
+      /**
+       * @description A bench is for trying things: its agent may approve activations itself, if its operator also installed it as a bench. On a production site a person approves every change. Set when the site is created.
+       * @default production
+       * @enum {unknown}
+       */
+      kind: "bench" | "production";
     };
     /** @description JSON Merge Patch (RFC 7396) of the mutable spec fields. */
     SiteUpdate: {
@@ -1968,6 +2263,226 @@ export interface components {
     ReleaseGates: {
       evaluations?: ("simulation" | "replay" | "shadow")[];
     };
+    /** @description Policy identifier: `pol_` followed by a ULID. */
+    PolicyId: string;
+    /** @description Policy version identifier: `pv_` followed by a ULID. */
+    PolicyVersionId: string;
+    /** @description Rollout identifier: `ro_` followed by a ULID. */
+    RolloutId: string;
+    /** @description Publisher key identifier: `pub_` followed by a ULID. */
+    PublisherKeyId: string;
+    /** @description Login session identifier: `lgn_` followed by a ULID. */
+    LoginSessionId: string;
+    Workspace: {
+      organization_id: components["schemas"]["OrganizationId"];
+      display_name: string;
+      project_id: components["schemas"]["ProjectId"];
+      permissions: ("admin" | "deploy" | "read")[];
+    };
+    PolicySpec: {
+      name: components["schemas"]["Name"];
+      display_name?: components["schemas"]["DisplayName"];
+      description?: string;
+      labels?: components["schemas"]["Labels"];
+    };
+    PolicyCreate: {
+      spec: components["schemas"]["PolicySpec"];
+    };
+    /** @description JSON merge patch of the policy's spec; only display_name, description and labels change. */
+    PolicyUpdate: {
+      spec: Record<string, never>;
+    };
+    /** @description A trained model, whatever built it, with numbered versions (design §29.1). */
+    Policy: {
+      metadata: components["schemas"]["Metadata"];
+      spec: components["schemas"]["PolicySpec"];
+      readonly status: {
+        versions: number;
+        latest_version: number | null;
+      };
+    };
+    /** @description A page of policies. */
+    PolicyPage: {
+      items: components["schemas"]["Policy"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /** @description How the version was built: a LeRobot checkpoint, a Python class with `@neura.policy`, or a container answering Neura's policy interface. */
+    PolicySource: {
+      /** @enum {unknown} */
+      kind: "lerobot" | "python" | "container";
+      reference?: string;
+    };
+    PolicyVersionSpec: {
+      source: components["schemas"]["PolicySource"];
+      model_artifact: components["schemas"]["ModelArtifactCreate"];
+      notes?: string;
+    };
+    PolicyVersionCreate: {
+      spec: components["schemas"]["PolicyVersionSpec"];
+    };
+    PolicyVersion: {
+      metadata: components["schemas"]["Metadata"];
+      spec: {
+        policy_id: components["schemas"]["PolicyId"];
+        source: components["schemas"]["PolicySource"];
+        model_artifact_id: components["schemas"]["ModelArtifactId"];
+        notes: string;
+      };
+      readonly status: {
+        number: number;
+        /** @description e.g. `pick v3`. */
+        name: string;
+        artifact_digest: components["schemas"]["Digest"];
+        adapter: string | null;
+        signed: boolean;
+        running_robot_ids: components["schemas"]["RobotId"][];
+      };
+    };
+    /** @description A page of policy versions, newest first. */
+    PolicyVersionPage: {
+      items: components["schemas"]["PolicyVersion"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /** @enum {unknown} */
+    RolloutStateFilter:
+      | "active"
+      | "checking"
+      | "preparing"
+      | "shadow_testing"
+      | "awaiting_approval"
+      | "switching"
+      | "live"
+      | "stopped"
+      | "cancelled";
+    RolloutSpec: {
+      /**
+       * @default deploy
+       * @enum {unknown}
+       */
+      kind: "deploy" | "try" | "rollback";
+      robot_ids: components["schemas"]["RobotId"][];
+      /** @description Required for a deploy or try; absent for a rollback. */
+      policy_version_id?: components["schemas"]["PolicyVersionId"] | null;
+      /** @description Seconds the new version runs beside the current one before approval; 0 skips it. Default: 600 on production sites when robots already run something, otherwise none. */
+      shadow_s?: number | null;
+      note?: string;
+    };
+    RolloutCreate: {
+      spec: components["schemas"]["RolloutSpec"];
+    };
+    RolloutStep: {
+      /** @enum {unknown} */
+      name: "check" | "prepare" | "shadow" | "approve" | "switch";
+      /** @enum {unknown} */
+      state: "pending" | "running" | "passed" | "skipped" | "failed";
+      /** @description What the step found or is waiting for. */
+      summary: string;
+      started_at?: components["schemas"]["Timestamp"] | null;
+      finished_at?: components["schemas"]["Timestamp"] | null;
+    };
+    /** @description One change to what some robots run (design §29.4). */
+    Rollout: {
+      metadata: components["schemas"]["Metadata"];
+      spec: components["schemas"]["RolloutSpec"];
+      readonly status: {
+        /** @enum {unknown} */
+        state:
+          | "checking"
+          | "preparing"
+          | "shadow_testing"
+          | "awaiting_approval"
+          | "switching"
+          | "live"
+          | "stopped"
+          | "cancelled";
+        /** @description The version, e.g. `pick v4`. */
+        name: string;
+        site_id: components["schemas"]["SiteId"];
+        deployment_id: components["schemas"]["DeploymentId"];
+        steps: components["schemas"]["RolloutStep"][];
+        reason?: components["schemas"]["ReasonCode"] | null;
+        message: string;
+        revision_id?: components["schemas"]["RevisionId"] | null;
+        /** @description What each robot ran when the rollout started. */
+        baseline_revision_ids?: {
+          [key: string]: components["schemas"]["RevisionId"] | null;
+        };
+        evaluation_id?: components["schemas"]["EvaluationId"] | null;
+        approved_by?: string | null;
+        finished_at?: components["schemas"]["Timestamp"] | null;
+      };
+    };
+    /** @description A page of rollouts, newest first. */
+    RolloutPage: {
+      items: components["schemas"]["Rollout"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    /** @description Something that happened, for a person to read. */
+    Activity: {
+      cursor: string;
+      occurred_at: components["schemas"]["Timestamp"];
+      summary: string;
+      /** @enum {unknown} */
+      level: "info" | "warning" | "error";
+      /** @description What it is about. */
+      resource: string;
+      site_id?: string | null;
+      robot_id?: string | null;
+      rollout_id?: string | null;
+    };
+    /** @description A page of activity, newest first. */
+    ActivityPage: {
+      items: components["schemas"]["Activity"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    PublisherKeyCreate: {
+      /** @description Raw Ed25519 public key, hex. */
+      public_key: string;
+      display_name: components["schemas"]["DisplayName"];
+    };
+    PublisherKey: {
+      metadata: components["schemas"]["Metadata"];
+      spec: components["schemas"]["PublisherKeyCreate"];
+      readonly status: {
+        key_id: string;
+      };
+    };
+    /** @description A page of publisher keys. */
+    PublisherKeyPage: {
+      items: components["schemas"]["PublisherKey"][];
+      page: components["schemas"]["PageInfo"];
+    };
+    LoginSessionCreate: {
+      /** @description What is signing in, e.g. `neura CLI on ada-laptop`. */
+      client_name: string;
+    };
+    LoginSession: {
+      id: components["schemas"]["LoginSessionId"];
+      user_code: string;
+      verification_url: string;
+      /** @description Only the CLI holds it; never shown. */
+      secret: string;
+      expires_at: components["schemas"]["Timestamp"];
+      interval_s: number;
+    };
+    LoginTokenRequest: {
+      secret: string;
+    };
+    LoginToken: {
+      token: string;
+      organization_id: components["schemas"]["OrganizationId"];
+      scopes: components["schemas"]["ApiTokenScope"][];
+      expires_at: components["schemas"]["Timestamp"];
+    };
+    LoginApprovalCreate: {
+      user_code: string;
+      organization_id?: components["schemas"]["OrganizationId"];
+    };
+    LoginApproval: {
+      client_name: string;
+      organization_id: components["schemas"]["OrganizationId"];
+      scopes: components["schemas"]["ApiTokenScope"][];
+    };
   };
   responses: {
     /** @description API_CONFLICT */
@@ -2113,6 +2628,11 @@ export interface components {
     SupportGrantId: components["schemas"]["SupportGrantId"];
     /** @description The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>). */
     WeightDigest: components["schemas"]["Digest"];
+    PolicyId: components["schemas"]["PolicyId"];
+    PolicyVersionId: components["schemas"]["PolicyVersionId"];
+    RolloutId: components["schemas"]["RolloutId"];
+    PublisherKeyId: components["schemas"]["PublisherKeyId"];
+    LoginSessionId: components["schemas"]["LoginSessionId"];
   };
   requestBodies: never;
   headers: {
@@ -4777,6 +5297,697 @@ export interface operations {
       401: components["responses"]["Unauthenticated"];
       403: components["responses"]["Forbidden"];
       404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getWorkspace: {
+    parameters: {
+      query?: {
+        /** @description The workspace's organization, when the caller belongs to several. */
+        organization_id?: components["schemas"]["OrganizationId"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Workspace"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listPolicies: {
+    parameters: {
+      query?: {
+        /** @description Filter by label, `key=value`. Repeat to AND several labels. */
+        label?: components["parameters"]["LabelSelector"];
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicyPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createPolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PolicyCreate"];
+      };
+    };
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          Location: components["headers"]["Location"];
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Policy"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        policy_id: components["parameters"]["PolicyId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Policy"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  updatePolicy: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description The resource version (ETag) the change is based on. */
+        "If-Match": components["parameters"]["IfMatch"];
+      };
+      path: {
+        policy_id: components["parameters"]["PolicyId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/merge-patch+json": components["schemas"]["PolicyUpdate"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Policy"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      412: components["responses"]["PreconditionFailed"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["IfMatchRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listPolicyVersions: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        policy_id: components["parameters"]["PolicyId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicyVersionPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createPolicyVersion: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        policy_id: components["parameters"]["PolicyId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PolicyVersionCreate"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicyVersion"];
+        };
+      };
+      /** @description Created. */
+      201: {
+        headers: {
+          Location: components["headers"]["Location"];
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicyVersion"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getPolicyVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        policy_version_id: components["parameters"]["PolicyVersionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicyVersion"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listRollouts: {
+    parameters: {
+      query?: {
+        /** @description Only rollouts at this site. */
+        site_id?: components["schemas"]["SiteId"];
+        /** @description Only rollouts of this deployment. */
+        deployment_id?: components["schemas"]["DeploymentId"];
+        /** @description Only rollouts that include this robot. */
+        robot_id?: components["schemas"]["RobotId"];
+        /** @description Only rollouts in this state; `active` for every one in progress. */
+        state?: components["schemas"]["RolloutStateFilter"];
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RolloutPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createRollout: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RolloutCreate"];
+      };
+    };
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          Location: components["headers"]["Location"];
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Rollout"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getRollout: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rollout_id: components["parameters"]["RolloutId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Rollout"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  cancelRollout: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        rollout_id: components["parameters"]["RolloutId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Rollout"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listActivity: {
+    parameters: {
+      query?: {
+        /** @description Only activity at this site. */
+        site_id?: components["schemas"]["SiteId"];
+        /** @description Only activity about this robot. */
+        robot_id?: components["schemas"]["RobotId"];
+        /** @description Only activity of this rollout. */
+        rollout_id?: components["schemas"]["RolloutId"];
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        project_id: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActivityPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  listPublisherKeys: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        page_size?: components["parameters"]["PageSize"];
+      };
+      header?: never;
+      path: {
+        organization_id: components["parameters"]["OrganizationId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PublisherKeyPage"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["ValidationFailed"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createPublisherKey: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        organization_id: components["parameters"]["OrganizationId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublisherKeyCreate"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PublisherKey"];
+        };
+      };
+      /** @description Created. */
+      201: {
+        headers: {
+          Location: components["headers"]["Location"];
+          ETag: components["headers"]["ETag"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PublisherKey"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  deletePublisherKey: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description The resource version (ETag) the change is based on. */
+        "If-Match": components["parameters"]["IfMatch"];
+      };
+      path: {
+        publisher_key_id: components["parameters"]["PublisherKeyId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Done. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      412: components["responses"]["PreconditionFailed"];
+      428: components["responses"]["IfMatchRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  createLoginSession: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LoginSessionCreate"];
+      };
+    };
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          Location: components["headers"]["Location"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LoginSession"];
+        };
+      };
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  exchangeLoginSession: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path: {
+        login_session_id: components["parameters"]["LoginSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LoginTokenRequest"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LoginToken"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["Conflict"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  approveLogin: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. */
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LoginApprovalCreate"];
+      };
+    };
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LoginApproval"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
+      413: components["responses"]["PayloadTooLarge"];
+      422: components["responses"]["ValidationFailed"];
+      428: components["responses"]["PreconditionRequired"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];

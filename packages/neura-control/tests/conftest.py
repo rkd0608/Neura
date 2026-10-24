@@ -269,7 +269,9 @@ class LiveApi:
     """The control plane served over real HTTP by uvicorn in a background thread, for clients
     that bring their own transport (the SDK, the console's end-to-end tests)."""
 
-    def __init__(self, settings: ControlPlaneSettings, subjects: dict[str, Role]) -> None:
+    def __init__(
+        self, settings: ControlPlaneSettings, subjects: dict[str, Role], **app_kwargs: Any
+    ) -> None:
         import socket
         import threading
 
@@ -283,7 +285,11 @@ class LiveApi:
             port = s.getsockname()[1]
         self.url = f"http://127.0.0.1:{port}"
         config = uvicorn.Config(
-            create_app(settings), host="127.0.0.1", port=port, log_level="warning", lifespan="on"
+            create_app(settings, **app_kwargs),
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+            lifespan="on",
         )
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
@@ -304,3 +310,23 @@ def live_api(settings: ControlPlaneSettings) -> Iterator[LiveApi]:
     api = LiveApi(settings, {})
     yield api
     api.close()
+
+
+LiveApiFactory = Callable[..., LiveApi]
+
+
+@pytest.fixture
+def make_live_api(settings: ControlPlaneSettings) -> Iterator[LiveApiFactory]:
+    """``make_live_api(settings_overrides={...}, memberships={...}, oidc_verifier=...)``."""
+    apis: list[LiveApi] = []
+
+    def factory(**app_kwargs: Any) -> LiveApi:
+        overrides = app_kwargs.pop("settings_overrides", {})
+        subjects = app_kwargs.pop("memberships", {})
+        api = LiveApi(settings.model_copy(update=overrides), subjects, **app_kwargs)
+        apis.append(api)
+        return api
+
+    yield factory
+    for api in apis:
+        api.close()

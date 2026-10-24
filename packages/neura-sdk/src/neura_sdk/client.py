@@ -57,11 +57,11 @@ class Client(Operations):
         transport: httpx.BaseTransport | None = None,
         user_agent: str = "neura-sdk-python/0.1",
     ) -> None:
+        headers = {"User-Agent": user_agent}
+        if token:  # without one, only the public operations (signing in, metadata) answer
+            headers["Authorization"] = f"Bearer {token}"
         self._http = httpx.Client(
-            base_url=base_url.rstrip("/"),
-            timeout=timeout_s,
-            transport=transport,
-            headers={"Authorization": f"Bearer {token}", "User-Agent": user_agent},
+            base_url=base_url.rstrip("/"), timeout=timeout_s, transport=transport, headers=headers
         )
         self._max_retries = max_retries
         self._sleep: Callable[[float], None] = time.sleep

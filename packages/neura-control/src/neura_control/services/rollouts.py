@@ -37,7 +37,7 @@ from neura_contracts.inference import (
     InferenceError,
     Timing,
     derive_execution_profile,
-    nominal_timing,
+    provisional_timing,
 )
 from neura_control.clock import iso, utcnow
 from neura_control.db.models import (
@@ -369,13 +369,15 @@ async def plan_deploy(
     session.add(rollout)
     await session.flush()
     what = await describe_version(session, version.id)
+    doing, onto = ("trying", "on") if kind == "try" else ("deploying", "to")
     await records.event(
         session,
         project_id=project.id,
         type="resource.created",
         resource=rollout.id,
         version=1,
-        summary=f"{principal.subject} started {kind}ing {what} to {_names(robots)} at {site.name}",
+        summary=f"{principal.display} started {doing} {what} {onto} {_names(robots)} "
+        f"at {site.name}",
         site_id=site.id,
         rollout_id=rollout.id,
     )
@@ -475,7 +477,7 @@ async def plan_rollback(
         type="resource.created",
         resource=rollout.id,
         version=1,
-        summary=f"{principal.subject} started rolling {_names(robots)} back to {what}",
+        summary=f"{principal.display} started rolling {_names(robots)} back to {what}",
         site_id=site.id,
         rollout_id=rollout.id,
     )
@@ -561,7 +563,6 @@ async def _check(session: AsyncSession, rollout: Rollout, project: Project) -> N
     assert artifact_row is not None
     assert robot_row is not None
     device = await _device(session, rollout.site_id)
-    adapter = artifact_row.document["spec"]["adapter"]["name"]
     precisions = next(
         (
             d["precisions"]
@@ -576,7 +577,9 @@ async def _check(session: AsyncSession, rollout: Rollout, project: Project) -> N
         profile_document, limits = derive_execution_profile(
             artifact_row.document,
             robot_row.document,
-            nominal_timing(adapter, device),
+            provisional_timing(
+                artifact_row.document, robot_row.document, device=device, robots=len(robots)
+            ),
             device=device,
             precision=precision,
             robots=len(robots),
@@ -974,7 +977,8 @@ async def _activation(session: AsyncSession, rollout: Rollout) -> None:
         _set_step(rollout, "switch", "passed", f"{_names(robots)} switched")
         rollout.state, rollout.finished_at = "live", utcnow()
         rollout.message = f"{_names(robots)} run {what}"
-        await _emit(session, rollout, f"{_names(robots)} now run {what}")
+        verb = "runs" if len(robots) == 1 else "run"
+        await _emit(session, rollout, f"{_names(robots)} now {verb} {what}")
         await _retire_unused(session, rollout.deployment_id)
         return
     refused = operation.result.get("refused") or (

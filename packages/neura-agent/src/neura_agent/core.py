@@ -1119,6 +1119,8 @@ class AgentCore:
             "pending_activations": [a.command_id for a in self.pending_approvals()],
             "gateway_running": self.gateway.running,
             "gateway_suspended": self.gateway_suspended,
+            # The robot processes this agent runs (design §29.5): driver, running, restarts.
+            "robots": self.robots.status(),
         }
 
     def serving_config(self) -> ServingConfig:

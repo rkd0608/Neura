@@ -1,0 +1,29 @@
+[project]
+name = "neura"
+version = "0.1.0.dev0"
+description = "Neura: the `neura` command, and @neura.policy for bringing your own models."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "neura-contracts",
+    "neura-proto",
+    "neura-sdk",
+    "cryptography>=44",
+    "httpx>=0.28",
+    "numpy>=2.2",
+    "pyyaml>=6.0.2",
+]
+
+[project.optional-dependencies]
+# Make this machine a site server: `neura site join` runs the site agent for the current user.
+site = ["neura-agent"]
+
+[project.scripts]
+neura = "neura_cli.app:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "neura_cli"

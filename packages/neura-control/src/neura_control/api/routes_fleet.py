@@ -340,7 +340,7 @@ async def create_policy_version(
             type="resource.created",
             resource=row.id,
             version=1,
-            summary=f"{principal.subject} added {policy.name} v{row.number} "
+            summary=f"{principal.display} added {policy.name} v{row.number} "
             f"({body.spec.source.kind})",
         )
         await session.refresh(row)

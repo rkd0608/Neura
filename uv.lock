@@ -2050,6 +2050,7 @@ name = "neura"
 version = "0.1.0.dev0"
 source = { editable = "packages/neura" }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "neura-contracts" },
     { name = "neura-proto" },
@@ -2058,15 +2059,23 @@ dependencies = [
     { name = "pyyaml" },
 ]
 
+[package.optional-dependencies]
+site = [
+    { name = "neura-agent" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=44" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "neura-agent", marker = "extra == 'site'", editable = "packages/neura-agent" },
     { name = "neura-contracts", editable = "packages/neura-contracts" },
     { name = "neura-proto", editable = "packages/neura-proto" },
     { name = "neura-sdk", editable = "packages/neura-sdk" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
+provides-extras = ["site"]
 
 [[package]]
 name = "neura-adapters"
@@ -2394,6 +2403,7 @@ dev = [
     { name = "httpx2" },
     { name = "hypothesis" },
     { name = "mypy" },
+    { name = "neura" },
     { name = "neura-adapters" },
     { name = "neura-agent" },
     { name = "neura-bench" },
@@ -2429,6 +2439,7 @@ dev = [
     { name = "httpx2", specifier = ">=0.1" },
     { name = "hypothesis", specifier = ">=6.169" },
     { name = "mypy", specifier = ">=2.4" },
+    { name = "neura", editable = "packages/neura" },
     { name = "neura-adapters", editable = "packages/neura-adapters" },
     { name = "neura-agent", editable = "packages/neura-agent" },
     { name = "neura-bench", editable = "packages/neura-bench" },

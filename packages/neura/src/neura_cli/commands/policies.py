@@ -278,9 +278,9 @@ def run_check(args: argparse.Namespace, ctx: Context) -> int:
             measured_us = _run_once(ctx, source, robot)
             ok = measured_us is not None
             if measured_us is not None:
-                timing, label = Timing({1: measured_us}), "measured on this machine"
+                timing, label = Timing({1: measured_us}), "on this machine"
     if timing is None and source.declaration.adapter in NOMINAL_PASS_US:
-        timing, label = nominal_timing(source.declaration.adapter, "cuda"), "estimated, GPU"
+        timing, label = nominal_timing(source.declaration.adapter, "cuda"), "on a GPU"
     if timing is None:
         out.hint("How fast it runs is measured at the site when it prepares; --run times it here.")
     elif ok:
@@ -292,9 +292,9 @@ def run_check(args: argparse.Namespace, ctx: Context) -> int:
                 robots=args.robots,
                 executed_actions=source.declaration.executed_actions,
             )
-            out.ok(f"Keeps up ({label})", limits.summary())
+            out.ok(f"Keeps up {label}", limits.summary())
         except InferenceError as error:
-            out.fail(f"Does not keep up ({label})", *error.problems)
+            out.fail(f"Does not keep up {label}", *error.problems)
             ok = False
     out.data({"fits": True, "keeps_up": ok, "artifact": artifact})
     out.line()
@@ -363,5 +363,6 @@ def _run_once(ctx: Context, source: sources.Source, robot: dict[str, Any]) -> in
         out.fail("It returned NaN or infinite actions")
         return None
     slowest = max(durations)
-    out.ok("Ran on this machine", f"{expected[0]}x{expected[1]} actions, {slowest * 1000:.0f} ms")
+    took = "under 1 ms" if slowest < 0.001 else f"{slowest * 1000:.0f} ms"
+    out.ok("Ran on this machine", f"{expected[0]}x{expected[1]} actions, {took}")
     return max(1, round(slowest * 1_000_000))

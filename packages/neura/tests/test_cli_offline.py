@@ -5,6 +5,7 @@ sources, signing keys, putting files where local sites find them, `neura check`,
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import stat
@@ -14,7 +15,7 @@ from typing import Any
 import pytest
 import yaml
 
-from neura_cli import keys, sources, weights
+from neura_cli import keys, sources, ui, weights
 from neura_cli.app import main
 from neura_cli.config import Config
 from neura_cli.local_site import LocalSite
@@ -269,7 +270,8 @@ def test_neura_check_runs_a_python_policy_once(
     assert "Fits so101-follower" in printed
     assert "reads state, front 640x480; returns 10 actions" in printed
     assert "Ran on this machine" in printed
-    assert "Keeps up (measured on this machine)" in printed
+    assert "Keeps up on this machine" in printed
+    assert "per pass (measured)" in printed
 
     broken = python_policy(tmp_path / "broken", HOLD.replace("(10, 1)", "(3, 1)"))
     assert main(["check", str(broken), "--profile", str(profile), "--run"]) == 1
@@ -279,6 +281,16 @@ def test_neura_check_runs_a_python_policy_once(
     result = json.loads(capsys.readouterr().out)
     assert result["fits"] is True
     assert result["artifact"]["spec"]["adapter"]["name"] == "python"
+
+
+def test_step_lines_line_up_and_end_where_their_text_does() -> None:
+    stream = io.StringIO()
+    out = ui.Output(stream=stream)
+    out.ok("Created bench site lab")
+    out.ok("Signed", "ed25519:d0216db5cea90024")
+    created, signed = stream.getvalue().splitlines()
+    assert created == "  ✓ Created bench site lab"
+    assert signed.index("ed25519") == len("  ✓ ") + 28
 
 
 def test_errors_say_what_happened_and_what_to_do(capsys: pytest.CaptureFixture[str]) -> None:

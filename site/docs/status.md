@@ -24,6 +24,7 @@ simulated robots until hardware is attached. Nothing here is a released product.
 | M10. Evaluate | A candidate model against the running one, at the site: simulation, replay and shadow suites, release gates | Built |
 | M11. Improve | Fine-tuning at the site on recorded episodes, signed artifacts with lineage, candidate revisions | Built |
 | M12. The loop | The loop in the console and these docs; capture, fine-tune, evaluate and activate on the simulated cell | In progress: console, docs and the cell's data path built; the run with a pretrained policy pending |
+| M13. The product | Sites, robots, policies and rollouts: the `neura` command, policies from LeRobot checkpoints, Python classes and containers, rollouts with shadow tests and approval at the site, the console's four pages, workspaces for individuals and companies | Built; the one-line installer, stateful policies and a ROS 2 bridge pending |
 
 ## Not yet on this site
 

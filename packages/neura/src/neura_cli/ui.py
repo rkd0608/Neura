@@ -83,6 +83,9 @@ class Output:
         self.line()
 
     def ok(self, text: str, detail: str = "") -> None:
+        if not detail:
+            self.line(f"  {self.s.good('✓')} {text}")
+            return
         self.line(f"  {self.s.good('✓')} {_pad(text, 28)}{self.s.quiet(detail)}")
 
     def fail(self, text: str, *details: str) -> None:

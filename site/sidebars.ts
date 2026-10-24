@@ -12,7 +12,14 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Try it",
       collapsed: false,
-      items: ["quickstart", "fault-suite", "hardware-qualification", "troubleshooting"],
+      items: [
+        "deploy-a-policy",
+        "policies",
+        "quickstart",
+        "fault-suite",
+        "hardware-qualification",
+        "troubleshooting",
+      ],
     },
     {
       type: "category",

@@ -70,6 +70,8 @@ It prints a summary with the faults injected, the recoveries and `"violations": 
 
 ## Next
 
+- [Deploy a policy](./deploy-a-policy.md): the same platform through the `neura` command, from
+  a fresh workspace to a simulated arm running your policy.
 - [Fault suite, soak and chaos](./fault-suite.md): the full fault suite, the 72-hour soak and
   chaos against real processes.
 - The whole platform (control plane, site agent, console) runs with Docker Compose: `make dev`,

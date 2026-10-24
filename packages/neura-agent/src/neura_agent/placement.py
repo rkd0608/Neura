@@ -12,7 +12,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import secrets
+import signal
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +25,8 @@ from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.config import profile_batch_sizes
 from neura_server.sandbox import Invocation, Launcher
+
+log = logging.getLogger("neura.agent")
 
 SAME_WEIGHTS = "same_weights"
 CO_LOCATED_FINE_TUNES = "co_located_fine_tunes"
@@ -117,10 +121,13 @@ async def measure(
     args = launcher.command(name, invocation)
     out.parent.mkdir(parents=True, exist_ok=True)
     process = await asyncio.create_subprocess_exec(
-        *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     try:
-        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
     except TimeoutError:
         process.kill()
         await process.wait()
@@ -144,6 +151,21 @@ async def measure(
             except ValueError:
                 code = ReasonCode.WORKER_LOAD_FAILED
             raise ArtifactError(code, str(error.get("message", "")))
+    # The worker died without saying why. Its output stays in the site's log: it can quote the
+    # customer's code, which does not leave the site.
+    for line in stderr.decode(errors="replace").splitlines()[-40:]:
+        log.warning("profiler: %s", line)
     raise ArtifactError(
-        ReasonCode.WORKER_LOAD_FAILED, f"the profiler exited with {process.returncode}"
+        ReasonCode.WORKER_LOAD_FAILED,
+        f"the profiler {exit_status(process.returncode)} (its output is in the site agent's log)",
     )
+
+
+def exit_status(code: int | None) -> str:
+    """How a process ended, as people say it: "exited with status 1", "was killed by SIGABRT"."""
+    if code is not None and code < 0:
+        try:
+            return f"was killed by {signal.Signals(-code).name}"
+        except ValueError:
+            return f"was killed by signal {-code}"
+    return f"exited with status {code}"

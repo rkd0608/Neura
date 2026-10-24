@@ -51,7 +51,12 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
         monkeypatch.delenv(name, raising=False)
     yield tmp_path
     for name, directory in Config.load().local_sites.items():
-        LocalSite.at(name, directory).stop()
+        site = LocalSite.at(name, directory)
+        site.stop()
+        # Shown when the test fails: what the site's agent and its workers said.
+        if site.log_file.is_file():
+            print(f"--- {site.log_file} ---")
+            print("\n".join(site.log_file.read_text(errors="replace").splitlines()[-150:]))
 
 
 def neura(capsys: pytest.CaptureFixture[str], *argv: str, code: int = 0) -> str:

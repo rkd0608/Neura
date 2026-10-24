@@ -345,8 +345,10 @@ def _local(ctx: Context, name: str) -> LocalSite:
 def robot_state(robot: dict[str, Any]) -> str:
     status = robot["status"]
     phase = status.get("phase", "Unknown")
+    if status.get("discovered") and status.get("present") is False:
+        return "missing"
     if phase == "Offline":
-        return "missing" if status.get("discovered") else "offline"
+        return "offline"
     if phase == "NeedsAttention":
         return "needs setup" if status.get("discovered") else "attention"
     if status.get("policy_version_id"):

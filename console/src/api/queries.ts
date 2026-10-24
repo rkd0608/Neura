@@ -331,6 +331,94 @@ export const useMetric = (
 // --- mutations ------------------------------------------------------------------------------------
 
 /** A mutation that refreshes the given query keys when it settles. */
+// --- the fleet (design §29): policies, their versions, rollouts, activity --------------------
+
+export const useWorkspace = (orgId: string) =>
+  useApiQuery(["org", orgId, "workspace"], async () =>
+    unwrap(await api.GET("/v1/workspace", { params: { query: { organization_id: orgId } } })),
+  );
+
+export const usePolicies = (projectId: string) =>
+  useApiQuery(["p", projectId, "policies"], () =>
+    all(async (cursor) =>
+      unwrap(
+        await api.GET("/v1/projects/{project_id}/policies", {
+          params: { path: { project_id: projectId }, query: { cursor, page_size: ALL } },
+        }),
+      ),
+    ),
+  );
+
+export const usePolicy = (projectId: string, policyId: string) =>
+  useApiQuery(["p", projectId, "policy", policyId], async () =>
+    unwrap(
+      await api.GET("/v1/policies/{policy_id}", { params: { path: { policy_id: policyId } } }),
+    ),
+  );
+
+export const usePolicyVersions = (projectId: string, policyId: string) =>
+  useApiQuery(
+    ["p", projectId, "policy-versions", policyId],
+    () =>
+      all(async (cursor) =>
+        unwrap(
+          await api.GET("/v1/policies/{policy_id}/versions", {
+            params: { path: { policy_id: policyId }, query: { cursor, page_size: ALL } },
+          }),
+        ),
+      ),
+    { enabled: policyId !== "" },
+  );
+
+/** Rollouts, newest first; live ones poll so their steps move on screen. */
+export const useRollouts = (projectId: string, query: { robot_id?: string } = {}) =>
+  useApiQuery(
+    ["p", projectId, "rollouts", query],
+    async () =>
+      unwrap(
+        await api.GET("/v1/projects/{project_id}/rollouts", {
+          params: { path: { project_id: projectId }, query: { ...query, page_size: 50 } },
+        }),
+      ).items,
+    { refetchInterval: 3000 },
+  );
+
+export const useRollout = (projectId: string, rolloutId: string) =>
+  useApiQuery(
+    ["p", projectId, "rollout", rolloutId],
+    async () =>
+      unwrap(
+        await api.GET("/v1/rollouts/{rollout_id}", { params: { path: { rollout_id: rolloutId } } }),
+      ),
+    { refetchInterval: 2000 },
+  );
+
+export const useFleetActivity = (
+  projectId: string,
+  query: { site_id?: string; robot_id?: string; rollout_id?: string } = {},
+) =>
+  useApiQuery(
+    ["p", projectId, "activity", query],
+    async () =>
+      unwrap(
+        await api.GET("/v1/projects/{project_id}/activity", {
+          params: { path: { project_id: projectId }, query: { ...query, page_size: 50 } },
+        }),
+      ).items,
+    { refetchInterval: 5000 },
+  );
+
+export const usePublisherKeys = (orgId: string) =>
+  useApiQuery(["org", orgId, "publisher-keys"], () =>
+    all(async (cursor) =>
+      unwrap(
+        await api.GET("/v1/organizations/{organization_id}/publisher-keys", {
+          params: { path: { organization_id: orgId }, query: { cursor, page_size: ALL } },
+        }),
+      ),
+    ),
+  );
+
 export function useApiMutation<TInput, TOutput>(
   fn: (input: TInput) => Promise<TOutput>,
   invalidate: QueryKey[] = [],

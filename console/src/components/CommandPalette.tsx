@@ -13,7 +13,7 @@ import {
 } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
 import { documentTitle } from "./Contracts";
-import { NAV } from "./nav";
+import { MORE, NAV } from "./nav";
 import {
   BotIcon,
   BuildingIcon,
@@ -83,16 +83,17 @@ export function CommandPalette({
       onClose();
       void navigate(to);
     };
-    const pages: Item[] = NAV.flatMap((section) =>
-      section.links.map((link) => ({
-        id: `page:${link.to}`,
-        group: "Go to",
-        label: link.label,
-        hint: section.heading,
-        icon: <link.icon />,
-        run: go(link.org ? `/o/${orgId}/${link.to}` : link.to ? `${base}/${link.to}` : base),
-      })),
-    );
+    const pages: Item[] = [
+      ...NAV.flatMap((section) => section.links.map((link) => ({ link, hint: section.heading }))),
+      ...MORE.map((link) => ({ link, hint: "More" })),
+    ].map(({ link, hint }) => ({
+      id: `page:${link.to}`,
+      group: "Go to",
+      label: link.label,
+      hint,
+      icon: <link.icon />,
+      run: go(link.org ? `/o/${orgId}/${link.to}` : link.to ? `${base}/${link.to}` : base),
+    }));
     const resources: Item[] = [
       ...(deployments.data ?? []).map((d) => ({
         id: d.metadata.id,

@@ -27,6 +27,12 @@ const Activity = page(() => import("./pages/Observe"), "Activity");
 const Deployments = page(() => import("./pages/Releases"), "Releases");
 const DeploymentPage = page(() => import("./pages/Release"), "ReleasePage");
 const Settings = page(() => import("./pages/Settings"), "Settings");
+const Fleet = page(() => import("./pages/Fleet"), "Fleet");
+const Policies = page(() => import("./pages/Policies"), "Policies");
+const PolicyPage = page(() => import("./pages/Policies"), "PolicyPage");
+const Rollouts = page(() => import("./pages/Rollouts"), "Rollouts");
+const RolloutPage = page(() => import("./pages/Rollouts"), "RolloutPage");
+const Activate = page(() => import("./pages/Activate"), "Activate");
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -79,6 +85,10 @@ export function AppRoutes() {
       <Route path="/sign-in" element={screen("Sign in", <SignIn />)} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
+        path="/activate"
+        element={<RequireAuth>{screen("Sign in the command line", <Activate />)}</RequireAuth>}
+      />
+      <Route
         path="/"
         element={
           <RequireAuth>
@@ -106,7 +116,12 @@ export function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={screen("Overview", <Overview />)} />
+        <Route index element={screen("Fleet", <Fleet />)} />
+        <Route path="policies" element={screen("Policies", <Policies />)} />
+        <Route path="policies/:policyId" element={screen("Policy", <PolicyPage />)} />
+        <Route path="rollouts" element={screen("Rollouts", <Rollouts />)} />
+        <Route path="rollouts/:rolloutId" element={screen("Rollout", <RolloutPage />)} />
+        <Route path="overview" element={screen("Overview", <Overview />)} />
         <Route path="deployments" element={screen("Deployments", <Deployments />)} />
         <Route
           path="deployments/:deploymentId"

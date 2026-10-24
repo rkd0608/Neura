@@ -693,6 +693,7 @@ class RobotStatus(TypedDict):
     lease_holder_session_id: NotRequired[SessionId | None]
     task_epoch: NotRequired[int | None]
     discovered: NotRequired[bool]
+    present: NotRequired[bool | None]
     hardware: NotRequired[dict[str, Any] | None]
     policy_version_id: NotRequired[PolicyVersionId | None]
     policy_name: NotRequired[str | None]

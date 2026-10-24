@@ -23,7 +23,7 @@ import {
   SearchIcon,
   SunIcon,
 } from "./Icons";
-import { NAV, sectionOf } from "./nav";
+import { MORE, NAV, sectionOf } from "./nav";
 import { MenuButton } from "./ui";
 
 export const DOCS_URL: string =
@@ -296,7 +296,7 @@ function Topbar({ live, onSearch }: { live?: LiveState; onSearch?: () => void })
   const rest =
     base && location.pathname.startsWith(base) ? location.pathname.slice(base.length + 1) : "";
   const section = projectId
-    ? (sectionOf(rest) ?? (rest ? undefined : { label: "Overview" }))
+    ? (sectionOf(rest) ?? (rest ? undefined : { label: "Fleet" }))
     : undefined;
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
   return (
@@ -362,7 +362,7 @@ export function OrgLayout() {
         <nav aria-label="Organization" style={{ display: "grid", gap: 2 }}>
           <div className="nav-section">
             <span className="nav-heading">Organization</span>
-            {NAV.flatMap((s) => s.links)
+            {[...MORE, ...NAV.flatMap((s) => s.links)]
               .filter((l) => l.org)
               .map((link) => (
                 <NavLink key={link.to} to={`/o/${orgId}/${link.to}`} className="nav-link">

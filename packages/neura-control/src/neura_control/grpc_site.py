@@ -631,9 +631,19 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 active_revision_id=item.revision_id or robot.observed.get("active_revision_id"),
             )
         for name, robot in robots.items():
-            if name not in seen and robot.observed.get("phase") not in (None, "Unknown", "Offline"):
+            if name in seen or robot.observed.get("setup") == "needs_setup":
+                continue  # a robot waiting to be set up stays as its server reported it
+            # A robot opens a session only once something is assigned to it: one the site's
+            # server still reports (design §29.5) with nothing assigned is ready.
+            idle = (
+                robot.source == "discovered"
+                and robot.observed.get("present", True)
+                and not robot.observed.get("active_revision_id")
+            )
+            phase = "Ready" if idle else "Offline"
+            if robot.observed.get("phase") not in (None, "Unknown", phase):
                 await site_reports.report_robot(
-                    session, robot.id, phase="Offline", reason=None, lease_holder_session_id=None
+                    session, robot.id, phase=phase, reason=None, lease_holder_session_id=None
                 )
         for fault in status.faults:
             robot = robots.get(fault.robot_name)

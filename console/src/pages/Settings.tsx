@@ -11,6 +11,7 @@ import {
   useMe,
   useMembers,
   useProjects,
+  usePublisherKeys,
   useSupportGrants,
 } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
@@ -77,6 +78,7 @@ export function Settings() {
 const SETTINGS_TABS: TabSpec[] = [
   { id: "members", label: "Members" },
   { id: "tokens", label: "API tokens" },
+  { id: "publishers", label: "Publisher keys" },
   { id: "support", label: "Support access" },
   { id: "sign-in", label: "Sign-in" },
 ];
@@ -101,6 +103,11 @@ function SettingsTabs({ orgId }: { orgId: string }) {
           <ApiTokens orgId={orgId} />
         </TabPanel>
       ) : null}
+      {tab === "publishers" ? (
+        <TabPanel label="Publisher keys">
+          <PublisherKeys orgId={orgId} />
+        </TabPanel>
+      ) : null}
       {tab === "support" ? (
         <TabPanel label="Support access">
           <SupportAccess orgId={orgId} />
@@ -112,6 +119,53 @@ function SettingsTabs({ orgId }: { orgId: string }) {
         </TabPanel>
       ) : null}
     </>
+  );
+}
+
+/** The keys policy versions are signed with: each machine that runs `neura policy push`
+ *  registers its own. Sites run only versions signed by a key their operator trusts. */
+function PublisherKeys({ orgId }: { orgId: string }) {
+  const keys = usePublisherKeys(orgId);
+  if (keys.isPending) return <Loading />;
+  if (keys.isError) return <ErrorState error={keys.error} />;
+  return (
+    <Card
+      title="Publisher keys"
+      description="New sites trust these: the install commands carry them. Removing one here does not make a site distrust it; its operator does that on the server."
+      flush={keys.data.length > 0}
+    >
+      {keys.data.length === 0 ? (
+        <p className="secondary">
+          None yet. The first <code>neura policy push</code> registers its machine&apos;s key.
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <caption className="visually-hidden">Publisher keys</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Key</th>
+                <th scope="col">Added</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.data.map((key) => (
+                <tr key={key.metadata.id}>
+                  <td>{key.spec.display_name}</td>
+                  <td>
+                    <code>{key.status.key_id}</code>
+                  </td>
+                  <td>
+                    <Time iso={key.metadata.created_at} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

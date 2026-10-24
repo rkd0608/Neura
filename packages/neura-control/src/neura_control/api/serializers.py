@@ -119,6 +119,7 @@ def robot(row: models.Robot) -> dict[str, Any]:
         lease_holder_session_id=row.observed.get("lease_holder_session_id"),
         task_epoch=row.observed.get("task_epoch"),
         discovered=row.source == "discovered",
+        present=row.observed.get("present", True) if row.source == "discovered" else None,
         hardware=row.hardware or None,
         policy_version_id=row.observed.get("policy_version_id"),
         policy_name=row.observed.get("policy_name"),

@@ -1817,6 +1817,8 @@ export interface components {
         task_epoch?: number | null;
         /** @description Whether the site's agent found the robot (rather than an API call). */
         discovered?: boolean;
+        /** @description For a robot its site's agent found, whether the agent still reports it (a robot that is gone is kept, with its history, and shown as missing). */
+        present?: boolean | null;
         /** @description What the agent found, e.g. its driver and port. */
         hardware?: Record<string, never> | null;
         policy_version_id?: components["schemas"]["PolicyVersionId"] | null;

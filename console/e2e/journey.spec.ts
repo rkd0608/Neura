@@ -6,6 +6,8 @@
 // accessibility (WCAG 2.1 AA).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { REPO, stackState } from "./global-setup";
@@ -15,7 +17,8 @@ const CONTRACTS = path.join(REPO, "examples", "contracts");
 const ROBOTS = 2;
 
 async function expectAccessible(page: Page, screen: string): Promise<void> {
-  await page.waitForLoadState("networkidle").catch(() => undefined);
+  // Pages that follow live state never go quiet for long: wait a little, then check.
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   // NEURA_E2E_SCREENSHOTS=<dir> keeps a full-page screenshot of every checked screen.
   const shots = process.env.NEURA_E2E_SCREENSHOTS;
   if (shots) {
@@ -51,10 +54,22 @@ async function register(
   await dialog.getByRole("button", { name: "Register", exact: true }).click();
 }
 
+const SIDEBAR = new Set(["Fleet", "Policies", "Rollouts"]);
+
+/** The four pages are in the sidebar; every other page is one search away (⌘K). */
 async function nav(page: Page, name: string): Promise<void> {
+  if (SIDEBAR.has(name)) {
+    await page
+      .getByRole("navigation", { name: "Project" })
+      .getByRole("link", { name, exact: true })
+      .click();
+    return;
+  }
+  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByRole("combobox", { name: /^Search pages/ }).fill(name);
   await page
-    .getByRole("navigation", { name: "Project" })
-    .getByRole("link", { name, exact: true })
+    .getByRole("option", { name: new RegExp(`^${name}`) })
+    .first()
     .click();
 }
 
@@ -77,6 +92,9 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     await expectAccessible(page, "welcome");
     await page.getByLabel("Project name").fill("Packing line");
     await page.getByRole("button", { name: "Create project" }).click();
+    await expect(page.getByRole("heading", { name: "Fleet" })).toBeVisible();
+    await expectAccessible(page, "fleet, first run");
+    await nav(page, "Overview");
     await expect(page.getByRole("heading", { name: "Packing line" })).toBeVisible();
     await expect(page.getByText("0 of 6 steps done")).toBeVisible();
     await expectAccessible(page, "home");
@@ -276,4 +294,122 @@ test("administer the organization: members and API tokens", async ({ page }) => 
   await created.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("row", { name: /ci-releases/ })).toBeVisible();
   await expectAccessible(page, "settings");
+});
+
+const HOLD = `
+import numpy as np
+
+import neura
+
+
+@neura.policy(chunk_length=10, cameras={})
+class Hold:
+    """Holds the arm where it is."""
+
+    def act(self, observation):
+        return np.tile(observation["observation.state"], (10, 1))
+`;
+
+test("the four pages: a site finds its arm, a pushed policy is deployed and approved at the site", async ({
+  page,
+}) => {
+  // A production site whose server finds a simulated arm by itself (design §29.5).
+  const site = new Site(0, 1);
+  const work = mkdtempSync(path.join(tmpdir(), "neura-e2e-policy-"));
+  try {
+    await page.goto("/sign-in");
+    await page.getByLabel("API token").fill(stackState().token);
+    await page.getByRole("button", { name: "Sign in with token" }).click();
+    const fleet = page.getByRole("heading", { name: "Fleet" });
+    const welcome = page.getByRole("heading", { name: "Welcome to Neura" });
+    await expect(fleet.or(welcome)).toBeVisible();
+    if (await welcome.isVisible()) {
+      await page.getByLabel("Project name").fill("Lab");
+      await page.getByRole("button", { name: "Create project" }).click();
+    }
+    await expect(fleet).toBeVisible();
+
+    // --- Fleet: a site, and the server that joins it ------------------------------------------
+    await page
+      .getByRole("button", { name: /^(Add|Create) a site$/ })
+      .first()
+      .click();
+    const create = page.getByRole("dialog", { name: "Create a site" });
+    await create.getByLabel("Name").fill("Lab line");
+    await create.getByLabel(/^Production/).check();
+    await create.getByRole("button", { name: "Create site" }).click();
+    const card = page.getByRole("region", { name: /lab-line/ });
+    await expect(card.getByText("No server yet", { exact: true })).toBeVisible();
+    await card.getByRole("button", { name: "Add a server" }).click();
+    const connect = page.getByRole("dialog", { name: "Add a server to lab-line" });
+    await connect.getByRole("button", { name: "Generate the commands" }).click();
+    await expect(connect.getByLabel("A workstation or bench")).toHaveText(
+      /^neura site join lab-line --control-plane \S+ --token \S+$/,
+    );
+    const command =
+      (await connect.getByLabel("A server with the agent installed").textContent()) ?? "";
+    await connect.getByRole("button", { name: "Done" }).click();
+    expect(site.enroll(command)).toContain("enrolled server");
+    await expect(card.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(card.getByRole("link", { name: "sim-1" })).toBeVisible();
+    await expect(card.getByText("ready", { exact: true })).toBeVisible();
+    await expectAccessible(page, "fleet");
+
+    // --- Policies: pushed from the command line, deployed from here -------------------------
+    const file = path.join(work, "hold.py");
+    writeFileSync(file, HOLD);
+    const pushed = site.push(file, "hold", "sim-1", stackState().token, site.publisherKey());
+    expect(pushed).toContain("hold v1");
+    await nav(page, "Policies");
+    await page.getByRole("link", { name: "hold", exact: true }).click();
+    await expect(page.getByRole("cell", { name: /Python\s*Signed/ })).toBeVisible();
+    await expectAccessible(page, "policy");
+    await page.getByRole("button", { name: "Deploy v1" }).click();
+    const deploy = page.getByRole("dialog", { name: "Deploy hold v1" });
+    await deploy.getByLabel("sim-1").check();
+    await deploy.getByLabel("Shadow test").selectOption({ label: "No shadow test" });
+    await deploy.getByLabel("Why (for the history)").fill("first try on the line");
+    await deploy.getByRole("button", { name: "Deploy to 1 robot" }).click();
+
+    // --- Rollouts: it waits for a person at the site, never for a cloud credential -----------
+    await expect(page.getByRole("heading", { name: "Deploy: hold v1" })).toBeVisible();
+    await expect(page.getByText("Waiting for a person at the site")).toBeVisible();
+    await expectAccessible(page, "rollout, awaiting approval");
+    await nav(page, "Fleet");
+    await expect(page.getByText("hold v1 is waiting")).toBeVisible();
+    await expect.poll(() => site.pendingApprovals().length, { timeout: 60_000 }).toBeGreaterThan(0);
+    const [pending] = site.pendingApprovals();
+    if (!pending) throw new Error("nothing waits for approval");
+    site.approve(pending.command_id, "Ada at the line");
+    await expect(page.getByText("hold v1 is waiting")).toBeHidden();
+    await expect(card.getByRole("cell", { name: "hold v1" })).toBeVisible();
+    await expect(card.getByText("running", { exact: true })).toBeVisible();
+
+    await nav(page, "Rollouts");
+    await page.getByRole("link", { name: "Deploy: hold v1" }).click();
+    await expect(page.locator(".page-meta").getByText("live")).toBeVisible();
+    await expect(
+      page.getByRole("list", { name: "Steps" }).getByText("approved by Ada at the line"),
+    ).toBeVisible();
+    await expect(page.getByText("sim-1 now runs hold v1")).toBeVisible();
+    await expectAccessible(page, "rollout, live");
+
+    // --- signing a CLI in: only a person may approve its code ---------------------------------
+    const started = (await (
+      await fetch(`${stackState().api_url}/v1/login-sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": `e2e-${Date.now()}` },
+        body: JSON.stringify({ client_name: "neura CLI on the e2e machine" }),
+      })
+    ).json()) as { user_code: string };
+    await page.goto(`/activate?code=${started.user_code}`);
+    await expect(page.getByLabel("Code")).toHaveValue(started.user_code);
+    await expectAccessible(page, "activate");
+    await page.getByRole("button", { name: "Approve" }).click();
+    // The console is signed in with an API token here: tokens cannot mint tokens.
+    await expect(page.getByText("only a signed-in person can approve a sign-in")).toBeVisible();
+  } finally {
+    site.stop();
+    rmSync(work, { recursive: true, force: true });
+  }
 });

@@ -2137,8 +2137,9 @@ The agent reports the robots it drives (`RobotInventory`):
 - plugged-in SO-101 adapters (`/dev/serial/by-id/*1a86*`), reported as needing setup.
 
 The control plane registers their robot profiles and creates the robots. A name that is taken gets
-the site's name as a prefix. A robot that disappears is shown as missing, never deleted. The agent
-issues each robot's credentials and supervises its process, with backoff.
+the site's name as a prefix. A robot that disappears is shown as missing (`present: false`), never
+deleted. One its server still reports, with nothing assigned, is ready. The agent issues each
+robot's credentials and supervises its process, with backoff.
 
 ### 29.6 Workspaces
 
@@ -2146,6 +2147,30 @@ A workspace is an organization and its default project. `GET /v1/workspace` tell
 one it is in. With `self_signup` on (Neura's cloud for individuals), a first SSO sign-in gets its
 own workspace. Off (a company's deployment), only people an admin added get in. Activity names
 people by their verified email and tokens by their name.
+
+### 29.7 The console
+
+Four pages in the sidebar, over the same objects as the CLI:
+
+- **Fleet** (the home page): each site with its robots, what each runs and its state, in the words
+  `neura robots` prints (running, ready, needs setup, missing, offline). A banner lists rollouts
+  waiting for a person at a site. A site is made here. Its server is connected with the
+  `neura site join` command, or the agent's enroll command for a production server, and a
+  single-use token that lasts an hour.
+- **Policies**: each policy and its versions, with their source (LeRobot, Python, container),
+  whether they are signed, and the robots running each. "Deploy vN" picks robots by site, the
+  shadow test and a note, then opens the rollout.
+- **Rollouts**: every deploy, try and rollback. Each shows the steps `neura deploy` prints, with
+  their reasons, and what happened. A rollout waiting for approval says to run `neura approve` at
+  the site: the console cannot approve it.
+- **Settings**: members, API tokens, the publisher keys that sign versions, support access and
+  sign-in.
+
+`/activate` is where a signed-in person approves a `neura login` code. The earlier pages
+(overview, deployments, robots, sites and servers, sessions, faults, models, capacity, activity)
+are one link away and in the command palette (⌘K), not in the sidebar.
+
+### 29.8 Tests, and what is not built
 
 Tests:
 - The quickstart runs end to end against a live control plane and a real agent started by the CLI
@@ -2155,10 +2180,11 @@ Tests:
 - The rollout driver: deploy to live, shadow and rollback, an inferior shadow, a failed prepare,
   timing that does not fit, overlap and cancel.
 - Robot discovery and self-signup.
+- The console's four pages, end to end in a browser: a production site with a simulated arm, a
+  version pushed with the CLI, deployed from Policies, approved at the site, and live.
 
 Not built yet:
 - the one-line installer;
-- the console's four pages;
 - stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED);
 - a ROS 2 bridge.
 

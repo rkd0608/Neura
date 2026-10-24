@@ -16,7 +16,12 @@ export class Site {
   private readonly processes: ChildProcess[] = [];
   private readonly cleanup: string[] = [];
 
-  constructor(private readonly robots: number) {}
+  constructor(
+    private readonly robots: number,
+    /** Simulated arms the agent finds and runs itself (design §29.5), instead of robots
+     *  started by the test. */
+    private readonly simulated = 0,
+  ) {}
 
   private env(): NodeJS.ProcessEnv {
     return {
@@ -34,6 +39,8 @@ export class Site {
       // Robots and the gateway use mutual TLS; the agent issues the simulated robots' keys and
       // certificates here (development only: real robots send a CSR).
       NEURA_AGENT_DEV_ROBOT_CERTIFICATE_DIR: path.join(this.stateDir, "robot-certs"),
+      NEURA_AGENT_SIMULATED_ROBOTS: String(this.simulated),
+      NEURA_AGENT_SCAN_SERIAL_PORTS: "false",
     };
   }
 
@@ -110,9 +117,32 @@ export class Site {
     });
   }
 
+  /** The machine that pushes policies: its publisher key, trusted by this site's operator. */
+  publisherKey(): string {
+    const key = path.join(this.stateDir, "..", `${path.basename(this.stateDir)}-cli.pem`);
+    const created = this.run(["neura-contracts", "publisher-key", "--out", key]);
+    const publicKey = /public_key\s+([0-9a-f]{64})/.exec(created)?.[1];
+    if (!publicKey) throw new Error(`no public key in: ${created}`);
+    this.run(["neura-agent", "trust-publisher", publicKey, "--note", "e2e developer"]);
+    this.cleanup.push(key);
+    return key;
+  }
+
+  /** `neura policy push`, as a developer runs it. */
+  push(file: string, name: string, robot: string, token: string, key: string): string {
+    const config = mkdtempSync(path.join(tmpdir(), "neura-e2e-cli-"));
+    this.cleanup.push(config);
+    return this.run(["neura", "policy", "push", file, "--name", name, "--for", robot], {
+      NEURA_API_URL: "http://127.0.0.1:18080",
+      NEURA_TOKEN: token,
+      NEURA_CONFIG_DIR: config,
+      NEURA_PUBLISHER_KEY: key,
+    });
+  }
+
   stop(): void {
     for (const child of this.processes.reverse()) child.kill("SIGTERM");
     rmSync(this.stateDir, { recursive: true, force: true });
-    for (const file of this.cleanup) rmSync(file, { force: true });
+    for (const file of this.cleanup) rmSync(file, { recursive: true, force: true });
   }
 }

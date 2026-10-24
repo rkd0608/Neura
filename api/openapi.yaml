@@ -5425,6 +5425,12 @@ components:
             discovered:
               type: boolean
               description: Whether the site's agent found the robot (rather than an API call).
+            present:
+              type:
+              - boolean
+              - 'null'
+              description: For a robot its site's agent found, whether the agent still reports it
+                (a robot that is gone is kept, with its history, and shown as missing).
             hardware:
               type:
               - object

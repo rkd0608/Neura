@@ -775,7 +775,8 @@ export function MenuButton({
   placement = "below",
   children,
 }: {
-  label: string;
+  /** The button's accessible name, when its visible content does not say what it opens. */
+  label?: string;
   button: ReactNode;
   className?: string;
   align?: "left" | "right";

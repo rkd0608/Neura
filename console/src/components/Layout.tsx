@@ -115,7 +115,6 @@ function OrgSwitcher({ orgId }: { orgId: string }) {
   const name = org?.display_name ?? "Organization";
   return (
     <MenuButton
-      label={`Organization: ${name}`}
       className="switcher-button"
       button={
         <>
@@ -169,7 +168,6 @@ function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: strin
   const name = project?.spec.display_name ?? (projectId ? "Project" : "Choose a project");
   return (
     <MenuButton
-      label={`Project: ${name}`}
       className="switcher-button"
       button={
         <>
@@ -232,7 +230,6 @@ function SidebarFooter() {
         <ExternalIcon style={{ marginLeft: "auto", width: 13, height: 13 }} />
       </a>
       <MenuButton
-        label="Account and theme"
         className="switcher-button"
         placement="above"
         button={
@@ -242,6 +239,7 @@ function SidebarFooter() {
             </span>
             <span className="switcher-text">
               <span className="truncate small">{who}</span>
+              <span className="visually-hidden">: account and theme</span>
             </span>
             <ChevronsIcon className="chevron" />
           </>

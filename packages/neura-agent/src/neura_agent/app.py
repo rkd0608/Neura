@@ -387,6 +387,11 @@ def create_app(
     async def episodes_style() -> Response:
         return page("episodes.css")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        # Browsers ask for one on every page; the viewer has none, and says so without an error.
+        return Response(status_code=204, headers=episode_viewer.HEADERS)
+
     @app.post("/v1/local/episodes/{episode_id}/label")
     async def label(episode_id: str, body: Label, request: Request) -> dict[str, Any]:
         operator(request)

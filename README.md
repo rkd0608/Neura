@@ -142,6 +142,12 @@ class Hold:
         return np.tile(observation["observation.state"], (10, 1))
 ```
 
+The console shows the same rollout, step by step, with who approved it at the site:
+
+<p align="center">
+  <img alt="A rollout in the Neura console: each step with its reason, who approved it at the site, and what happened" src=".github/assets/console-rollout.png" width="100%">
+</p>
+
 The same run is a test against a live control plane and a real site agent:
 [`test_neura_cli.py`](packages/neura-control/tests/test_neura_cli.py). Production servers install
 the agent with one line, which the console shows with a single-use token:

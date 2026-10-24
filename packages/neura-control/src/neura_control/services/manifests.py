@@ -96,8 +96,20 @@ async def manifest_content(session: AsyncSession, site: Site) -> dict[str, Any]:
         "site_id": site.id,
         "project_id": site.project_id,
         "offline_authorization_hours": site.offline_authorization_hours,
+        "site": {"name": site.name, "kind": site.kind},
         "robots": [
-            {"id": r.id, "name": r.name, "robot_profile_id": r.robot_profile_id} for r in robots
+            {
+                "id": r.id,
+                "name": r.name,
+                "robot_profile_id": r.robot_profile_id,
+                # The agent runs the robots it found under the names Neura gave them.
+                **(
+                    {"local_name": r.hardware["local_name"]}
+                    if r.source == "discovered" and r.hardware.get("local_name")
+                    else {}
+                ),
+            }
+            for r in robots
         ],
         "deployments": [
             {

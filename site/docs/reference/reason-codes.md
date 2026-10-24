@@ -12,7 +12,7 @@ generated: true
 
 Every refusal, rejection and fault in Neura carries one stable code from a single catalog, the same in the robot runtime, the gateway, the site agent, the management API and the console. Codes are never reused or renamed. A `fatal` code latches a fault on the robot: only an explicit local reset clears it.
 
-Catalog version 1, 119 codes.
+Catalog version 1, 127 codes.
 
 ## Contracts
 
@@ -163,10 +163,23 @@ Catalog version 1, 119 codes.
 | `TRAINING_INVALID` | error | no |  | The training job's recipe or episode filter is not valid. |
 | `TRAINING_RESULT_REJECTED` | error | no |  | The site's trained model did not verify against its base, its dataset or its signature; nothing was registered. |
 
+## Rollout
+
+| Code | Severity | Retryable | HTTP | Meaning |
+| --- | --- | --- | --- | --- |
+| `ROLLOUT_ROBOT_TYPES_DIFFER` | error | no |  | The robots are of different types; a rollout serves one type of robot. |
+| `ROLLOUT_TIMING_UNFIT` | error | no |  | No timing limits let these robots run this version on this GPU without starving. |
+| `ROLLOUT_PREPARE_FAILED` | error | yes |  | The site could not prepare the version. |
+| `ROLLOUT_SHADOW_FAILED` | error | yes |  | The shadow test could not run to completion. |
+| `ROLLOUT_SHADOW_INFERIOR` | error | no |  | The shadow test found the version too far from the one the robots run. |
+| `ROLLOUT_SWITCH_FAILED` | error | yes |  | The robots did not switch to the version. |
+| `ROLLOUT_CANCELLED` | warning | no |  | The rollout was cancelled before the robots switched. |
+
 ## Api
 
 | Code | Severity | Retryable | HTTP | Meaning |
 | --- | --- | --- | --- | --- |
+| `API_LOGIN_PENDING` | info | yes | 409 | Nobody has approved this sign-in in the browser yet. |
 | `API_UNAUTHENTICATED` | error | no | 401 | Authentication is required. |
 | `API_FORBIDDEN` | error | no | 403 | The caller does not have permission for this action. |
 | `API_NOT_FOUND` | error | no | 404 | The resource does not exist or is not visible to the caller. |

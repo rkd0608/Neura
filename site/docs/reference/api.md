@@ -843,6 +843,87 @@ Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `428`, `429`,
 
 Responses: `204`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`.
 
+### List the keys this workspace signs artifacts with
+
+`GET /v1/organizations/{organization_id}/publisher-keys` · operation `listPublisherKeys`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `organization_id` | path | yes |  |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Register the public part of a signing key
+
+`POST /v1/organizations/{organization_id}/publisher-keys` · operation `createPublisherKey`
+
+New sites' install commands trust it. A site installed before trusts it only once its operator says so locally: the cloud can never make a site trust a key.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `organization_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `PublisherKeyCreate`.
+
+Responses: `201`, `200`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Forget a signing key (sites that trust it keep trusting it)
+
+`DELETE /v1/publisher-keys/{publisher_key_id}` · operation `deletePublisherKey`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `publisher_key_id` | path | yes |  |
+| `If-Match` | header | yes | The resource version (ETag) the change is based on. |
+
+Responses: `204`, `401`, `403`, `404`, `409`, `412`, `429`, `500`, `503`, `428`.
+
+### Start signing a CLI in through the browser
+
+`POST /v1/login-sessions` · operation `createLoginSession`
+
+Returns a short code to approve in the console and a secret only the CLI holds (device authorization, after RFC 8628). No credential is needed.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `LoginSessionCreate`.
+
+Responses: `201`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Exchange an approved sign-in for an API token
+
+`POST /v1/login-sessions/{login_session_id}/token` · operation `exchangeLoginSession`
+
+409 with `API_LOGIN_PENDING` until someone approves the code; poll at the session's interval. A token is issued once.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `login_session_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `LoginTokenRequest`.
+
+Responses: `200`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Approve a CLI's sign-in code for one of your workspaces
+
+`POST /v1/login-approvals` · operation `approveLogin`
+
+Only a signed-in person can approve. The CLI gets a token with that person's permissions in the workspace, for 30 days.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `LoginApprovalCreate`.
+
+Responses: `200`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
+
 ## Improvement
 
 ### List a deployment's evaluations
@@ -972,4 +1053,181 @@ Sites that already opened it keep their verified copy; no site can fetch it afte
 | `If-Match` | header | yes | The resource version (ETag) the change is based on. |
 
 Responses: `204`, `401`, `403`, `404`, `412`, `422`, `428`, `429`, `500`, `503`.
+
+## Workspace
+
+### The caller's workspace: its organization and the project it works in
+
+`GET /v1/workspace` · operation `getWorkspace`
+
+A workspace is an organization and its default project, which people and tools never have to choose (design §29). With one organization the caller's own is used; with several, name one.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `organization_id` | query | no | The workspace's organization, when the caller belongs to several. |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+## Policies
+
+### List policies
+
+`GET /v1/projects/{project_id}/policies` · operation `listPolicies`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `project_id` | path | yes |  |
+| `label` | query | no | Filter by label, `key=value`. Repeat to AND several labels. |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Create a policy
+
+`POST /v1/projects/{project_id}/policies` · operation `createPolicy`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `project_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `PolicyCreate`.
+
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Get a policy
+
+`GET /v1/policies/{policy_id}` · operation `getPolicy`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `policy_id` | path | yes |  |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
+### Update a policy's display name, description or labels
+
+`PATCH /v1/policies/{policy_id}` · operation `updatePolicy`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `policy_id` | path | yes |  |
+| `If-Match` | header | yes | The resource version (ETag) the change is based on. |
+
+Request body: `application/merge-patch+json`, `PolicyUpdate`.
+
+Responses: `200`, `401`, `403`, `404`, `409`, `412`, `413`, `422`, `429`, `500`, `503`, `428`.
+
+### List a policy's versions, newest first
+
+`GET /v1/policies/{policy_id}/versions` · operation `listPolicyVersions`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `policy_id` | path | yes |  |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Add a version: its model artifact and where it came from
+
+`POST /v1/policies/{policy_id}/versions` · operation `createPolicyVersion`
+
+The artifact is registered (or found by its digest) with its publisher signatures. Pushing an artifact the policy already has returns that version with 200. Weights never pass through this call: the site fetches them from the customer's storage, or from Neura's registry sealed with the customer's key.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `policy_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `PolicyVersionCreate`.
+
+Responses: `201`, `200`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Get a policy version
+
+`GET /v1/policy-versions/{policy_version_id}` · operation `getPolicyVersion`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `policy_version_id` | path | yes |  |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
+## Rollouts
+
+### List rollouts, newest first
+
+`GET /v1/projects/{project_id}/rollouts` · operation `listRollouts`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `project_id` | path | yes |  |
+| `site_id` | query | no | Only rollouts at this site. |
+| `deployment_id` | query | no | Only rollouts of this deployment. |
+| `robot_id` | query | no | Only rollouts that include this robot. |
+| `state` | query | no | Only rollouts in this state; `active` for every one in progress. |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
+
+### Deploy a policy version to robots, try one on a bench robot, or roll robots back
+
+`POST /v1/projects/{project_id}/rollouts` · operation `createRollout`
+
+The rollout's steps then advance with the site's reports (design §29.4): it checks the version fits the robots, the site prepares and times it on its GPU, it runs beside the current version on live observations when asked, a person at the site approves, and the robots switch at their next task boundary. No credential in the cloud can approve: only the site does.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `project_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Request body: `application/json`, `RolloutCreate`.
+
+Responses: `201`, `401`, `403`, `404`, `409`, `413`, `422`, `428`, `429`, `500`, `503`.
+
+### Get a rollout and its steps
+
+`GET /v1/rollouts/{rollout_id}` · operation `getRollout`
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `rollout_id` | path | yes |  |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
+### Cancel a rollout before its robots switch
+
+`POST /v1/rollouts/{rollout_id}/cancel` · operation `cancelRollout`
+
+A pending approval at the site is withdrawn. Robots that already switched keep what they run: roll back to undo that.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `rollout_id` | path | yes |  |
+| `Idempotency-Key` | header | yes | Required on every POST. A repeated key with the same body returns the original result; with a different body it returns API_IDEMPOTENCY_KEY_REUSED. |
+
+Responses: `200`, `401`, `403`, `404`, `409`, `428`, `429`, `500`, `503`.
+
+## Activity
+
+### What happened, newest first, one sentence each
+
+`GET /v1/projects/{project_id}/activity` · operation `listActivity`
+
+The same events stream live, with their summaries, from `/v1/projects/{project_id}/events`.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `project_id` | path | yes |  |
+| `site_id` | query | no | Only activity at this site. |
+| `robot_id` | query | no | Only activity about this robot. |
+| `rollout_id` | query | no | Only activity of this rollout. |
+| `cursor` | query | no |  |
+| `page_size` | query | no |  |
+
+Responses: `200`, `401`, `403`, `404`, `422`, `429`, `500`, `503`.
 

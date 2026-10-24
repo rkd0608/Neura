@@ -37,23 +37,32 @@ with Client("https://neura.example", token="...") as neura:
 | --- | --- | --- |
 | `add_member` | `(organization_id: str, *, body: MemberCreate, idempotency_key: str \| None=None) -&gt; Member` | Invite a person by email or add an SSO subject. (``POST /v1/organizations/{organization_id}/members``) |
 | `add_model_artifact_signature` | `(model_artifact_id: str, *, body: ArtifactSignature, idempotency_key: str \| None=None) -&gt; ModelArtifact` | Add a publisher signature to a model artifact. (``POST /v1/model- artifacts/{model_artifact_id}/signatures``) |
+| `approve_login` | `(*, body: LoginApprovalCreate, idempotency_key: str \| None=None) -&gt; LoginApproval` | Approve a CLI's sign-in code for one of your workspaces. (``POST /v1/login- approvals``) |
 | `cancel_operation` | `(operation_id: str, *, idempotency_key: str \| None=None) -&gt; Operation` | Cancel an operation that has not finished. (``POST /v1/operations/{operation_id}/cancel``) |
+| `cancel_rollout` | `(rollout_id: str, *, idempotency_key: str \| None=None) -&gt; Rollout` | Cancel a rollout before its robots switch. (``POST /v1/rollouts/{rollout_id}/cancel``) |
 | `check_compatibility` | `(project_id: str, *, body: CompatibilityCheckRequest) -&gt; CompatibilityReport` | Check a model artifact, robot profile and execution profile together. (``POST /v1/projects/{project_id}/compatibility-checks``) |
 | `create_api_token` | `(organization_id: str, *, body: ApiTokenCreate, idempotency_key: str \| None=None) -&gt; ApiTokenWithSecret` | Create an API token. The secret is returned once. (``POST /v1/organizations/{organization_id}/api-tokens``) |
 | `create_deployment` | `(project_id: str, *, body: DeploymentCreate, idempotency_key: str \| None=None) -&gt; Deployment` | Create a deployment. (``POST /v1/projects/{project_id}/deployments``) |
 | `create_enrollment_token` | `(site_id: str, *, body: EnrollmentTokenCreate, idempotency_key: str \| None=None) -&gt; EnrollmentToken` | Create a one-time server enrollment token. (``POST /v1/sites/{site_id}/enrollment- tokens``) |
 | `create_evaluation` | `(deployment_id: str, *, body: EvaluationCreate, idempotency_key: str \| None=None) -&gt; Operation` | Evaluate a candidate revision against the one it would replace. (``POST /v1/deployments/{deployment_id}/evaluations``) |
+| `create_login_session` | `(*, body: LoginSessionCreate, idempotency_key: str \| None=None) -&gt; LoginSession` | Start signing a CLI in through the browser. (``POST /v1/login-sessions``) |
+| `create_policy` | `(project_id: str, *, body: PolicyCreate, idempotency_key: str \| None=None) -&gt; Policy` | Create a policy. (``POST /v1/projects/{project_id}/policies``) |
+| `create_policy_version` | `(policy_id: str, *, body: PolicyVersionCreate, idempotency_key: str \| None=None) -&gt; PolicyVersion` | Add a version: its model artifact and where it came from. (``POST /v1/policies/{policy_id}/versions``) |
 | `create_project` | `(organization_id: str, *, body: ProjectCreate, idempotency_key: str \| None=None) -&gt; Project` | Create a project. (``POST /v1/organizations/{organization_id}/projects``) |
+| `create_publisher_key` | `(organization_id: str, *, body: PublisherKeyCreate, idempotency_key: str \| None=None) -&gt; PublisherKey` | Register the public part of a signing key. (``POST /v1/organizations/{organization_id}/publisher-keys``) |
 | `create_revision` | `(deployment_id: str, *, body: RevisionCreate, idempotency_key: str \| None=None) -&gt; Revision` | Create an immutable revision. (``POST /v1/deployments/{deployment_id}/revisions``) |
 | `create_robot` | `(project_id: str, *, body: RobotCreate, idempotency_key: str \| None=None) -&gt; Robot` | Create a robot. (``POST /v1/projects/{project_id}/robots``) |
+| `create_rollout` | `(project_id: str, *, body: RolloutCreate, idempotency_key: str \| None=None) -&gt; Rollout` | Deploy a policy version to robots, try one on a bench robot, or roll robots back. (``POST /v1/projects/{project_id}/rollouts``) |
 | `create_site` | `(project_id: str, *, body: SiteCreate, idempotency_key: str \| None=None) -&gt; Site` | Create a site. (``POST /v1/projects/{project_id}/sites``) |
 | `create_support_grant` | `(organization_id: str, *, body: SupportGrantCreate, idempotency_key: str \| None=None) -&gt; SupportGrant` | Grant time-boxed support access. (``POST /v1/organizations/{organization_id}/support- grants``) |
 | `create_training_job` | `(deployment_id: str, *, body: TrainingJobCreate, idempotency_key: str \| None=None) -&gt; Operation` | Fine-tune a revision's model on episodes recorded at its site. (``POST /v1/deployments/{deployment_id}/training-jobs``) |
 | `delete_deployment` | `(deployment_id: str, *, if_match: str) -&gt; None` | Delete a deployment. (``DELETE /v1/deployments/{deployment_id}``) |
+| `delete_publisher_key` | `(publisher_key_id: str, *, if_match: str) -&gt; None` | Forget a signing key (sites that trust it keep trusting it). (``DELETE /v1/publisher- keys/{publisher_key_id}``) |
 | `delete_robot` | `(robot_id: str, *, if_match: str) -&gt; None` | Delete a robot. (``DELETE /v1/robots/{robot_id}``) |
 | `delete_sealed_weights` | `(project_id: str, digest: str, *, if_match: str) -&gt; None` | Remove a sealed weight file from Neura's registry. (``DELETE /v1/projects/{project_id}/sealed-weights/{digest}``) |
 | `delete_server` | `(server_id: str, *, if_match: str) -&gt; None` | Unenroll a server and revoke its certificate. (``DELETE /v1/servers/{server_id}``) |
 | `delete_site` | `(site_id: str, *, if_match: str) -&gt; None` | Delete a site. (``DELETE /v1/sites/{site_id}``) |
+| `exchange_login_session` | `(login_session_id: str, *, body: LoginTokenRequest, idempotency_key: str \| None=None) -&gt; LoginToken` | Exchange an approved sign-in for an API token. (``POST /v1/login- sessions/{login_session_id}/token``) |
 | `get_current_principal` | `() -&gt; CurrentPrincipal` | Who the caller is and which organizations it can access. (``GET /v1/me``) |
 | `get_deployment` | `(deployment_id: str) -&gt; Deployment` | Get a deployment. (``GET /v1/deployments/{deployment_id}``) |
 | `get_evaluation` | `(evaluation_id: str) -&gt; Evaluation` | Get an evaluation. (``GET /v1/evaluations/{evaluation_id}``) |
@@ -63,16 +72,21 @@ with Client("https://neura.example", token="...") as neura:
 | `get_model_artifact` | `(model_artifact_id: str) -&gt; ModelArtifact` | Get a registered model artifact. (``GET /v1/model-artifacts/{model_artifact_id}``) |
 | `get_operation` | `(operation_id: str) -&gt; Operation` | Get an operation. (``GET /v1/operations/{operation_id}``) |
 | `get_organization` | `(organization_id: str) -&gt; Organization` | Get an organization. (``GET /v1/organizations/{organization_id}``) |
+| `get_policy` | `(policy_id: str) -&gt; Policy` | Get a policy. (``GET /v1/policies/{policy_id}``) |
+| `get_policy_version` | `(policy_version_id: str) -&gt; PolicyVersion` | Get a policy version. (``GET /v1/policy-versions/{policy_version_id}``) |
 | `get_project` | `(project_id: str) -&gt; Project` | Get a project. (``GET /v1/projects/{project_id}``) |
 | `get_revision` | `(revision_id: str) -&gt; Revision` | Get a revision. (``GET /v1/revisions/{revision_id}``) |
 | `get_robot` | `(robot_id: str) -&gt; Robot` | Get a robot. (``GET /v1/robots/{robot_id}``) |
 | `get_robot_profile` | `(robot_profile_id: str) -&gt; RobotProfile` | Get a registered robot profile. (``GET /v1/robot-profiles/{robot_profile_id}``) |
+| `get_rollout` | `(rollout_id: str) -&gt; Rollout` | Get a rollout and its steps. (``GET /v1/rollouts/{rollout_id}``) |
 | `get_sealed_weights` | `(project_id: str, digest: str) -&gt; SealedWeights` | Get a sealed weight file's record. (``GET /v1/projects/{project_id}/sealed- weights/{digest}``) |
 | `get_server` | `(server_id: str) -&gt; Server` | Get a server, its GPUs and preflight results. (``GET /v1/servers/{server_id}``) |
 | `get_session` | `(session_id: str) -&gt; Session` | Get a session. (``GET /v1/sessions/{session_id}``) |
 | `get_site` | `(site_id: str) -&gt; Site` | Get a site. (``GET /v1/sites/{site_id}``) |
 | `get_training_job` | `(training_job_id: str) -&gt; TrainingJob` | Get a training job. (``GET /v1/training-jobs/{training_job_id}``) |
+| `get_workspace` | `(*, organization_id: OrganizationId \| None=None) -&gt; Workspace` | The caller's workspace: its organization and the project it works in. (``GET /v1/workspace``) |
 | `list_activation_requests` | `(deployment_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ActivationRequestPage` | List activation requests. (``GET /v1/deployments/{deployment_id}/activation- requests``) |
+| `list_activity` | `(project_id: str, *, site_id: SiteId \| None=None, robot_id: RobotId \| None=None, rollout_id: RolloutId \| None=None, cursor: str \| None=None, page_size: int \| None=None) -&gt; ActivityPage` | What happened, newest first, one sentence each. (``GET /v1/projects/{project_id}/activity``) |
 | `list_api_tokens` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ApiTokenPage` | List API tokens. (``GET /v1/organizations/{organization_id}/api-tokens``) |
 | `list_audit_records` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; AuditRecordPage` | List audit records. (``GET /v1/projects/{project_id}/audit-records``) |
 | `list_deployments` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; DeploymentPage` | List deployments. (``GET /v1/projects/{project_id}/deployments``) |
@@ -81,10 +95,14 @@ with Client("https://neura.example", token="...") as neura:
 | `list_faults` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; FaultPage` | List faults. (``GET /v1/projects/{project_id}/faults``) |
 | `list_members` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; MemberPage` | List the organization's members and invitations. (``GET /v1/organizations/{organization_id}/members``) |
 | `list_model_artifacts` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ModelArtifactPage` | List registered model artifacts. (``GET /v1/projects/{project_id}/model-artifacts``) |
+| `list_policies` | `(project_id: str, *, label: list[str] \| None=None, cursor: str \| None=None, page_size: int \| None=None) -&gt; PolicyPage` | List policies. (``GET /v1/projects/{project_id}/policies``) |
+| `list_policy_versions` | `(policy_id: str, *, cursor: str \| None=None, page_size: int \| None=None) -&gt; PolicyVersionPage` | List a policy's versions, newest first. (``GET /v1/policies/{policy_id}/versions``) |
 | `list_projects` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ProjectPage` | List projects. (``GET /v1/organizations/{organization_id}/projects``) |
+| `list_publisher_keys` | `(organization_id: str, *, cursor: str \| None=None, page_size: int \| None=None) -&gt; PublisherKeyPage` | List the keys this workspace signs artifacts with. (``GET /v1/organizations/{organization_id}/publisher-keys``) |
 | `list_revisions` | `(deployment_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; RevisionPage` | List a deployment's revisions. (``GET /v1/deployments/{deployment_id}/revisions``) |
 | `list_robot_profiles` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; RobotProfilePage` | List registered robot profiles. (``GET /v1/projects/{project_id}/robot-profiles``) |
 | `list_robots` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; RobotPage` | List robots. (``GET /v1/projects/{project_id}/robots``) |
+| `list_rollouts` | `(project_id: str, *, site_id: SiteId \| None=None, deployment_id: DeploymentId \| None=None, robot_id: RobotId \| None=None, state: RolloutStateFilter \| None=None, cursor: str \| None=None, page_size: int \| None=None) -&gt; RolloutPage` | List rollouts, newest first. (``GET /v1/projects/{project_id}/rollouts``) |
 | `list_sealed_weights` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None) -&gt; SealedWeightsPage` | List the sealed weight files of a project. (``GET /v1/projects/{project_id}/sealed- weights``) |
 | `list_servers` | `(site_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; ServerPage` | List servers enrolled at a site. (``GET /v1/sites/{site_id}/servers``) |
 | `list_sessions` | `(project_id: str, *, cursor: str \| None=None, page_size: int \| None=None, label: list[str] \| None=None) -&gt; SessionPage` | List live and recent robot sessions. (``GET /v1/projects/{project_id}/sessions``) |
@@ -103,6 +121,7 @@ with Client("https://neura.example", token="...") as neura:
 | `rollback_deployment` | `(deployment_id: str, *, body: RollbackCreate, idempotency_key: str \| None=None) -&gt; Operation` | Roll back to an earlier compatible revision. (``POST /v1/deployments/{deployment_id}/rollbacks``) |
 | `update_deployment` | `(deployment_id: str, *, body: DeploymentUpdate, if_match: str) -&gt; Deployment` | Update a deployment. (``PATCH /v1/deployments/{deployment_id}``) |
 | `update_member` | `(member_id: str, *, body: MemberUpdate, if_match: str) -&gt; Member` | Change a member's role. (``PATCH /v1/members/{member_id}``) |
+| `update_policy` | `(policy_id: str, *, body: PolicyUpdate, if_match: str) -&gt; Policy` | Update a policy's display name, description or labels. (``PATCH /v1/policies/{policy_id}``) |
 | `update_project` | `(project_id: str, *, body: ProjectUpdate, if_match: str) -&gt; Project` | Update a project. (``PATCH /v1/projects/{project_id}``) |
 | `update_robot` | `(robot_id: str, *, body: RobotUpdate, if_match: str) -&gt; Robot` | Update a robot. (``PATCH /v1/robots/{robot_id}``) |
 | `update_server` | `(server_id: str, *, body: ServerUpdate, if_match: str) -&gt; Server` | Update a server's GPU allocation or labels. (``PATCH /v1/servers/{server_id}``) |

@@ -65,6 +65,11 @@ def database_url() -> Iterator[str]:
 
 
 TABLES = [
+    "login_sessions",
+    "publisher_keys",
+    "rollouts",
+    "policy_versions",
+    "policies",
     "idempotency_keys",
     "events",
     "audit_records",

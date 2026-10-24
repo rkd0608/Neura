@@ -31,6 +31,7 @@ AREA_ORDER = (
     "capture",
     "evaluation",
     "training",
+    "rollout",
     "api",
 )
 AREAS = set(AREA_ORDER)

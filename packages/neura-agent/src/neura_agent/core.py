@@ -8,6 +8,7 @@ is checked against local boundaries, recorded in the local audit log, and execut
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -21,7 +22,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from neura.v1 import common_pb2, site_pb2
-from neura_agent import placement, site_pki, trust
+from neura_agent import placement, robots, site_pki, trust
 from neura_agent.artifacts import ArtifactError, ArtifactStore, load_keys
 from neura_agent.capture import SiteCapture
 from neura_agent.gateway import (
@@ -63,6 +64,7 @@ from neura_server.config import ServingConfig, load_profile_points
 from neura_server.sandbox import ImageUnavailableError, ensure_image, launcher_for
 
 log = logging.getLogger("neura.agent")
+BENCH_APPROVER = "the bench site's agent"
 OUTBOX_LIMIT = 1000
 # Nonces awaiting a contact proof; older ones are forgotten (a proof for them no longer counts).
 OUTSTANDING_NONCES = 8
@@ -145,6 +147,13 @@ class AgentCore:
         self._accounted_at: float | None = None
         # Robot name -> the revision of its live session, from the gateway's last status.
         self._running: dict[str, str] = {}
+        # Robots this server found or was configured with, and those it runs (design §29.5).
+        self.found: list[robots.FoundRobot] = []
+        self.robots_problem: str | None = None
+        self.robots = robots.RobotSupervisor(settings.state_dir / "robots" / "logs")
+        self._launches: list[robots.Launch] = []
+        self._inventory_digest: str | None = None
+        self._robot_tokens: dict[str, str] = {}
 
     # --- helpers ------------------------------------------------------------------------------
 
@@ -162,6 +171,100 @@ class AgentCore:
 
     def manifest(self) -> dict[str, Any]:
         return self.state.manifest() or {"robots": [], "deployments": []}
+
+    # --- robots (design §29.5) -------------------------------------------------------------
+
+    def refresh_robots(self) -> bool:
+        """Look for robots again; report the inventory if it changed. Returns whether it did."""
+        try:
+            found = robots.discover(
+                simulated=self.settings.simulated_robots,
+                robots_file=self.settings.robots_file,
+                scan_serial=self.settings.scan_serial_ports,
+            )
+            self.robots_problem = None
+        except robots.RobotsFileError as error:
+            if self.robots_problem != str(error):
+                log.error("robots: %s", error)
+            self.robots_problem = str(error)
+            return False
+        message = robots.inventory(found)
+        digest = hashlib.sha256(message.SerializeToString(deterministic=True)).hexdigest()
+        self.found = found
+        if digest == self._inventory_digest:
+            return False
+        self._inventory_digest = digest
+        self._send(site_pb2.AgentMessage(inventory=message))
+        return True
+
+    def inventory_message(self) -> site_pb2.AgentMessage:
+        return site_pb2.AgentMessage(inventory=robots.inventory(self.found))
+
+    def _gateway_address(self) -> str:
+        port = self.settings.gateway_listen.rsplit(":", 1)[-1]
+        return f"127.0.0.1:{port}"
+
+    def _managed_launches(self) -> list[robots.Launch]:
+        """The robots this agent runs: found here, ready, and in the site's manifest. Each gets
+        credentials from the site CA (or, without TLS, a device token) before it starts."""
+        ready = {r.local_name: r for r in self.found if r.state == "ready"}
+        launches = []
+        for entry in self.manifest().get("robots", []):
+            robot = ready.get(entry.get("local_name") or "")
+            if robot is None:
+                continue
+            name = entry["name"]
+            directory = self.settings.state_dir / "robots" / name
+            token: str | None = None
+            if self.settings.gateway_tls:
+                self._issue_managed_credentials(name, directory)
+            else:
+                token = self._robot_tokens.get(name)
+                if token is None:
+                    token = self._robot_tokens[name] = secrets.token_urlsafe(32)
+                self.state.robot_credentials[name] = hashlib.sha256(token.encode()).hexdigest()
+            try:
+                launches.append(
+                    robots.launch_for(
+                        name,
+                        robot,
+                        gateway=self._gateway_address(),
+                        credentials_dir=directory,
+                        token=token,
+                        config_dir=self.settings.state_dir / "robots" / "config",
+                    )
+                )
+            except robots.RobotsFileError as error:
+                log.error("robots: %s", error)
+        return launches
+
+    def _issue_managed_credentials(self, name: str, directory: Path) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        directory.chmod(0o700)
+        ca = directory / "ca.pem"
+        if not ca.exists() or ca.read_bytes() != self.pki.ca_pem:
+            atomic_write(ca, self.pki.ca_pem, 0o644)
+        certificate_path = directory / f"{name}.pem"
+        allowed = set(unexpired(self.state.robot_certificates.get(name, [])))
+        if certificate_path.exists() and pki.fingerprint(certificate_path.read_bytes()) in allowed:
+            return
+        key_pem, certificate = self.pki.issue_robot_bundle(name)
+        atomic_write(directory / f"{name}.key", key_pem, 0o600)
+        atomic_write(certificate_path, certificate, 0o644)
+        self._record_robot_certificate(name, certificate)
+        self.audit.write(
+            "robot_certificate_issued",
+            robot=name,
+            sha256=pki.fingerprint(certificate),
+            managed=True,
+        )
+
+    def bench_approves(self) -> bool:
+        """Whether this agent approves activations itself: only on a bench, and only when both
+        the site's operator (who installed it as a bench) and the cloud (which created the site
+        as one) say so. A production site always waits for a person (design §29.4)."""
+        site = self.manifest().get("site") or {}
+        return bool(self.settings.bench) and site.get("kind") == "bench"
 
     def robot_names(self) -> dict[str, str]:
         """control-plane robot id -> site robot name."""
@@ -404,6 +507,7 @@ class AgentCore:
             await self.gateway.start(self.gateway_config_path)
         elif changed:
             await self.gateway.reload()
+        await self.robots.sync(self._launches)
 
     # --- commands -----------------------------------------------------------------------------
 
@@ -464,6 +568,9 @@ class AgentCore:
                 command.rollback.to_revision_id,
                 list(command.rollback.robot_ids),
             )
+        if kind in ("request_activation", "rollback") and self.bench_approves():
+            if command_id in self.state.activations:
+                await self.approve(command_id, BENCH_APPROVER)
         elif kind == "cancel":
             await self._cancel(command.cancel.operation_id)
         elif kind == "collect_diagnostics":
@@ -814,6 +921,7 @@ class AgentCore:
             activation.operation_id,
             "Running",
             message=f"approved by {operator}; robots switch at their next task boundary",
+            result={"approved_by": operator},
         )
         await self.watch_activations({})
         return activation
@@ -1024,6 +1132,7 @@ class AgentCore:
         """The gateway's configuration, with mutual TLS from the site CA unless disabled."""
         shadows = list(self.jobs.shadows.values())
         if not self.settings.gateway_tls:
+            self._launches = self._managed_launches()
             return build_gateway_config(
                 self.state,
                 self.settings,
@@ -1035,6 +1144,7 @@ class AgentCore:
         tls = self.pki.gateway_tls(self.gateway_dir / "tls", names)
         if self.settings.dev_robot_certificate_dir is not None:
             self._issue_dev_robot_certificates(self.settings.dev_robot_certificate_dir)
+        self._launches = self._managed_launches()
         return build_gateway_config(
             self.state,
             self.settings,

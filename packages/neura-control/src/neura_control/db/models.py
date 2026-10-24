@@ -106,6 +106,9 @@ class Site(Resource, Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     offline_authorization_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    # "bench": for trying things; its agent may approve activations itself if its operator also
+    # installed it as a bench. "production": a person at the site approves every change.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="production")
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     # Desired-state manifest bookkeeping: the generation increments when the content digest changes.
     manifest_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
@@ -200,7 +203,115 @@ class Robot(Resource, Base):
     name: Mapped[str] = mapped_column(String(63), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    # "api": created by a person or a script; "discovered": reported by the site's agent.
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="api")
+    # What the agent found: {"driver", "port", "serial", "simulated"}.
+    hardware: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
     observed: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+
+
+class Policy(Resource, Base):
+    """A trained model, whatever built it, with numbered versions (design §29.1)."""
+
+    __tablename__ = "policies"
+    __table_args__ = (UniqueConstraint("project_id", "name"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(63), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    labels: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+
+
+class PolicyVersion(Resource, Base):
+    """One version of a policy: a registered model artifact and where it came from."""
+
+    __tablename__ = "policy_versions"
+    __table_args__ = (
+        UniqueConstraint("policy_id", "number"),
+        UniqueConstraint("policy_id", "model_artifact_id"),
+    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    policy_id: Mapped[str] = mapped_column(
+        ForeignKey("policies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_artifact_id: Mapped[str] = mapped_column(
+        ForeignKey("contract_documents.id", ondelete="RESTRICT"), nullable=False
+    )
+    # {"kind": "lerobot" | "python" | "container", "reference": "..."}
+    source: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class Rollout(Resource, Base):
+    """One change to what some robots run: a deploy, a rollback or a try (design §29.4). Its
+    steps advance on site reports; each step change is an event with a plain-language summary."""
+
+    __tablename__ = "rollouts"
+    __table_args__ = (Index("ix_rollouts_project_state", "project_id", "state"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False)
+    deployment_id: Mapped[str] = mapped_column(
+        ForeignKey("deployments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    policy_version_id: Mapped[str | None] = mapped_column(ForeignKey("policy_versions.id"))
+    robot_ids: Mapped[list[Any]] = mapped_column(nullable=False)
+    options: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    steps: Mapped[list[Any]] = mapped_column(nullable=False, default=list)
+    reason: Mapped[str | None] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The revision robots switch to, once timed; the first one prepared before the timing.
+    revision_id: Mapped[str | None] = mapped_column(String(40))
+    provisional_revision_id: Mapped[str | None] = mapped_column(String(40))
+    # What each robot ran when the rollout started: robot id -> revision id (or null).
+    baseline_revision_ids: Mapped[dict[str, Any]] = mapped_column(nullable=False, default=dict)
+    evaluation_id: Mapped[str | None] = mapped_column(String(40))
+    operation_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    approved_by: Mapped[str | None] = mapped_column(String(256))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PublisherKey(Resource, Base):
+    """A key the workspace signs model artifacts with (public part only). Install commands carry
+    them so a new site trusts them; a site never trusts a key it was not given locally."""
+
+    __tablename__ = "publisher_keys"
+    __table_args__ = (UniqueConstraint("organization_id", "key_id"),)
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    public_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class LoginSession(Base):
+    """A CLI signing in through the browser (device authorization, RFC 8628 style)."""
+
+    __tablename__ = "login_sessions"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    organization_id: Mapped[str | None] = mapped_column(String(40))
+    approved_by: Mapped[str | None] = mapped_column(String(512))
+    scopes: Mapped[list[Any]] = mapped_column(nullable=False, default=list)
+    api_token_id: Mapped[str | None] = mapped_column(String(40))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _now()
 
 
 class Deployment(Resource, Base):
@@ -433,6 +544,12 @@ class Event(Base):
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     resource: Mapped[str] = mapped_column(String(80), nullable=False)
     resource_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    # For people (activity): one sentence, how much it matters, and what it is about.
+    summary: Mapped[str | None] = mapped_column(Text)
+    level: Mapped[str | None] = mapped_column(String(16))
+    site_id: Mapped[str | None] = mapped_column(String(40))
+    robot_id: Mapped[str | None] = mapped_column(String(40))
+    rollout_id: Mapped[str | None] = mapped_column(String(40))
     occurred_at: Mapped[datetime] = _now()
 
 

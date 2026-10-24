@@ -668,7 +668,7 @@ def test_agents_enroll_over_tls_and_refuse_an_unknown_server(
     assert identity.endpoint == stream  # the agent streams to the stream listener
     # The install command names the enrollment endpoint.
     issued = client.post(f"/v1/sites/{site}/enrollment-tokens", {}).json()
-    assert f"--control-plane {endpoint} " in issued["install_command"]
+    assert f"--control-plane {endpoint} " in issued["enroll_command"]
 
 
 def test_staging_requires_tls_for_the_agent_listener(settings: Any) -> None:

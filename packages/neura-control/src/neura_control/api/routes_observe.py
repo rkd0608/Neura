@@ -160,13 +160,22 @@ async def list_audit(
 
 
 def _event_json(row: Event) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "cursor": str(row.cursor),
         "type": row.type,
         "resource": row.resource,
         "resource_version": row.resource_version,
         "occurred_at": iso(row.occurred_at),
     }
+    if row.summary is not None:  # activity a person reads (routes_fleet.list_activity)
+        data.update(
+            summary=row.summary,
+            level=row.level,
+            site_id=row.site_id,
+            robot_id=row.robot_id,
+            rollout_id=row.rollout_id,
+        )
+    return data
 
 
 @router.get("/v1/projects/{project_id}/events")

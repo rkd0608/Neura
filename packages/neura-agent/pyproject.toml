@@ -16,6 +16,8 @@ dependencies = [
     "grpcio>=1.84,<2",
     "neura-runtime",
     "neura-server",
+    # Simulated robots for benches and tests (neura_agent.robots).
+    "neura-sim",
     "prometheus-client>=0.21",
     "packaging>=24",
 ]

@@ -382,6 +382,11 @@ def main() -> None:
     parser.add_argument("--gateway", default=env("NEURA_SIM_GATEWAY", "127.0.0.1:50051"))
     parser.add_argument("--robots", type=int, default=int(env("NEURA_SIM_ROBOTS", "4")))
     parser.add_argument("--robot-prefix", default=env("NEURA_SIM_ROBOT_PREFIX", "robot-"))
+    parser.add_argument(
+        "--names",
+        default=env("NEURA_SIM_NAMES", ""),
+        help="comma-separated robot names, instead of --robot-prefix and --robots",
+    )
     parser.add_argument("--revision", default=env("NEURA_SIM_REVISION", "rev_dev"))
     parser.add_argument(
         "--artifact",
@@ -464,17 +469,20 @@ def main() -> None:
         else None
     )
 
+    names = [n for n in args.names.split(",") if n] or [
+        f"{args.robot_prefix}{i}" for i in range(args.robots)
+    ]
     if args.assigned:
         assigned = [
             AssignedRobot(
-                f"{args.robot_prefix}{i}",
+                name,
                 gateway=args.gateway,
-                credentials=later(f"{args.robot_prefix}{i}"),
+                credentials=later(name),
                 task_seconds=args.task_seconds,
                 monitor=monitor,
                 reset_after_s=args.reset_after,
             )
-            for i in range(args.robots)
+            for name in names
         ]
         asyncio.run(
             run_robots(assigned, duration_s=args.duration, report_every_s=args.report_every)
@@ -482,8 +490,7 @@ def main() -> None:
     else:
         binding = load_binding(args.artifact, args.robot_profile, args.profile)
         robots = []
-        for i in range(args.robots):
-            robot_id = f"{args.robot_prefix}{i}"
+        for robot_id in names:
             process = SimulatedRobotProcess(
                 binding,
                 robot_id,

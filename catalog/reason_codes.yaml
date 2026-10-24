@@ -562,8 +562,52 @@ codes:
     retryable: false
     message: The site's trained model did not verify against its base, its dataset or its signature; nothing was registered.
   # ---------------------------------------------------------------------------
+  # Rollouts (design §29.4): why a rollout stopped
+  # ---------------------------------------------------------------------------
+  - code: ROLLOUT_ROBOT_TYPES_DIFFER
+    area: rollout
+    severity: error
+    retryable: false
+    message: The robots are of different types; a rollout serves one type of robot.
+  - code: ROLLOUT_TIMING_UNFIT
+    area: rollout
+    severity: error
+    retryable: false
+    message: No timing limits let these robots run this version on this GPU without starving.
+  - code: ROLLOUT_PREPARE_FAILED
+    area: rollout
+    severity: error
+    retryable: true
+    message: The site could not prepare the version.
+  - code: ROLLOUT_SHADOW_FAILED
+    area: rollout
+    severity: error
+    retryable: true
+    message: The shadow test could not run to completion.
+  - code: ROLLOUT_SHADOW_INFERIOR
+    area: rollout
+    severity: error
+    retryable: false
+    message: The shadow test found the version too far from the one the robots run.
+  - code: ROLLOUT_SWITCH_FAILED
+    area: rollout
+    severity: error
+    retryable: true
+    message: The robots did not switch to the version.
+  - code: ROLLOUT_CANCELLED
+    area: rollout
+    severity: warning
+    retryable: false
+    message: The rollout was cancelled before the robots switched.
+  # ---------------------------------------------------------------------------
   # Management API (design §20)
   # ---------------------------------------------------------------------------
+  - code: API_LOGIN_PENDING
+    area: api
+    severity: info
+    retryable: true
+    http_status: 409
+    message: Nobody has approved this sign-in in the browser yet.
   - code: API_UNAUTHENTICATED
     area: api
     severity: error

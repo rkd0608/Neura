@@ -40,7 +40,7 @@ from neura_control.security import agent_tokens
 from neura_control.security.principal import Principal, PrincipalKind
 from neura_control.security.signing import ManifestSigner
 from neura_control.security.tokens import ENROLLMENT_TOKEN_PREFIX, parse_token, verify_secret
-from neura_control.services import records, site_reports
+from neura_control.services import inventory, records, site_reports
 from neura_control.services.manifests import current_manifest
 from neura_control.services.sealed_weights import SealedUploadError, SealedWeightsStore
 from neura_control.settings import ControlPlaneSettings
@@ -517,6 +517,8 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 await self._status(session, site_id, message.status)
             elif kind == "telemetry":
                 await self._telemetry(session, site_id, message.telemetry)
+            elif kind == "inventory":
+                await inventory.report(session, site_id, message.inventory)
 
     async def _ack(
         self, session: AsyncSession, site_id: str, ack: site_pb2.Acknowledgement

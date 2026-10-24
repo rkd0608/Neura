@@ -77,6 +77,14 @@ messages:
     operation.reason.message: {minimal: false, description: "Human-readable detail (free text)."}
     operation.message: {minimal: false, description: "Progress or failure detail (free text)."}
     operation.result_json: {minimal: true, description: "The operation's result; only the keys under `results` below."}
+    inventory.robots.local_name: {minimal: true, description: "A robot's name at the server."}
+    inventory.robots.driver: {minimal: true, description: "How the agent drives it (simulated, so101, or a driver's name)."}
+    inventory.robots.robot_profile_json: {minimal: true, description: "Its robot profile document: joints, units, ranges, cameras. No robot state or images."}
+    inventory.robots.port: {minimal: false, description: "Where it is attached (a serial port path or a network address)."}
+    inventory.robots.serial: {minimal: false, description: "Its hardware serial number, when it reports one."}
+    inventory.robots.simulated: {minimal: true, description: "Whether it is a simulated robot."}
+    inventory.robots.state: {minimal: true, description: "ready, or needs_setup."}
+    inventory.robots.message: {minimal: false, description: "What needs setting up (free text)."}
     facts.hostname: {minimal: false, description: "The server's host name."}
     facts.driver_version: {minimal: true, description: "NVIDIA driver version."}
     facts.cuda_version: {minimal: true, description: "CUDA version."}

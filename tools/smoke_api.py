@@ -232,7 +232,7 @@ def main() -> int:
 
     step("enrolling the site agent with the install command from the API")
     enrollment = neura.create_enrollment_token(ids["site"], body={"ttl_minutes": 30})
-    print("    " + on_server(*shlex.split(enrollment["install_command"])).strip())
+    print("    " + on_server(*shlex.split(enrollment["enroll_command"])).strip())
     wait_for(
         "the site to connect",
         lambda: neura.get_site(ids["site"])["status"].get("connected"),

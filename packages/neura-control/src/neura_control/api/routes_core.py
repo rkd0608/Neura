@@ -47,6 +47,7 @@ from neura_control.db.models import (
     Deployment,
     EnrollmentToken,
     Project,
+    PublisherKey,
     Robot,
     Server,
     Site,
@@ -219,6 +220,7 @@ async def create_site(
             display_name=body.spec.display_name,
             labels=body.spec.labels,
             offline_authorization_hours=body.spec.offline_authorization_hours,
+            kind=body.spec.kind,
             observed={"phase": "Unknown", "connected": False},
             created_by=principal.subject,
         )
@@ -256,6 +258,7 @@ async def update_site(
             "display_name": site.display_name,
             "labels": site.labels,
             "offline_authorization_hours": site.offline_authorization_hours,
+            "kind": site.kind,
         }
         spec = await patched_spec(request, current, "site", SiteSpec)
         site.display_name, site.labels = spec.display_name, spec.labels
@@ -321,6 +324,18 @@ async def create_enrollment_token(
         )
         await ctx.record(session, project, "enrollment_token.create", token_id)
         token = format_token(ENROLLMENT_TOKEN_PREFIX, token_id, secret)
+        endpoint = settings.agent_enroll_endpoint or settings.agent_endpoint
+        keys = (
+            await session.scalars(
+                select(PublisherKey.public_key)
+                .where(PublisherKey.organization_id == project.organization_id)
+                .order_by(PublisherKey.id)
+            )
+        ).all()
+        flags = "".join(f" --trust {key}" for key in keys)
+        if site.kind == "bench":
+            flags += " --bench"
+        public = settings.public_url.rstrip("/")
         return ApiResult(
             201,
             {
@@ -328,10 +343,18 @@ async def create_enrollment_token(
                 "site_id": site.id,
                 "secret": token,
                 "expires_at": iso(expires_at),
+                # A server: the signed agent, installed as a service. Run by its administrator.
                 "install_command": (
-                    "neura-agent enroll --control-plane "
-                    f"{settings.agent_enroll_endpoint or settings.agent_endpoint} --token {token}"
+                    f"curl -fsSL {public}/install.sh | sudo sh -s -- --control-plane "
+                    f"{endpoint} --token {token}{flags}"
                 ),
+                # A workstation or a test bench: the agent in the current Python environment,
+                # in the foreground (neura site join).
+                "join_command": (
+                    f"neura site join --control-plane {endpoint} --token {token}{flags}"
+                ),
+                # The agent alone, for scripts that install it themselves.
+                "enroll_command": f"neura-agent enroll --control-plane {endpoint} --token {token}",
             },
             {"Location": f"/v1/sites/{site.id}"},
         )

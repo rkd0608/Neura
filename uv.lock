@@ -14,6 +14,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "neura",
     "neura-adapters",
     "neura-agent",
     "neura-bench",
@@ -2045,6 +2046,29 @@ wheels = [
 ]
 
 [[package]]
+name = "neura"
+version = "0.1.0.dev0"
+source = { editable = "packages/neura" }
+dependencies = [
+    { name = "httpx" },
+    { name = "neura-contracts" },
+    { name = "neura-proto" },
+    { name = "neura-sdk" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "neura-contracts", editable = "packages/neura-contracts" },
+    { name = "neura-proto", editable = "packages/neura-proto" },
+    { name = "neura-sdk", editable = "packages/neura-sdk" },
+    { name = "numpy", specifier = ">=2.2" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+]
+
+[[package]]
 name = "neura-adapters"
 version = "0.1.0.dev0"
 source = { editable = "packages/neura-adapters" }
@@ -2084,6 +2108,7 @@ dependencies = [
     { name = "neura-proto" },
     { name = "neura-runtime" },
     { name = "neura-server" },
+    { name = "neura-sim" },
     { name = "packaging" },
     { name = "prometheus-client" },
     { name = "pydantic-settings" },
@@ -2101,6 +2126,7 @@ requires-dist = [
     { name = "neura-proto", editable = "packages/neura-proto" },
     { name = "neura-runtime", editable = "packages/neura-runtime" },
     { name = "neura-server", editable = "packages/neura-server" },
+    { name = "neura-sim", editable = "packages/neura-sim" },
     { name = "packaging", specifier = ">=24" },
     { name = "prometheus-client", specifier = ">=0.21" },
     { name = "pydantic-settings", specifier = ">=2.10" },

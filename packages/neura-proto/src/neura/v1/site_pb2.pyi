@@ -107,7 +107,7 @@ class PreflightResult(_message.Message):
     def __init__(self, name: _Optional[str] = ..., passed: _Optional[bool] = ..., reason: _Optional[str] = ..., detail: _Optional[str] = ..., fix: _Optional[str] = ...) -> None: ...
 
 class AgentMessage(_message.Message):
-    __slots__ = ("hello", "ack", "status", "telemetry", "operation", "facts", "certificate_request")
+    __slots__ = ("hello", "ack", "status", "telemetry", "operation", "facts", "certificate_request", "inventory")
     HELLO_FIELD_NUMBER: _ClassVar[int]
     ACK_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -115,6 +115,7 @@ class AgentMessage(_message.Message):
     OPERATION_FIELD_NUMBER: _ClassVar[int]
     FACTS_FIELD_NUMBER: _ClassVar[int]
     CERTIFICATE_REQUEST_FIELD_NUMBER: _ClassVar[int]
+    INVENTORY_FIELD_NUMBER: _ClassVar[int]
     hello: AgentHello
     ack: Acknowledgement
     status: SiteStatus
@@ -122,7 +123,34 @@ class AgentMessage(_message.Message):
     operation: OperationReport
     facts: ServerFacts
     certificate_request: CertificateRequest
-    def __init__(self, hello: _Optional[_Union[AgentHello, _Mapping]] = ..., ack: _Optional[_Union[Acknowledgement, _Mapping]] = ..., status: _Optional[_Union[SiteStatus, _Mapping]] = ..., telemetry: _Optional[_Union[TelemetryBatch, _Mapping]] = ..., operation: _Optional[_Union[OperationReport, _Mapping]] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ..., certificate_request: _Optional[_Union[CertificateRequest, _Mapping]] = ...) -> None: ...
+    inventory: RobotInventory
+    def __init__(self, hello: _Optional[_Union[AgentHello, _Mapping]] = ..., ack: _Optional[_Union[Acknowledgement, _Mapping]] = ..., status: _Optional[_Union[SiteStatus, _Mapping]] = ..., telemetry: _Optional[_Union[TelemetryBatch, _Mapping]] = ..., operation: _Optional[_Union[OperationReport, _Mapping]] = ..., facts: _Optional[_Union[ServerFacts, _Mapping]] = ..., certificate_request: _Optional[_Union[CertificateRequest, _Mapping]] = ..., inventory: _Optional[_Union[RobotInventory, _Mapping]] = ...) -> None: ...
+
+class RobotInventory(_message.Message):
+    __slots__ = ("robots",)
+    ROBOTS_FIELD_NUMBER: _ClassVar[int]
+    robots: _containers.RepeatedCompositeFieldContainer[DiscoveredRobot]
+    def __init__(self, robots: _Optional[_Iterable[_Union[DiscoveredRobot, _Mapping]]] = ...) -> None: ...
+
+class DiscoveredRobot(_message.Message):
+    __slots__ = ("local_name", "driver", "robot_profile_json", "port", "serial", "simulated", "state", "message")
+    LOCAL_NAME_FIELD_NUMBER: _ClassVar[int]
+    DRIVER_FIELD_NUMBER: _ClassVar[int]
+    ROBOT_PROFILE_JSON_FIELD_NUMBER: _ClassVar[int]
+    PORT_FIELD_NUMBER: _ClassVar[int]
+    SERIAL_FIELD_NUMBER: _ClassVar[int]
+    SIMULATED_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    local_name: str
+    driver: str
+    robot_profile_json: str
+    port: str
+    serial: str
+    simulated: bool
+    state: str
+    message: str
+    def __init__(self, local_name: _Optional[str] = ..., driver: _Optional[str] = ..., robot_profile_json: _Optional[str] = ..., port: _Optional[str] = ..., serial: _Optional[str] = ..., simulated: _Optional[bool] = ..., state: _Optional[str] = ..., message: _Optional[str] = ...) -> None: ...
 
 class CertificateRequest(_message.Message):
     __slots__ = ("csr",)

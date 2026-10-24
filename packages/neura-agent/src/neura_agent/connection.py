@@ -155,6 +155,7 @@ class ControlConnection:
             )
         )
         yield site_pb2.AgentMessage(facts=self._facts())
+        yield self.core.inventory_message()
         for report in self.core.pending_reports():
             yield report
         while not stop.is_set():

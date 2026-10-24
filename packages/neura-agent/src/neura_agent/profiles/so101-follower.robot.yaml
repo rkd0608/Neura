@@ -1,0 +1,31 @@
+# Illustrative robot profile for an SO-101-class 6-DoF arm (LeRobot feature naming).
+# Ranges are example values, not a validated hardware envelope.
+api_version: neura.dev/v1alpha1
+kind: RobotProfile
+metadata:
+  name: so101-follower
+  version: r1
+  description: SO-101-class follower arm, position control at 30 Hz, two cameras.
+spec:
+  controller:
+    name: feetech-sts3215-bus
+    revision: example-1
+  control_period_us: 33333
+  command_interface:
+    - {name: shoulder_pan.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position, min: -110.0, max: 110.0}
+    - {name: shoulder_lift.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position, min: -100.0, max: 100.0}
+    - {name: elbow_flex.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position, min: -100.0, max: 100.0}
+    - {name: wrist_flex.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position, min: -100.0, max: 100.0}
+    - {name: wrist_roll.pos, unit: deg, frame: joint_space, semantics: absolute_joint_position, min: -160.0, max: 160.0}
+    - {name: gripper.pos, unit: normalized, frame: joint_space, semantics: gripper_position, min: 0.0, max: 100.0}
+  state_features:
+    - {name: shoulder_pan.pos, unit: deg, frame: joint_space}
+    - {name: shoulder_lift.pos, unit: deg, frame: joint_space}
+    - {name: elbow_flex.pos, unit: deg, frame: joint_space}
+    - {name: wrist_flex.pos, unit: deg, frame: joint_space}
+    - {name: wrist_roll.pos, unit: deg, frame: joint_space}
+    - {name: gripper.pos, unit: normalized, frame: joint_space}
+  cameras:
+    - {role: front, width: 640, height: 480, color_order: rgb, encodings: [raw, jpeg], calibration_revision: c1}
+    - {role: wrist, width: 640, height: 480, color_order: rgb, encodings: [raw, jpeg], calibration_revision: c1}
+  fault_responses: [hold_position, controlled_stop]

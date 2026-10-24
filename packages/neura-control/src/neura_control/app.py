@@ -31,7 +31,9 @@ from neura_control.api import (
     routes_contracts,
     routes_core,
     routes_deployments,
+    routes_fleet,
     routes_improvement,
+    routes_login,
     routes_observe,
     routes_weights,
 )
@@ -51,7 +53,7 @@ from neura_control.problems import (
 )
 from neura_control.security.oidc import OidcVerifier
 from neura_control.security.signing import ManifestSigner
-from neura_control.services import bootstrap
+from neura_control.services import bootstrap, rollouts
 from neura_control.services.sealed_weights import SealedWeightsStore
 from neura_control.settings import ControlPlaneSettings
 
@@ -124,6 +126,20 @@ async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Eve
                         EnrollmentToken.expires_at < now - timedelta(days=1)
                     )
                 )
+
+
+async def _sweep_rollouts(
+    app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event
+) -> None:
+    """Advance rollouts in progress (design §29.4). Site reports advance them as they arrive;
+    the sweep makes sure a missed report only delays one."""
+    while True:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=settings.rollout_sweep_interval_s)
+        if stop.is_set():
+            return
+        with contextlib.suppress(Exception):
+            await rollouts.sweep(app.state.sessions)
 
 
 async def _dev_bootstrap(app: FastAPI, settings: ControlPlaneSettings) -> None:
@@ -204,6 +220,7 @@ def create_app(
             )
         stop_pruning = asyncio.Event()
         pruner = asyncio.create_task(_prune(app, settings, stop_pruning))
+        sweeper = asyncio.create_task(_sweep_rollouts(app, settings, stop_pruning))
         try:
             yield
         finally:
@@ -212,6 +229,7 @@ def create_app(
                 await app.state.site_control.close()
             stop_pruning.set()
             await pruner
+            await sweeper
             await engine.dispose()
             if metrics_server is not None:
                 metrics_server.shutdown()
@@ -333,6 +351,8 @@ def create_app(
         routes_observe,
         routes_access,
         routes_weights,
+        routes_fleet,
+        routes_login,
     ):
         app.include_router(module.router)
 

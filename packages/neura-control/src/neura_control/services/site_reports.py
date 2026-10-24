@@ -33,6 +33,8 @@ from neura_control.db.models import (
     Fault,
     MetricPoint,
     Operation,
+    Policy,
+    PolicyVersion,
     Project,
     Revision,
     Robot,
@@ -106,6 +108,9 @@ async def update_operation(
             row.phase, row.message = "Running", operation.message
             _touch(row)
             await _emit(session, row.project_id, row)
+    from neura_control.services import rollouts  # the driver starts operations itself
+
+    await rollouts.on_operation(session, operation)
     return operation
 
 
@@ -449,6 +454,26 @@ def _training_metrics(reported: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _policy_version_of(session: AsyncSession, revision: Revision) -> dict[str, Any]:
+    """The policy version a revision serves, as a robot's status shows it."""
+    version = (
+        await session.scalars(
+            select(PolicyVersion).where(
+                PolicyVersion.project_id == revision.project_id,
+                PolicyVersion.model_artifact_id == revision.model_artifact_id,
+            )
+        )
+    ).first()
+    if version is None:
+        return {"policy_version_id": None, "policy_name": None, "policy_version": None}
+    policy = await session.get(Policy, version.policy_id)
+    return {
+        "policy_version_id": version.id,
+        "policy_name": policy.name if policy else None,
+        "policy_version": version.number,
+    }
+
+
 async def set_active_revision(
     session: AsyncSession, revision_id: str, robot_ids: list[str]
 ) -> None:
@@ -463,6 +488,7 @@ async def set_active_revision(
     active = dict(
         deployment.observed.get("active_revision_ids", dict.fromkeys(deployment.robot_ids))
     )
+    running = await _policy_version_of(session, revision)
     for robot_id in robot_ids:
         active[robot_id] = revision_id
         robot = await session.get(Robot, robot_id, with_for_update=True)
@@ -470,6 +496,7 @@ async def set_active_revision(
             robot.observed = {
                 **robot.observed,
                 "active_revision_id": revision_id,
+                **running,
                 "observed_at": now,
             }
             _touch(robot)

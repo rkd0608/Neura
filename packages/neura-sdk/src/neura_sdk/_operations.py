@@ -9,6 +9,7 @@ from urllib.parse import quote
 from neura_sdk.models import (
     ActivationRequestCreate,
     ActivationRequestPage,
+    ActivityPage,
     AgentUpgradeCreate,
     ApiTokenCreate,
     ApiTokenPage,
@@ -20,6 +21,7 @@ from neura_sdk.models import (
     CurrentPrincipal,
     Deployment,
     DeploymentCreate,
+    DeploymentId,
     DeploymentPage,
     DeploymentUpdate,
     EnrollmentToken,
@@ -32,6 +34,12 @@ from neura_sdk.models import (
     ExecutionProfilePage,
     Fault,
     FaultPage,
+    LoginApproval,
+    LoginApprovalCreate,
+    LoginSession,
+    LoginSessionCreate,
+    LoginToken,
+    LoginTokenRequest,
     Member,
     MemberCreate,
     MemberPage,
@@ -43,21 +51,38 @@ from neura_sdk.models import (
     ModelArtifactPage,
     Operation,
     Organization,
+    OrganizationId,
+    Policy,
+    PolicyCreate,
+    PolicyPage,
+    PolicyUpdate,
+    PolicyVersion,
+    PolicyVersionCreate,
+    PolicyVersionPage,
     Project,
     ProjectCreate,
     ProjectPage,
     ProjectUpdate,
+    PublisherKey,
+    PublisherKeyCreate,
+    PublisherKeyPage,
     Revision,
     RevisionCreate,
     RevisionPage,
     Robot,
     RobotCreate,
+    RobotId,
     RobotPage,
     RobotProfile,
     RobotProfileCreate,
     RobotProfilePage,
     RobotUpdate,
     RollbackCreate,
+    Rollout,
+    RolloutCreate,
+    RolloutId,
+    RolloutPage,
+    RolloutStateFilter,
     SealedWeights,
     SealedWeightsPage,
     Server,
@@ -68,6 +93,7 @@ from neura_sdk.models import (
     SessionPage,
     Site,
     SiteCreate,
+    SiteId,
     SitePage,
     SiteUpdate,
     SupportGrant,
@@ -76,6 +102,7 @@ from neura_sdk.models import (
     TrainingJob,
     TrainingJobCreate,
     TrainingJobPage,
+    Workspace,
 )
 
 
@@ -1180,4 +1207,322 @@ class Operations:
         return self._call(  # type: ignore[no-any-return]
             "GET",
             f"/v1/training-jobs/{_segment(training_job_id)}",
+        )
+
+    def get_workspace(
+        self,
+        *,
+        organization_id: OrganizationId | None = None,
+    ) -> Workspace:
+        """
+        The caller's workspace: its organization and the project it works in. (``GET
+        /v1/workspace``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            "/v1/workspace",
+            query={"organization_id": organization_id},
+        )
+
+    def list_policies(
+        self,
+        project_id: str,
+        *,
+        label: list[str] | None = None,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> PolicyPage:
+        """List policies. (``GET /v1/projects/{project_id}/policies``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/projects/{_segment(project_id)}/policies",
+            query={"label": label, "cursor": cursor, "page_size": page_size},
+        )
+
+    def create_policy(
+        self,
+        project_id: str,
+        *,
+        body: PolicyCreate,
+        idempotency_key: str | None = None,
+    ) -> Policy:
+        """Create a policy. (``POST /v1/projects/{project_id}/policies``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/projects/{_segment(project_id)}/policies",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def get_policy(
+        self,
+        policy_id: str,
+    ) -> Policy:
+        """Get a policy. (``GET /v1/policies/{policy_id}``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/policies/{_segment(policy_id)}",
+        )
+
+    def update_policy(
+        self,
+        policy_id: str,
+        *,
+        body: PolicyUpdate,
+        if_match: str,
+    ) -> Policy:
+        """
+        Update a policy's display name, description or labels. (``PATCH
+        /v1/policies/{policy_id}``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "PATCH",
+            f"/v1/policies/{_segment(policy_id)}",
+            body=body,
+            content_type="application/merge-patch+json",
+            if_match=if_match,
+        )
+
+    def list_policy_versions(
+        self,
+        policy_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> PolicyVersionPage:
+        """List a policy's versions, newest first. (``GET /v1/policies/{policy_id}/versions``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/policies/{_segment(policy_id)}/versions",
+            query={"cursor": cursor, "page_size": page_size},
+        )
+
+    def create_policy_version(
+        self,
+        policy_id: str,
+        *,
+        body: PolicyVersionCreate,
+        idempotency_key: str | None = None,
+    ) -> PolicyVersion:
+        """
+        Add a version: its model artifact and where it came from. (``POST
+        /v1/policies/{policy_id}/versions``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/policies/{_segment(policy_id)}/versions",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def get_policy_version(
+        self,
+        policy_version_id: str,
+    ) -> PolicyVersion:
+        """Get a policy version. (``GET /v1/policy-versions/{policy_version_id}``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/policy-versions/{_segment(policy_version_id)}",
+        )
+
+    def list_rollouts(
+        self,
+        project_id: str,
+        *,
+        site_id: SiteId | None = None,
+        deployment_id: DeploymentId | None = None,
+        robot_id: RobotId | None = None,
+        state: RolloutStateFilter | None = None,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> RolloutPage:
+        """List rollouts, newest first. (``GET /v1/projects/{project_id}/rollouts``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/projects/{_segment(project_id)}/rollouts",
+            query={
+                "site_id": site_id,
+                "deployment_id": deployment_id,
+                "robot_id": robot_id,
+                "state": state,
+                "cursor": cursor,
+                "page_size": page_size,
+            },
+        )
+
+    def create_rollout(
+        self,
+        project_id: str,
+        *,
+        body: RolloutCreate,
+        idempotency_key: str | None = None,
+    ) -> Rollout:
+        """
+        Deploy a policy version to robots, try one on a bench robot, or roll robots back.
+        (``POST /v1/projects/{project_id}/rollouts``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/projects/{_segment(project_id)}/rollouts",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def get_rollout(
+        self,
+        rollout_id: str,
+    ) -> Rollout:
+        """Get a rollout and its steps. (``GET /v1/rollouts/{rollout_id}``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/rollouts/{_segment(rollout_id)}",
+        )
+
+    def cancel_rollout(
+        self,
+        rollout_id: str,
+        *,
+        idempotency_key: str | None = None,
+    ) -> Rollout:
+        """
+        Cancel a rollout before its robots switch. (``POST
+        /v1/rollouts/{rollout_id}/cancel``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/rollouts/{_segment(rollout_id)}/cancel",
+            idempotency_key=idempotency_key,
+        )
+
+    def list_activity(
+        self,
+        project_id: str,
+        *,
+        site_id: SiteId | None = None,
+        robot_id: RobotId | None = None,
+        rollout_id: RolloutId | None = None,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> ActivityPage:
+        """
+        What happened, newest first, one sentence each. (``GET
+        /v1/projects/{project_id}/activity``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/projects/{_segment(project_id)}/activity",
+            query={
+                "site_id": site_id,
+                "robot_id": robot_id,
+                "rollout_id": rollout_id,
+                "cursor": cursor,
+                "page_size": page_size,
+            },
+        )
+
+    def list_publisher_keys(
+        self,
+        organization_id: str,
+        *,
+        cursor: str | None = None,
+        page_size: int | None = None,
+    ) -> PublisherKeyPage:
+        """
+        List the keys this workspace signs artifacts with. (``GET
+        /v1/organizations/{organization_id}/publisher-keys``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/organizations/{_segment(organization_id)}/publisher-keys",
+            query={"cursor": cursor, "page_size": page_size},
+        )
+
+    def create_publisher_key(
+        self,
+        organization_id: str,
+        *,
+        body: PublisherKeyCreate,
+        idempotency_key: str | None = None,
+    ) -> PublisherKey:
+        """
+        Register the public part of a signing key. (``POST
+        /v1/organizations/{organization_id}/publisher-keys``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/organizations/{_segment(organization_id)}/publisher-keys",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def delete_publisher_key(
+        self,
+        publisher_key_id: str,
+        *,
+        if_match: str,
+    ) -> None:
+        """
+        Forget a signing key (sites that trust it keep trusting it). (``DELETE /v1/publisher-
+        keys/{publisher_key_id}``)
+        """
+        self._call(
+            "DELETE",
+            f"/v1/publisher-keys/{_segment(publisher_key_id)}",
+            if_match=if_match,
+        )
+
+    def create_login_session(
+        self,
+        *,
+        body: LoginSessionCreate,
+        idempotency_key: str | None = None,
+    ) -> LoginSession:
+        """Start signing a CLI in through the browser. (``POST /v1/login-sessions``)"""
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            "/v1/login-sessions",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def exchange_login_session(
+        self,
+        login_session_id: str,
+        *,
+        body: LoginTokenRequest,
+        idempotency_key: str | None = None,
+    ) -> LoginToken:
+        """
+        Exchange an approved sign-in for an API token. (``POST /v1/login-
+        sessions/{login_session_id}/token``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            f"/v1/login-sessions/{_segment(login_session_id)}/token",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
+        )
+
+    def approve_login(
+        self,
+        *,
+        body: LoginApprovalCreate,
+        idempotency_key: str | None = None,
+    ) -> LoginApproval:
+        """
+        Approve a CLI's sign-in code for one of your workspaces. (``POST /v1/login-
+        approvals``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "POST",
+            "/v1/login-approvals",
+            body=body,
+            content_type="application/json",
+            idempotency_key=idempotency_key,
         )

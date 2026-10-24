@@ -30,6 +30,8 @@ LabelValue = Annotated[str, StringConstraints(max_length=256)]
 Labels = Annotated[dict[Name, LabelValue], Field(max_length=64)]
 SiteId = Annotated[str, StringConstraints(pattern=rf"^site_{ULID_PATTERN}$")]
 RobotId = Annotated[str, StringConstraints(pattern=rf"^rbt_{ULID_PATTERN}$")]
+PolicyVersionId = Annotated[str, StringConstraints(pattern=rf"^pv_{ULID_PATTERN}$")]
+OrganizationId = Annotated[str, StringConstraints(pattern=rf"^org_{ULID_PATTERN}$")]
 ProjectId = Annotated[str, StringConstraints(pattern=rf"^prj_{ULID_PATTERN}$")]
 RevisionId = Annotated[str, StringConstraints(pattern=rf"^rev_{ULID_PATTERN}$")]
 RobotProfileId = Annotated[str, StringConstraints(pattern=rf"^rpf_{ULID_PATTERN}$")]
@@ -52,6 +54,7 @@ class SiteSpec(Strict):
     display_name: DisplayName
     labels: Labels = Field(default_factory=dict)
     offline_authorization_hours: int = Field(ge=1, le=8760)
+    kind: Literal["bench", "production"] = "production"
 
 
 class SiteCreate(Strict):
@@ -375,6 +378,84 @@ class MemberUpdate(Strict):
     role: MemberRole | None = None
 
 
+# --- policies and rollouts (design §29) ------------------------------------------------------
+
+
+Note = Annotated[str, StringConstraints(max_length=2000)]
+
+
+class PolicySpec(Strict):
+    name: Name
+    display_name: DisplayName | None = None
+    description: Annotated[str, StringConstraints(max_length=4000)] = ""
+    labels: Labels = Field(default_factory=dict)
+
+
+class PolicyCreate(Strict):
+    spec: PolicySpec
+
+
+class PolicySource(Strict):
+    """Where a version came from: a LeRobot checkpoint, a Python class with ``@neura.policy``,
+    or a container answering Neura's policy interface."""
+
+    kind: Literal["lerobot", "python", "container"]
+    reference: Annotated[str, StringConstraints(max_length=2000)] = ""
+
+
+class PolicyVersionSpec(Strict):
+    source: PolicySource
+    model_artifact: ContractCreate
+    notes: Annotated[str, StringConstraints(max_length=4000)] = ""
+
+
+class PolicyVersionCreate(Strict):
+    spec: PolicyVersionSpec
+
+
+class RolloutSpec(Strict):
+    """A deploy (or, on a bench site, a try) of a policy version to robots, or a rollback of
+    robots to what they ran before their last rollout."""
+
+    kind: Literal["deploy", "try", "rollback"] = "deploy"
+    robot_ids: list[RobotId] = Field(min_length=1, max_length=1000)
+    policy_version_id: PolicyVersionId | None = None
+    # Seconds the new version runs beside the current one before approval; 0 skips it.
+    # Default: 10 minutes on production sites when robots already run something, else none.
+    shadow_s: float | None = Field(default=None, ge=0, le=7 * 86_400)
+    note: Note = ""
+
+    @model_validator(mode="after")
+    def _version(self) -> Self:
+        if len(set(self.robot_ids)) != len(self.robot_ids):
+            raise ValueError("robot_ids must be unique")
+        if (self.kind == "rollback") != (self.policy_version_id is None):
+            raise ValueError("a deploy or try names policy_version_id; a rollback does not")
+        return self
+
+
+class RolloutCreate(Strict):
+    spec: RolloutSpec
+
+
+class PublisherKeyCreate(Strict):
+    public_key: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    display_name: DisplayName
+
+
+class LoginSessionCreate(Strict):
+    client_name: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class LoginTokenRequest(Strict):
+    secret: Annotated[str, StringConstraints(min_length=16, max_length=256)]
+
+
+class LoginApprovalCreate(Strict):
+    user_code: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9]{4}-?[A-Z0-9]{4}$")]
+    organization_id: OrganizationId | None = None
+
+
 class SpecPatch(Strict):
     """``{"spec": {...}}`` merge-patch envelope; fields are checked after merging."""
 
@@ -386,6 +467,7 @@ MUTABLE_FIELDS: dict[str, frozenset[str]] = {
     "site": frozenset({"display_name", "labels", "offline_authorization_hours"}),
     "server": frozenset({"display_name", "labels", "allocated_gpu_indexes"}),
     "robot": frozenset({"display_name", "labels", "robot_profile_id"}),
+    "policy": frozenset({"display_name", "description", "labels"}),
     "deployment": frozenset(
         {"display_name", "labels", "robot_ids", "desired_revision_id", "capture", "release_gates"}
     ),

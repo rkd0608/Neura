@@ -45,7 +45,24 @@ async def event(
     type: str,
     resource: str,
     version: int,
+    summary: str | None = None,
+    level: str | None = None,
+    site_id: str | None = None,
+    robot_id: str | None = None,
+    rollout_id: str | None = None,
 ) -> None:
+    """A change event. With a ``summary`` it is also activity a person reads: one sentence, its
+    ``level`` (info, warning or error) and what it is about."""
     session.add(
-        Event(project_id=project_id, type=type, resource=resource, resource_version=str(version))
+        Event(
+            project_id=project_id,
+            type=type,
+            resource=resource,
+            resource_version=str(version),
+            summary=summary,
+            level=(level or "info") if summary else None,
+            site_id=site_id,
+            robot_id=robot_id,
+            rollout_id=rollout_id,
+        )
     )

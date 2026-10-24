@@ -20,6 +20,8 @@ class ControlPlaneSettings(BaseSettings):
     port: int = Field(default=8080, ge=1, le=65535)
     # Externally reachable URL, used in install commands shown to customers.
     public_url: str = "http://127.0.0.1:8080"
+    # Where people open the console (sign-in links for the CLI); default: public_url.
+    console_url: str | None = None
     database_url: PostgresDsn = PostgresDsn("postgresql://neura:neura@127.0.0.1:5432/neura")
     # Staging and production connect to Postgres over TLS that verifies the server
     # (sslmode=verify-full in database_url), unless the connection never leaves the host (a
@@ -59,6 +61,11 @@ class ControlPlaneSettings(BaseSettings):
     agent_max_concurrent_rpcs: int = Field(default=2000, ge=1)
     event_retention_hours: int = Field(default=24, ge=1)
     events_poll_interval_s: float = Field(default=1.0, gt=0, le=30)
+    # How often rollouts in progress are advanced even without a site report (design §29.4).
+    rollout_sweep_interval_s: float = Field(default=2.0, gt=0, le=300)
+    # Anyone who signs in with the identity provider and belongs to no workspace gets their own
+    # (individual developers). Off: an admin adds people (companies with SSO).
+    self_signup: bool = False
     events_keepalive_s: float = Field(default=15.0, gt=0)
     # Streams end after this long; clients reconnect with Last-Event-ID. Bounds connection age
     # behind load balancers and frees server resources from abandoned clients.

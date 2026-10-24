@@ -97,7 +97,7 @@ def test_onboarding_to_activation(api: tuple[ConformanceClient, str], settings: 
     token = client.post(f"/v1/sites/{ids['site']}/enrollment-tokens", {"ttl_minutes": 30})
     assert token.status_code == 201
     assert token.json()["secret"].startswith("nen_enr_")
-    assert token.json()["secret"] in token.json()["install_command"]
+    assert token.json()["secret"] in token.json()["enroll_command"]
 
     # Registering an identical document again returns the existing resource.
     again = client.post(

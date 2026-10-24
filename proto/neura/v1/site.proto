@@ -99,7 +99,32 @@ message AgentMessage {
     ServerFacts facts = 6;
     // Renew the TLS client certificate before it expires: a CSR for a new key.
     CertificateRequest certificate_request = 7;
+    // The robots this server found or was configured with (design §29.5). Sent on connect and
+    // whenever it changes; the control plane registers the ones it does not know yet.
+    RobotInventory inventory = 8;
   }
+}
+
+message RobotInventory {
+  repeated DiscoveredRobot robots = 1;
+}
+
+message DiscoveredRobot {
+  // The robot's name at this server (unique there), e.g. "arm-1" or "sim-1".
+  string local_name = 1;
+  // How the agent drives it: "simulated", "so101", or a customer driver's name.
+  string driver = 2;
+  // Its robot profile (a RobotProfile document, JSON): joints, units, ranges, cameras.
+  string robot_profile_json = 3;
+  // Where it is attached: a serial port (a stable /dev/serial/by-id path) or a network address.
+  string port = 4;
+  // A hardware serial number, when the robot reports one.
+  string serial = 5;
+  bool simulated = 6;
+  // "ready": the agent can run it once it is part of a deployment. "needs_setup": found, but
+  // something must be configured first (message says what).
+  string state = 7;
+  string message = 8;
 }
 
 message CertificateRequest {

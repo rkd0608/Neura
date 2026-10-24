@@ -50,6 +50,14 @@ tags:
   description: Recorded episodes, evaluations and training jobs at a site (design §28).
 - name: Weights
   description: Neura's registry of weights sealed with customer-managed keys (design §18.2).
+- name: Workspace
+  description: The caller's organization and the project it works in (design §29).
+- name: Policies
+  description: Trained models, whatever built them, and their numbered versions (design §29.1).
+- name: Rollouts
+  description: Changes to what robots run, from a version to robots switched (design §29.4).
+- name: Activity
+  description: What happened, one sentence each (design §29).
 paths:
   /v1/api-tokens/{api_token_id}:
     delete:
@@ -2801,6 +2809,770 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/workspace:
+    get:
+      operationId: getWorkspace
+      tags:
+      - Workspace
+      summary: 'The caller''s workspace: its organization and the project it works in.'
+      description: A workspace is an organization and its default project, which people and tools never
+        have to choose (design §29). With one organization the caller's own is used; with several, name
+        one.
+      parameters:
+      - name: organization_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/OrganizationId'
+        description: The workspace's organization, when the caller belongs to several.
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/policies:
+    get:
+      operationId: listPolicies
+      tags:
+      - Policies
+      summary: List policies.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/LabelSelector'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createPolicy
+      tags:
+      - Policies
+      summary: Create a policy.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/policies/{policy_id}:
+    get:
+      operationId: getPolicy
+      tags:
+      - Policies
+      summary: Get a policy.
+      parameters:
+      - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updatePolicy
+      tags:
+      - Policies
+      summary: Update a policy's display name, description or labels.
+      parameters:
+      - $ref: '#/components/parameters/PolicyId'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '428':
+          $ref: '#/components/responses/IfMatchRequired'
+  /v1/policies/{policy_id}/versions:
+    get:
+      operationId: listPolicyVersions
+      tags:
+      - Policies
+      summary: List a policy's versions, newest first.
+      parameters:
+      - $ref: '#/components/parameters/PolicyId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyVersionPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createPolicyVersion
+      tags:
+      - Policies
+      summary: 'Add a version: its model artifact and where it came from.'
+      parameters:
+      - $ref: '#/components/parameters/PolicyId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyVersionCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyVersion'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyVersion'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      description: 'The artifact is registered (or found by its digest) with its publisher signatures. Pushing
+        an artifact the policy already has returns that version with 200. Weights never pass through this
+        call: the site fetches them from the customer''s storage, or from Neura''s registry sealed with
+        the customer''s key.'
+  /v1/policy-versions/{policy_version_id}:
+    get:
+      operationId: getPolicyVersion
+      tags:
+      - Policies
+      summary: Get a policy version.
+      parameters:
+      - $ref: '#/components/parameters/PolicyVersionId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyVersion'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/rollouts:
+    get:
+      operationId: listRollouts
+      tags:
+      - Rollouts
+      summary: List rollouts, newest first.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: site_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/SiteId'
+        description: Only rollouts at this site.
+      - name: deployment_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/DeploymentId'
+        description: Only rollouts of this deployment.
+      - name: robot_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/RobotId'
+        description: Only rollouts that include this robot.
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/RolloutStateFilter'
+        description: Only rollouts in this state; `active` for every one in progress.
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolloutPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createRollout
+      tags:
+      - Rollouts
+      summary: Deploy a policy version to robots, try one on a bench robot, or roll robots back.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RolloutCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rollout'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      description: 'The rollout''s steps then advance with the site''s reports (design §29.4): it checks
+        the version fits the robots, the site prepares and times it on its GPU, it runs beside the current
+        version on live observations when asked, a person at the site approves, and the robots switch at
+        their next task boundary. No credential in the cloud can approve: only the site does.'
+  /v1/rollouts/{rollout_id}:
+    get:
+      operationId: getRollout
+      tags:
+      - Rollouts
+      summary: Get a rollout and its steps.
+      parameters:
+      - $ref: '#/components/parameters/RolloutId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rollout'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/rollouts/{rollout_id}/cancel:
+    post:
+      operationId: cancelRollout
+      tags:
+      - Rollouts
+      summary: Cancel a rollout before its robots switch.
+      description: 'A pending approval at the site is withdrawn. Robots that already switched keep what
+        they run: roll back to undo that.'
+      parameters:
+      - $ref: '#/components/parameters/RolloutId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rollout'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/projects/{project_id}/activity:
+    get:
+      operationId: listActivity
+      tags:
+      - Activity
+      summary: What happened, newest first, one sentence each.
+      parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: site_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/SiteId'
+        description: Only activity at this site.
+      - name: robot_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/RobotId'
+        description: Only activity about this robot.
+      - name: rollout_id
+        in: query
+        schema:
+          $ref: '#/components/schemas/RolloutId'
+        description: Only activity of this rollout.
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      description: The same events stream live, with their summaries, from `/v1/projects/{project_id}/events`.
+  /v1/organizations/{organization_id}/publisher-keys:
+    get:
+      operationId: listPublisherKeys
+      tags:
+      - Access
+      summary: List the keys this workspace signs artifacts with.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherKeyPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createPublisherKey
+      tags:
+      - Access
+      summary: Register the public part of a signing key.
+      parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublisherKeyCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherKey'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherKey'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      description: 'New sites'' install commands trust it. A site installed before trusts it only once its
+        operator says so locally: the cloud can never make a site trust a key.'
+  /v1/publisher-keys/{publisher_key_id}:
+    delete:
+      operationId: deletePublisherKey
+      tags:
+      - Access
+      summary: Forget a signing key (sites that trust it keep trusting it).
+      parameters:
+      - $ref: '#/components/parameters/PublisherKeyId'
+      - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Done.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '428':
+          $ref: '#/components/responses/IfMatchRequired'
+  /v1/login-sessions:
+    post:
+      operationId: createLoginSession
+      tags:
+      - Access
+      summary: Start signing a CLI in through the browser.
+      description: Returns a short code to approve in the console and a secret only the CLI holds (device
+        authorization, after RFC 8628). No credential is needed.
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginSessionCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSession'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/login-sessions/{login_session_id}/token:
+    post:
+      operationId: exchangeLoginSession
+      tags:
+      - Access
+      summary: Exchange an approved sign-in for an API token.
+      description: 409 with `API_LOGIN_PENDING` until someone approves the code; poll at the session's interval.
+        A token is issued once.
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/LoginSessionId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginTokenRequest'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/login-approvals:
+    post:
+      operationId: approveLogin
+      tags:
+      - Access
+      summary: Approve a CLI's sign-in code for one of your workspaces.
+      description: Only a signed-in person can approve. The CLI gets a token with that person's permissions
+        in the workspace, for 30 days.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginApprovalCreate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApproval'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     oidc:
@@ -2991,6 +3763,36 @@ components:
       description: The plaintext weight file's digest, as the model artifact lists it (sha256:<hex>).
       schema:
         $ref: '#/components/schemas/Digest'
+    PolicyId:
+      name: policy_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/PolicyId'
+    PolicyVersionId:
+      name: policy_version_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/PolicyVersionId'
+    RolloutId:
+      name: rollout_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/RolloutId'
+    PublisherKeyId:
+      name: publisher_key_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/PublisherKeyId'
+    LoginSessionId:
+      name: login_session_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/LoginSessionId'
   headers:
     ETag:
       description: Resource version for optimistic concurrency.
@@ -3827,6 +4629,15 @@ components:
           $ref: '#/components/schemas/Timestamp'
         install_command:
           type: string
+          description: Installs the signed agent as a service on a server and enrolls it (run by its
+            administrator).
+        join_command:
+          type: string
+          description: Runs the agent in the current Python environment and enrolls it (a workstation
+            or test bench).
+        enroll_command:
+          type: string
+          description: Enrolls an agent that is already installed.
     EnrollmentTokenCreate:
       type: object
       properties:
@@ -3869,6 +4680,32 @@ components:
           type: string
         occurred_at:
           $ref: '#/components/schemas/Timestamp'
+        summary:
+          type:
+          - string
+          - 'null'
+          description: One sentence for a person, when the event is activity.
+        level:
+          type:
+          - string
+          - 'null'
+          enum:
+          - info
+          - warning
+          - error
+          - null
+        site_id:
+          type:
+          - string
+          - 'null'
+        robot_id:
+          type:
+          - string
+          - 'null'
+        rollout_id:
+          type:
+          - string
+          - 'null'
     ExecutionProfile:
       type: object
       description: An immutable, registered ExecutionProfile document. Changes are new documents.
@@ -4585,6 +5422,26 @@ components:
               - integer
               - 'null'
               minimum: 0
+            discovered:
+              type: boolean
+              description: Whether the site's agent found the robot (rather than an API call).
+            hardware:
+              type:
+              - object
+              - 'null'
+              description: What the agent found, e.g. its driver and port.
+            policy_version_id:
+              oneOf:
+              - $ref: '#/components/schemas/PolicyVersionId'
+              - type: 'null'
+            policy_name:
+              type:
+              - string
+              - 'null'
+            policy_version:
+              type:
+              - integer
+              - 'null'
       additionalProperties: false
     RobotCreate:
       type: object
@@ -5108,6 +5965,14 @@ components:
           maximum: 8760
           description: How long the site keeps operating on its committed configuration without reaching
             the control plane (design §13).
+        kind:
+          enum:
+          - bench
+          - production
+          default: production
+          description: 'A bench is for trying things: its agent may approve activations itself, if its operator
+            also installed it as a bench. On a production site a person approves every change. Set
+            when the site is created.'
       additionalProperties: false
     SiteUpdate:
       type: object
@@ -5646,4 +6511,593 @@ components:
             - replay
             - shadow
           uniqueItems: true
+      additionalProperties: false
+    PolicyId:
+      type: string
+      pattern: ^pol_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Policy identifier: `pol_` followed by a ULID.'
+    PolicyVersionId:
+      type: string
+      pattern: ^pv_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Policy version identifier: `pv_` followed by a ULID.'
+    RolloutId:
+      type: string
+      pattern: ^ro_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Rollout identifier: `ro_` followed by a ULID.'
+    PublisherKeyId:
+      type: string
+      pattern: ^pub_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Publisher key identifier: `pub_` followed by a ULID.'
+    LoginSessionId:
+      type: string
+      pattern: ^lgn_[0-9A-HJKMNP-TV-Z]{26}$
+      description: 'Login session identifier: `lgn_` followed by a ULID.'
+    Workspace:
+      type: object
+      required:
+      - organization_id
+      - display_name
+      - project_id
+      - permissions
+      properties:
+        organization_id:
+          $ref: '#/components/schemas/OrganizationId'
+        display_name:
+          type: string
+        project_id:
+          $ref: '#/components/schemas/ProjectId'
+        permissions:
+          type: array
+          items:
+            enum:
+            - admin
+            - deploy
+            - read
+      additionalProperties: false
+    PolicySpec:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+        description:
+          type: string
+          maxLength: 4000
+        labels:
+          $ref: '#/components/schemas/Labels'
+      additionalProperties: false
+    PolicyCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/PolicySpec'
+      additionalProperties: false
+    PolicyUpdate:
+      type: object
+      description: JSON merge patch of the policy's spec; only display_name, description and labels change.
+      required:
+      - spec
+      properties:
+        spec:
+          type: object
+      additionalProperties: false
+    Policy:
+      type: object
+      description: A trained model, whatever built it, with numbered versions (design §29.1).
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/PolicySpec'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - versions
+          - latest_version
+          properties:
+            versions:
+              type: integer
+              minimum: 0
+            latest_version:
+              type:
+              - integer
+              - 'null'
+              minimum: 1
+          additionalProperties: false
+      additionalProperties: false
+    PolicyPage:
+      type: object
+      description: A page of policies.
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    PolicySource:
+      type: object
+      description: 'How the version was built: a LeRobot checkpoint, a Python class with `@neura.policy`,
+        or a container answering Neura''s policy interface.'
+      required:
+      - kind
+      properties:
+        kind:
+          enum:
+          - lerobot
+          - python
+          - container
+        reference:
+          type: string
+          maxLength: 2000
+      additionalProperties: false
+    PolicyVersionSpec:
+      type: object
+      required:
+      - source
+      - model_artifact
+      properties:
+        source:
+          $ref: '#/components/schemas/PolicySource'
+        model_artifact:
+          $ref: '#/components/schemas/ModelArtifactCreate'
+        notes:
+          type: string
+          maxLength: 4000
+      additionalProperties: false
+    PolicyVersionCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/PolicyVersionSpec'
+      additionalProperties: false
+    PolicyVersion:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          type: object
+          required:
+          - policy_id
+          - source
+          - model_artifact_id
+          - notes
+          properties:
+            policy_id:
+              $ref: '#/components/schemas/PolicyId'
+            source:
+              $ref: '#/components/schemas/PolicySource'
+            model_artifact_id:
+              $ref: '#/components/schemas/ModelArtifactId'
+            notes:
+              type: string
+          additionalProperties: false
+        status:
+          type: object
+          readOnly: true
+          required:
+          - number
+          - name
+          - artifact_digest
+          - adapter
+          - signed
+          - running_robot_ids
+          properties:
+            number:
+              type: integer
+              minimum: 1
+            name:
+              type: string
+              description: e.g. `pick v3`.
+            artifact_digest:
+              $ref: '#/components/schemas/Digest'
+            adapter:
+              type:
+              - string
+              - 'null'
+            signed:
+              type: boolean
+            running_robot_ids:
+              type: array
+              items:
+                $ref: '#/components/schemas/RobotId'
+          additionalProperties: false
+      additionalProperties: false
+    PolicyVersionPage:
+      type: object
+      description: A page of policy versions, newest first.
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyVersion'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    RolloutStateFilter:
+      enum:
+      - active
+      - checking
+      - preparing
+      - shadow_testing
+      - awaiting_approval
+      - switching
+      - live
+      - stopped
+      - cancelled
+    RolloutSpec:
+      type: object
+      required:
+      - robot_ids
+      properties:
+        kind:
+          enum:
+          - deploy
+          - try
+          - rollback
+          default: deploy
+        robot_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotId'
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+        policy_version_id:
+          oneOf:
+          - $ref: '#/components/schemas/PolicyVersionId'
+          - type: 'null'
+          description: Required for a deploy or try; absent for a rollback.
+        shadow_s:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 604800
+          description: 'Seconds the new version runs beside the current one before approval; 0 skips it. Default:
+            600 on production sites when robots already run something, otherwise none.'
+        note:
+          type: string
+          maxLength: 2000
+      additionalProperties: false
+    RolloutCreate:
+      type: object
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/RolloutSpec'
+      additionalProperties: false
+    RolloutStep:
+      type: object
+      required:
+      - name
+      - state
+      - summary
+      properties:
+        name:
+          enum:
+          - check
+          - prepare
+          - shadow
+          - approve
+          - switch
+        state:
+          enum:
+          - pending
+          - running
+          - passed
+          - skipped
+          - failed
+        summary:
+          type: string
+          description: What the step found or is waiting for.
+        started_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        finished_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+      additionalProperties: false
+    Rollout:
+      type: object
+      description: One change to what some robots run (design §29.4).
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/RolloutSpec'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - state
+          - name
+          - site_id
+          - deployment_id
+          - steps
+          - message
+          properties:
+            state:
+              enum:
+              - checking
+              - preparing
+              - shadow_testing
+              - awaiting_approval
+              - switching
+              - live
+              - stopped
+              - cancelled
+            name:
+              type: string
+              description: The version, e.g. `pick v4`.
+            site_id:
+              $ref: '#/components/schemas/SiteId'
+            deployment_id:
+              $ref: '#/components/schemas/DeploymentId'
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/RolloutStep'
+            reason:
+              oneOf:
+              - $ref: '#/components/schemas/ReasonCode'
+              - type: 'null'
+            message:
+              type: string
+            revision_id:
+              oneOf:
+              - $ref: '#/components/schemas/RevisionId'
+              - type: 'null'
+            baseline_revision_ids:
+              type: object
+              description: What each robot ran when the rollout started.
+              additionalProperties:
+                oneOf:
+                - $ref: '#/components/schemas/RevisionId'
+                - type: 'null'
+            evaluation_id:
+              oneOf:
+              - $ref: '#/components/schemas/EvaluationId'
+              - type: 'null'
+            approved_by:
+              type:
+              - string
+              - 'null'
+            finished_at:
+              oneOf:
+              - $ref: '#/components/schemas/Timestamp'
+              - type: 'null'
+          additionalProperties: false
+      additionalProperties: false
+    RolloutPage:
+      type: object
+      description: A page of rollouts, newest first.
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rollout'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Activity:
+      type: object
+      description: Something that happened, for a person to read.
+      required:
+      - cursor
+      - occurred_at
+      - summary
+      - level
+      - resource
+      properties:
+        cursor:
+          type: string
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        summary:
+          type: string
+        level:
+          enum:
+          - info
+          - warning
+          - error
+        resource:
+          type: string
+          description: What it is about.
+        site_id:
+          type:
+          - string
+          - 'null'
+        robot_id:
+          type:
+          - string
+          - 'null'
+        rollout_id:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+    ActivityPage:
+      type: object
+      description: A page of activity, newest first.
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    PublisherKeyCreate:
+      type: object
+      required:
+      - public_key
+      - display_name
+      properties:
+        public_key:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Raw Ed25519 public key, hex.
+        display_name:
+          $ref: '#/components/schemas/DisplayName'
+      additionalProperties: false
+    PublisherKey:
+      type: object
+      required:
+      - metadata
+      - spec
+      - status
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        spec:
+          $ref: '#/components/schemas/PublisherKeyCreate'
+        status:
+          type: object
+          readOnly: true
+          required:
+          - key_id
+          properties:
+            key_id:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    PublisherKeyPage:
+      type: object
+      description: A page of publisher keys.
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublisherKey'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    LoginSessionCreate:
+      type: object
+      required:
+      - client_name
+      properties:
+        client_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: What is signing in, e.g. `neura CLI on ada-laptop`.
+      additionalProperties: false
+    LoginSession:
+      type: object
+      required:
+      - id
+      - user_code
+      - verification_url
+      - secret
+      - expires_at
+      - interval_s
+      properties:
+        id:
+          $ref: '#/components/schemas/LoginSessionId'
+        user_code:
+          type: string
+          pattern: ^[A-Z0-9]{4}-[A-Z0-9]{4}$
+        verification_url:
+          type: string
+        secret:
+          type: string
+          description: Only the CLI holds it; never shown.
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        interval_s:
+          type: integer
+          minimum: 1
+      additionalProperties: false
+    LoginTokenRequest:
+      type: object
+      required:
+      - secret
+      properties:
+        secret:
+          type: string
+          minLength: 16
+          maxLength: 256
+      additionalProperties: false
+    LoginToken:
+      type: object
+      required:
+      - token
+      - organization_id
+      - scopes
+      - expires_at
+      properties:
+        token:
+          type: string
+        organization_id:
+          $ref: '#/components/schemas/OrganizationId'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiTokenScope'
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+      additionalProperties: false
+    LoginApprovalCreate:
+      type: object
+      required:
+      - user_code
+      properties:
+        user_code:
+          type: string
+          pattern: ^[A-Z0-9]{4}-?[A-Z0-9]{4}$
+        organization_id:
+          $ref: '#/components/schemas/OrganizationId'
+      additionalProperties: false
+    LoginApproval:
+      type: object
+      required:
+      - client_name
+      - organization_id
+      - scopes
+      properties:
+        client_name:
+          type: string
+        organization_id:
+          $ref: '#/components/schemas/OrganizationId'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiTokenScope'
       additionalProperties: false

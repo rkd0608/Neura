@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "capture", "evaluation", "training", "api"]
+Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "capture", "evaluation", "training", "rollout", "api"]
 Severity = Literal["info", "warning", "error", "fatal"]
 
 
@@ -119,6 +119,14 @@ class ReasonCode(StrEnum):
     EVALUATION_REPORT_INVALID = "EVALUATION_REPORT_INVALID"
     TRAINING_INVALID = "TRAINING_INVALID"
     TRAINING_RESULT_REJECTED = "TRAINING_RESULT_REJECTED"
+    ROLLOUT_ROBOT_TYPES_DIFFER = "ROLLOUT_ROBOT_TYPES_DIFFER"
+    ROLLOUT_TIMING_UNFIT = "ROLLOUT_TIMING_UNFIT"
+    ROLLOUT_PREPARE_FAILED = "ROLLOUT_PREPARE_FAILED"
+    ROLLOUT_SHADOW_FAILED = "ROLLOUT_SHADOW_FAILED"
+    ROLLOUT_SHADOW_INFERIOR = "ROLLOUT_SHADOW_INFERIOR"
+    ROLLOUT_SWITCH_FAILED = "ROLLOUT_SWITCH_FAILED"
+    ROLLOUT_CANCELLED = "ROLLOUT_CANCELLED"
+    API_LOGIN_PENDING = "API_LOGIN_PENDING"
     API_UNAUTHENTICATED = "API_UNAUTHENTICATED"
     API_FORBIDDEN = "API_FORBIDDEN"
     API_NOT_FOUND = "API_NOT_FOUND"
@@ -874,6 +882,63 @@ REASON_CODES: dict[ReasonCode, ReasonCodeInfo] = {
         severity="error",
         retryable=False,
         message="The site's trained model did not verify against its base, its dataset or its signature; nothing was registered.",
+    ),
+    ReasonCode.ROLLOUT_ROBOT_TYPES_DIFFER: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_ROBOT_TYPES_DIFFER,
+        area="rollout",
+        severity="error",
+        retryable=False,
+        message='The robots are of different types; a rollout serves one type of robot.',
+    ),
+    ReasonCode.ROLLOUT_TIMING_UNFIT: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_TIMING_UNFIT,
+        area="rollout",
+        severity="error",
+        retryable=False,
+        message='No timing limits let these robots run this version on this GPU without starving.',
+    ),
+    ReasonCode.ROLLOUT_PREPARE_FAILED: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_PREPARE_FAILED,
+        area="rollout",
+        severity="error",
+        retryable=True,
+        message='The site could not prepare the version.',
+    ),
+    ReasonCode.ROLLOUT_SHADOW_FAILED: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_SHADOW_FAILED,
+        area="rollout",
+        severity="error",
+        retryable=True,
+        message='The shadow test could not run to completion.',
+    ),
+    ReasonCode.ROLLOUT_SHADOW_INFERIOR: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_SHADOW_INFERIOR,
+        area="rollout",
+        severity="error",
+        retryable=False,
+        message='The shadow test found the version too far from the one the robots run.',
+    ),
+    ReasonCode.ROLLOUT_SWITCH_FAILED: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_SWITCH_FAILED,
+        area="rollout",
+        severity="error",
+        retryable=True,
+        message='The robots did not switch to the version.',
+    ),
+    ReasonCode.ROLLOUT_CANCELLED: ReasonCodeInfo(
+        code=ReasonCode.ROLLOUT_CANCELLED,
+        area="rollout",
+        severity="warning",
+        retryable=False,
+        message='The rollout was cancelled before the robots switched.',
+    ),
+    ReasonCode.API_LOGIN_PENDING: ReasonCodeInfo(
+        code=ReasonCode.API_LOGIN_PENDING,
+        area="api",
+        severity="info",
+        retryable=True,
+        message='Nobody has approved this sign-in in the browser yet.',
+        http_status=409,
     ),
     ReasonCode.API_UNAUTHENTICATED: ReasonCodeInfo(
         code=ReasonCode.API_UNAUTHENTICATED,

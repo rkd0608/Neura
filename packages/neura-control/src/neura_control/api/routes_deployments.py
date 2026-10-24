@@ -52,7 +52,7 @@ from neura_control.db.models import (
 from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
-from neura_control.services import release_gates
+from neura_control.services import operations, release_gates
 from neura_control.services.revisions import report_json, revision_digest
 from neura_control.services.site_reports import update_operation
 
@@ -359,36 +359,16 @@ async def start_operation(
     target: str,
     command: dict[str, Any],
 ) -> Operation:
-    operation = Operation(
-        id=new_id(Kind.OPERATION),
-        project_id=project.id,
+    return await operations.start(
+        session,
+        project,
+        ctx.principal,
+        request_id=ctx.request_id,
         site_id=site_id,
         kind=kind,
         target=target,
-        state="Pending",
-        created_by=ctx.principal.subject,
+        command=command,
     )
-    session.add(operation)
-    await session.flush()
-    command_id = new_id(Kind.OPERATION).replace("op_", "cmd_", 1)
-    session.add(
-        SiteCommand(
-            site_id=site_id,
-            command_id=command_id,
-            operation_id=operation.id,
-            command={**command, "command_id": command_id, "operation_id": operation.id},
-        )
-    )
-    await ctx.record(
-        session,
-        project,
-        f"operation.{kind}",
-        operation.id,
-        version=1,
-        event_type="operation.updated",
-    )
-    await session.refresh(operation)
-    return operation
 
 
 def accepted(operation: Operation) -> ApiResult:

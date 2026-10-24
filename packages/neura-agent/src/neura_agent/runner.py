@@ -131,6 +131,8 @@ class AgentRuntime:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks.clear()
+        if self.core is not None:
+            await self.core.robots.stop()
         await self.gateway.stop()
         if self.core is not None:
             await self.core.capture.stop()
@@ -160,6 +162,7 @@ class AgentRuntime:
             restart=self._restart,
         )
         self.core.recover()
+        self.core.refresh_robots()
         await self.core.reconcile()  # resume serving committed state immediately, cloud or not
         self.connection = ControlConnection(
             self.core, key, self.facts, max_backoff_s=self.settings.reconnect_max_backoff_s
@@ -169,7 +172,14 @@ class AgentRuntime:
             self._periodic(self.settings.status_interval_s, self._report_status),
             self._periodic(1.0, self._watch),
             self._periodic(600.0, self.core.capture.retention),
+            self._periodic(10.0, self._robots),
         )
+
+    async def _robots(self) -> None:
+        """Look for robots again; run the ones that became ready (design §29.5)."""
+        assert self.core is not None
+        if self.core.refresh_robots():
+            await self.core.reconcile()
 
     async def _periodic(self, interval: float, work: Callable[[], object]) -> None:
         while not self._stop.is_set():
@@ -187,6 +197,7 @@ class AgentRuntime:
         if self.upgrader is not None:
             self.upgrader.check()
         await self.core.enforce_authorization()
+        await self.core.robots.tick()
         self.last_gateway_status = await self.gateway.status()
         await self.core.watch_activations(self.last_gateway_status)
 

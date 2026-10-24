@@ -17,7 +17,8 @@ SPEC: dict[str, Any] = yaml.safe_load(SPEC_PATH.read_text(encoding="utf-8"))
 METHODS = {"get", "post", "put", "patch", "delete"}
 # Read-only computations exposed as POST because they take a body; they must say so.
 READ_ONLY_POSTS = {"checkCompatibility", "queryMetrics"}
-UNAUTHENTICATED = {"getMeta"}
+# Public: the service description, and a CLI signing in before it has any credential.
+UNAUTHENTICATED = {"getMeta", "createLoginSession", "exchangeLoginSession"}
 
 
 def _resolve(node: Any) -> Any:

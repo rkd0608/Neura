@@ -430,6 +430,26 @@ What the agent observed about its server (design §17.2 preflight).
 | `operation` | `OperationReport` | 5 | (one of `body`) |
 | `facts` | `ServerFacts` | 6 | (one of `body`) |
 | `certificate_request` | `CertificateRequest` | 7 | Renew the TLS client certificate before it expires: a CSR for a new key. (one of `body`) |
+| `inventory` | `RobotInventory` | 8 | The robots this server found or was configured with (design §29.5). Sent on connect and whenever it changes; the control plane registers the ones it does not know yet. (one of `body`) |
+
+### Message `RobotInventory`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `robots` | `repeated DiscoveredRobot` | 1 |  |
+
+### Message `DiscoveredRobot`
+
+| Field | Type | Number | Description |
+| --- | --- | --- | --- |
+| `local_name` | `string` | 1 | The robot's name at this server (unique there), e.g. "arm-1" or "sim-1". |
+| `driver` | `string` | 2 | How the agent drives it: "simulated", "so101", or a customer driver's name. |
+| `robot_profile_json` | `string` | 3 | Its robot profile (a RobotProfile document, JSON): joints, units, ranges, cameras. |
+| `port` | `string` | 4 | Where it is attached: a serial port (a stable /dev/serial/by-id path) or a network address. |
+| `serial` | `string` | 5 | A hardware serial number, when the robot reports one. |
+| `simulated` | `bool` | 6 |  |
+| `state` | `string` | 7 | "ready": the agent can run it once it is part of a deployment. "needs_setup": found, but something must be configured first (message says what). |
+| `message` | `string` | 8 |  |
 
 ### Message `CertificateRequest`
 

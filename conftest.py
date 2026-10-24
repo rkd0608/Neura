@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ import pytest
 import yaml
 
 EXAMPLES = Path(__file__).resolve().parent / "examples" / "contracts"
+# The agent's tests share the core harness in test_core (imported by test_robots).
+sys.path.insert(0, str(Path(__file__).resolve().parent / "packages" / "neura-agent" / "tests"))
 
 
 def example_data(name: str) -> dict[str, Any]:

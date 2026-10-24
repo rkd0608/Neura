@@ -331,6 +331,8 @@ class EnrollmentToken(TypedDict):
     secret: str
     expires_at: Timestamp
     install_command: str
+    join_command: NotRequired[str]
+    enroll_command: NotRequired[str]
 
 
 class EnrollmentTokenCreate(TypedDict):
@@ -358,6 +360,11 @@ class Event(TypedDict):
     resource: str
     resource_version: NotRequired[str]
     occurred_at: Timestamp
+    summary: NotRequired[str | None]
+    level: NotRequired[Literal["info", "warning", "error", None]]
+    site_id: NotRequired[str | None]
+    robot_id: NotRequired[str | None]
+    rollout_id: NotRequired[str | None]
 
 
 class ExecutionProfile(TypedDict):
@@ -685,6 +692,11 @@ class RobotStatus(TypedDict):
     active_revision_id: NotRequired[RevisionId | None]
     lease_holder_session_id: NotRequired[SessionId | None]
     task_epoch: NotRequired[int | None]
+    discovered: NotRequired[bool]
+    hardware: NotRequired[dict[str, Any] | None]
+    policy_version_id: NotRequired[PolicyVersionId | None]
+    policy_name: NotRequired[str | None]
+    policy_version: NotRequired[int | None]
 
 
 class Robot(TypedDict):
@@ -932,6 +944,7 @@ class SiteSpec(TypedDict):
     display_name: DisplayName
     labels: NotRequired[Labels]
     offline_authorization_hours: int
+    kind: NotRequired[Literal["bench", "production"]]
 
 
 class SiteUpdateSpec(TypedDict):
@@ -1144,3 +1157,253 @@ class ReleaseGates(TypedDict):
     """
 
     evaluations: NotRequired[list[Literal["simulation", "replay", "shadow"]]]
+
+
+type PolicyId = str
+
+
+type PolicyVersionId = str
+
+
+type RolloutId = str
+
+
+type PublisherKeyId = str
+
+
+type LoginSessionId = str
+
+
+class Workspace(TypedDict):
+    organization_id: OrganizationId
+    display_name: str
+    project_id: ProjectId
+    permissions: list[Literal["admin", "deploy", "read"]]
+
+
+class PolicySpec(TypedDict):
+    name: Name
+    display_name: NotRequired[DisplayName]
+    description: NotRequired[str]
+    labels: NotRequired[Labels]
+
+
+class PolicyCreate(TypedDict):
+    spec: PolicySpec
+
+
+class PolicyUpdate(TypedDict):
+    """JSON merge patch of the policy's spec; only display_name, description and labels change."""
+
+    spec: dict[str, Any]
+
+
+class PolicyStatus(TypedDict):
+    versions: int
+    latest_version: int | None
+
+
+class Policy(TypedDict):
+    """A trained model, whatever built it, with numbered versions (design §29.1)."""
+
+    metadata: Metadata
+    spec: PolicySpec
+    status: PolicyStatus
+
+
+class PolicyPage(TypedDict):
+    """A page of policies."""
+
+    items: list[Policy]
+    page: PageInfo
+
+
+class PolicySource(TypedDict):
+    """
+    How the version was built: a LeRobot checkpoint, a Python class with `@neura.policy`, or
+    a container answering Neura's policy interface.
+    """
+
+    kind: Literal["lerobot", "python", "container"]
+    reference: NotRequired[str]
+
+
+class PolicyVersionSpec(TypedDict):
+    source: PolicySource
+    model_artifact: ModelArtifactCreate
+    notes: NotRequired[str]
+
+
+class PolicyVersionCreate(TypedDict):
+    spec: PolicyVersionSpec
+
+
+class PolicyVersionStatus(TypedDict):
+    number: int
+    name: str
+    artifact_digest: Digest
+    adapter: str | None
+    signed: bool
+    running_robot_ids: list[RobotId]
+
+
+class PolicyVersion(TypedDict):
+    metadata: Metadata
+    spec: PolicyVersionSpec
+    status: PolicyVersionStatus
+
+
+class PolicyVersionPage(TypedDict):
+    """A page of policy versions, newest first."""
+
+    items: list[PolicyVersion]
+    page: PageInfo
+
+
+type RolloutStateFilter = Literal[
+    "active",
+    "checking",
+    "preparing",
+    "shadow_testing",
+    "awaiting_approval",
+    "switching",
+    "live",
+    "stopped",
+    "cancelled",
+]
+
+
+class RolloutSpec(TypedDict):
+    kind: NotRequired[Literal["deploy", "try", "rollback"]]
+    robot_ids: list[RobotId]
+    policy_version_id: NotRequired[PolicyVersionId | None]
+    shadow_s: NotRequired[float | None]
+    note: NotRequired[str]
+
+
+class RolloutCreate(TypedDict):
+    spec: RolloutSpec
+
+
+class RolloutStep(TypedDict):
+    name: Literal["check", "prepare", "shadow", "approve", "switch"]
+    state: Literal["pending", "running", "passed", "skipped", "failed"]
+    summary: str
+    started_at: NotRequired[Timestamp | None]
+    finished_at: NotRequired[Timestamp | None]
+
+
+class RolloutStatus(TypedDict):
+    state: Literal[
+        "checking",
+        "preparing",
+        "shadow_testing",
+        "awaiting_approval",
+        "switching",
+        "live",
+        "stopped",
+        "cancelled",
+    ]
+    name: str
+    site_id: SiteId
+    deployment_id: DeploymentId
+    steps: list[RolloutStep]
+    reason: NotRequired[ReasonCode | None]
+    message: str
+    revision_id: NotRequired[RevisionId | None]
+    baseline_revision_ids: NotRequired[dict[str, RevisionId | None]]
+    evaluation_id: NotRequired[EvaluationId | None]
+    approved_by: NotRequired[str | None]
+    finished_at: NotRequired[Timestamp | None]
+
+
+class Rollout(TypedDict):
+    """One change to what some robots run (design §29.4)."""
+
+    metadata: Metadata
+    spec: RolloutSpec
+    status: RolloutStatus
+
+
+class RolloutPage(TypedDict):
+    """A page of rollouts, newest first."""
+
+    items: list[Rollout]
+    page: PageInfo
+
+
+class Activity(TypedDict):
+    """Something that happened, for a person to read."""
+
+    cursor: str
+    occurred_at: Timestamp
+    summary: str
+    level: Literal["info", "warning", "error"]
+    resource: str
+    site_id: NotRequired[str | None]
+    robot_id: NotRequired[str | None]
+    rollout_id: NotRequired[str | None]
+
+
+class ActivityPage(TypedDict):
+    """A page of activity, newest first."""
+
+    items: list[Activity]
+    page: PageInfo
+
+
+class PublisherKeyCreate(TypedDict):
+    public_key: str
+    display_name: DisplayName
+
+
+class PublisherKeyStatus(TypedDict):
+    key_id: str
+
+
+class PublisherKey(TypedDict):
+    metadata: Metadata
+    spec: PublisherKeyCreate
+    status: PublisherKeyStatus
+
+
+class PublisherKeyPage(TypedDict):
+    """A page of publisher keys."""
+
+    items: list[PublisherKey]
+    page: PageInfo
+
+
+class LoginSessionCreate(TypedDict):
+    client_name: str
+
+
+class LoginSession(TypedDict):
+    id: LoginSessionId
+    user_code: str
+    verification_url: str
+    secret: str
+    expires_at: Timestamp
+    interval_s: int
+
+
+class LoginTokenRequest(TypedDict):
+    secret: str
+
+
+class LoginToken(TypedDict):
+    token: str
+    organization_id: OrganizationId
+    scopes: list[ApiTokenScope]
+    expires_at: Timestamp
+
+
+class LoginApprovalCreate(TypedDict):
+    user_code: str
+    organization_id: NotRequired[OrganizationId]
+
+
+class LoginApproval(TypedDict):
+    client_name: str
+    organization_id: OrganizationId
+    scopes: list[ApiTokenScope]

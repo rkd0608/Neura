@@ -153,7 +153,7 @@ def main() -> int:
         )["metadata"]["id"]
         for name in names
     ]
-    install = neura.create_enrollment_token(site, body={"ttl_minutes": 30})["install_command"]
+    install = neura.create_enrollment_token(site, body={"ttl_minutes": 30})["enroll_command"]
 
     step("./site.sh connect: the site's server, enrolled; the robot cell")
     site_sh("connect", install)

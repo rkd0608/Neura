@@ -77,6 +77,14 @@ Schema version 1.
 | `operation.reason.message` | no | Human-readable detail (free text). |
 | `operation.message` | no | Progress or failure detail (free text). |
 | `operation.result_json` | yes | The operation's result; only the keys under `results` below. |
+| `inventory.robots.local_name` | yes | A robot's name at the server. |
+| `inventory.robots.driver` | yes | How the agent drives it (simulated, so101, or a driver's name). |
+| `inventory.robots.robot_profile_json` | yes | Its robot profile document: joints, units, ranges, cameras. No robot state or images. |
+| `inventory.robots.port` | no | Where it is attached (a serial port path or a network address). |
+| `inventory.robots.serial` | no | Its hardware serial number, when it reports one. |
+| `inventory.robots.simulated` | yes | Whether it is a simulated robot. |
+| `inventory.robots.state` | yes | ready, or needs_setup. |
+| `inventory.robots.message` | no | What needs setting up (free text). |
 | `facts.hostname` | no | The server's host name. |
 | `facts.driver_version` | yes | NVIDIA driver version. |
 | `facts.cuda_version` | yes | CUDA version. |

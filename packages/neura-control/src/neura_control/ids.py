@@ -34,6 +34,11 @@ class Kind(StrEnum):
     ENROLLMENT_TOKEN = "enr"
     EVALUATION = "evl"
     TRAINING_JOB = "trn"
+    POLICY = "pol"
+    POLICY_VERSION = "pv"
+    ROLLOUT = "ro"
+    PUBLISHER_KEY = "pub"
+    LOGIN_SESSION = "lgn"
 
 
 _ID_RE = re.compile(rf"^([a-z]+)_({ULID_PATTERN})$")

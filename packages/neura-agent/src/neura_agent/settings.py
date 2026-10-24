@@ -71,6 +71,17 @@ class AgentSettings(BaseSettings):
     control_plane_insecure: bool = False
 
     # --- boundaries (design §17.4) ---
+    # This server is a test bench: it approves activations itself when the cloud also created
+    # its site as a bench (design §29.4). Never on a server that drives robots near people.
+    bench: bool = False
+
+    # --- robots (design §29.5) ---
+    # Simulated SO-101 arms this server runs (sim-1, sim-2, ...), for benches and tests.
+    simulated_robots: int = Field(default=0, ge=0, le=64)
+    # The robots this server drives: names, drivers, ports, cameras (neura_agent.robots).
+    robots_file: Path | None = None
+    # Report SO-101 bus adapters that are plugged in but not configured yet.
+    scan_serial_ports: bool = True
     allowed_operations: list[RemoteOperation] = Field(
         default_factory=lambda: list(DEFAULT_OPERATIONS)
     )

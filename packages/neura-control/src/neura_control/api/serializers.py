@@ -82,6 +82,7 @@ def site(row: models.Site) -> dict[str, Any]:
             "display_name": row.display_name,
             "labels": row.labels,
             "offline_authorization_hours": row.offline_authorization_hours,
+            "kind": row.kind,
         },
         "status": status,
     }
@@ -117,6 +118,11 @@ def robot(row: models.Robot) -> dict[str, Any]:
         active_revision_id=row.observed.get("active_revision_id"),
         lease_holder_session_id=row.observed.get("lease_holder_session_id"),
         task_epoch=row.observed.get("task_epoch"),
+        discovered=row.source == "discovered",
+        hardware=row.hardware or None,
+        policy_version_id=row.observed.get("policy_version_id"),
+        policy_name=row.observed.get("policy_name"),
+        policy_version=row.observed.get("policy_version"),
     )
     return {
         "metadata": metadata(row, project_id=row.project_id),
@@ -359,4 +365,101 @@ def support_grant(row: models.SupportGrant) -> dict[str, Any]:
         "justification": row.justification,
         "expires_at": iso(row.expires_at),
         "state": state,
+    }
+
+
+def policy(row: models.Policy, *, versions: int, latest: int | None) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, project_id=row.project_id),
+        "spec": {
+            "name": row.name,
+            "display_name": row.display_name,
+            "description": row.description,
+            "labels": row.labels,
+        },
+        "status": {"versions": versions, "latest_version": latest},
+    }
+
+
+def policy_version(
+    row: models.PolicyVersion,
+    *,
+    policy_name: str,
+    artifact: models.ContractDocument,
+    running_robot_ids: list[str],
+) -> dict[str, Any]:
+    spec = artifact.document.get("spec", {})
+    return {
+        "metadata": metadata(row, project_id=row.project_id),
+        "spec": {
+            "policy_id": row.policy_id,
+            "source": row.source,
+            "model_artifact_id": row.model_artifact_id,
+            "notes": row.notes,
+        },
+        "status": {
+            "number": row.number,
+            "name": f"{policy_name} v{row.number}",
+            "artifact_digest": artifact.digest,
+            "adapter": spec.get("adapter", {}).get("name"),
+            "signed": bool(artifact.signatures),
+            "running_robot_ids": running_robot_ids,
+        },
+    }
+
+
+def rollout(row: models.Rollout, *, name: str) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, project_id=row.project_id),
+        "spec": {
+            "kind": row.kind,
+            "robot_ids": row.robot_ids,
+            "policy_version_id": row.policy_version_id,
+            "shadow_s": row.options.get("shadow_s"),
+            "note": row.options.get("note", ""),
+        },
+        "status": {
+            "state": row.state,
+            "name": name,
+            "site_id": row.site_id,
+            "deployment_id": row.deployment_id,
+            "steps": [
+                {
+                    "name": step["name"],
+                    "state": step["state"],
+                    "summary": step.get("summary", ""),
+                    "started_at": step.get("started_at"),
+                    "finished_at": step.get("finished_at"),
+                }
+                for step in row.steps
+            ],
+            "reason": row.reason,
+            "message": row.message,
+            "revision_id": row.revision_id,
+            "baseline_revision_ids": row.baseline_revision_ids,
+            "evaluation_id": row.evaluation_id,
+            "approved_by": row.approved_by,
+            "finished_at": iso(row.finished_at) if row.finished_at else None,
+        },
+    }
+
+
+def publisher_key(row: models.PublisherKey) -> dict[str, Any]:
+    return {
+        "metadata": metadata(row, organization_id=row.organization_id),
+        "spec": {"display_name": row.display_name, "public_key": row.public_key},
+        "status": {"key_id": row.key_id},
+    }
+
+
+def activity(row: models.Event) -> dict[str, Any]:
+    return {
+        "cursor": str(row.cursor),
+        "occurred_at": iso(row.occurred_at),
+        "summary": row.summary or "",
+        "level": row.level or "info",
+        "resource": row.resource,
+        "site_id": row.site_id,
+        "robot_id": row.robot_id,
+        "rollout_id": row.rollout_id,
     }

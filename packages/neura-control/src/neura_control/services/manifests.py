@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import canonical_json, content_digest
 from neura_contracts.site_protocol import MANIFEST_API_VERSION
+from neura_control.db.locks import SITE_ROW
 from neura_control.db.models import ContractDocument, Deployment, Revision, Robot, Site
 from neura_control.security.signing import ManifestSigner
 
@@ -131,7 +132,7 @@ async def current_manifest(
 ) -> SignedManifest:
     """Build the site's manifest, bumping its generation if the content changed. The caller's
     transaction persists the new generation."""
-    site = await session.get(Site, site_id, with_for_update=True)
+    site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         raise LookupError(site_id)
     content = await manifest_content(session, site)

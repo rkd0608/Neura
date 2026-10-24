@@ -313,6 +313,7 @@ class So101Arm:
             with contextlib.suppress(Exception):
                 if hold:
                     self._hold()
+                self.lock.release_port()  # before the port closes, or the flag stays behind
                 self.robot.bus.disconnect(not hold)
         self.lock.release()
 

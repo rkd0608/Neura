@@ -335,7 +335,7 @@ async def create_enrollment_token(
         flags = "".join(f" --trust {key}" for key in keys)
         if site.kind == "bench":
             flags += " --bench"
-        public = settings.public_url.rstrip("/")
+        enroll = f"neura-agent enroll --control-plane {endpoint} --token {token}"
         return ApiResult(
             201,
             {
@@ -343,18 +343,16 @@ async def create_enrollment_token(
                 "site_id": site.id,
                 "secret": token,
                 "expires_at": iso(expires_at),
-                # A server: the signed agent, installed as a service. Run by its administrator.
-                "install_command": (
-                    f"curl -fsSL {public}/install.sh | sudo sh -s -- --control-plane "
-                    f"{endpoint} --token {token}{flags}"
-                ),
+                # A server with the signed agent installed (deploy/install/install.sh), run by
+                # its administrator.
+                "install_command": enroll,
                 # A workstation or a test bench: the agent for the current user, in the
                 # current Python environment (neura site join).
                 "join_command": (
                     f"neura site join {site.name} --control-plane {endpoint} --token {token}{flags}"
                 ),
                 # The agent alone, for scripts that install it themselves.
-                "enroll_command": f"neura-agent enroll --control-plane {endpoint} --token {token}",
+                "enroll_command": enroll,
             },
             {"Location": f"/v1/sites/{site.id}"},
         )

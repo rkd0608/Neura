@@ -4629,7 +4629,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         install_command:
           type: string
-          description: Installs the signed agent as a service on a server and enrolls it (run by its
+          description: Enrolls a server where the signed agent is installed (run by its
             administrator).
         join_command:
           type: string

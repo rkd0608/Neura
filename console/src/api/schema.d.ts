@@ -1478,7 +1478,7 @@ export interface components {
       site_id: components["schemas"]["SiteId"];
       secret: string;
       expires_at: components["schemas"]["Timestamp"];
-      /** @description Installs the signed agent as a service on a server and enrolls it (run by its administrator). */
+      /** @description Enrolls a server where the signed agent is installed (run by its administrator). */
       install_command: string;
       /** @description Enrolls this machine and runs the agent for the current user, in the current Python environment (a workstation or test bench). */
       join_command?: string;

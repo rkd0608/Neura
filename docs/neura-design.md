@@ -2012,6 +2012,151 @@ hub, or a GPU runner, to show a policy improving).
 
 ---
 
+## 29. The product: sites, robots, policies, rollouts
+
+### 29.1 Decision and scope
+
+Decision (October 23, 2026): Neura is a deployment company. The wedge is that policies are **safe to
+run and safe to change** on real robots. The product makes that as simple as Modal made running code
+on GPUs. Everything earlier (§1–§28) stays underneath. What changes is what a person sees:
+
+- **Four nouns.** A **site** is where robots are, either a **bench** for trying things or
+  **production**. A **robot** is found by the site's server, not typed in. A **policy** has numbered
+  **versions**. A **rollout** changes what robots run (deploy, try, rollback). Revisions, execution
+  profiles, operations and activation requests still exist, but are made and driven by Neura.
+- **One command line, one console, one API** over the same objects (`neura`, §29.2; the console's
+  four pages; `/v1/workspace`, `/v1/projects/{id}/policies|rollouts|activity`).
+- **Every kind of customer.** Individuals sign up on their own and get a workspace. Companies bring
+  SSO, add people, and keep the cloud to records only (§18). One declaration model covers LeRobot
+  checkpoints, a team's own Python models and proprietary stacks in containers (§29.3).
+
+The invariant that does not change: **no cloud credential and no role can approve an activation.**
+Only the site can (§17.4). A bench may approve its own activations only if both sides say it is a
+bench: its server was installed as one (`NEURA_AGENT_BENCH=true`) and its site is a bench in the
+signed manifest. Production sites wait for a person at the site (`neura approve`).
+
+### 29.2 The `neura` command
+
+```
+neura login                                  browser sign-in (device flow), or a token on stdin
+neura site create lab --bench                a site
+neura site join lab --simulate 1             this machine becomes its server
+neura robots                                 what the sites found, and what each runs
+neura policy push ./ckpt --name pick         a version: checked, signed, its files to the sites
+neura check ./ckpt --run                     the same checks without pushing, timed here
+neura try pick --on sim-1                    on a bench, right away
+neura deploy pick --to arm-1,arm-2           check, prepare, shadow, approve, switch
+neura approve                                at the site: what waits to switch
+neura status | logs | rollback | cancel | doctor
+```
+
+The rules that keep it clean:
+- One header saying what is being done, and one line per step with its mark and reason.
+- A failure says what happened, then why and what to type next.
+- Colour only marks state, and never appears with `NO_COLOR` or off a terminal.
+- `--json` anywhere prints the API's objects for scripts.
+
+Sign-in follows RFC 8628. The CLI shows a code, the person approves it in the console, and the CLI
+exchanges its secret for a 30-day token with that person's highest permission. The CLI never sees
+the person's credentials.
+
+`neura site join` makes this machine a development bench. The agent runs as the current user
+(`~/.local/share/neura/sites/<site>/`): enrolled with a single-use token, started detached, with
+its own operator credential. It listens on loopback only, runs policy workers as processes, and
+trusts this machine's publisher key. Production sites run the agent as a system service, installed
+with `deploy/install/install.sh`. A one-line installer served by the control plane is not built
+yet.
+
+### 29.3 Policy sources, one declaration
+
+A `PolicyDeclaration` says what a policy reads and returns:
+- adapter, chunk length and executed actions;
+- the cameras it reads, at which size;
+- state, language;
+- deterministic, stateful, batchable.
+
+Three sources fill it in:
+
+- **LeRobot**: a checkpoint's `config.json` (ACT, Diffusion, SmolVLA, pi0, pi0.5).
+- **Python**: `@neura.policy(chunk_length=..., cameras=...)` on a class with `act(observation)`
+  (and optionally `act_batch`, `reset`). The file's directory ships with the version. A generated
+  `neura-policy.json` names the class and its weights; the site's `python` adapter imports it in
+  the worker sandbox.
+- **Container**: an image pinned by digest that answers Neura's policy interface, plus a
+  declaration file.
+
+From the declaration and the robot's profile Neura writes the model artifact: inputs in the robot's
+order and units, outputs as the robot's commands. A policy that does not fit is refused with the
+reason ("the policy reads camera 'top'; arm-1 has front, wrist").
+
+A version is named by its content (`sha-<12 hex>`), so pushing the same files again returns the same
+version. It is signed with the pushing machine's publisher key, which is registered with the
+workspace and put in the install commands. Its files go to the sites this machine serves (a
+directory the agent reads by digest), or sealed to Neura's registry (`--seal-key`). Neura never
+reads them.
+
+### 29.4 Rollouts
+
+A deploy goes through these steps:
+- **check**: does it fit the robots?
+- **prepare**: a provisional revision; the site verifies the weights and times the model.
+- **shadow**: the new version runs beside the current one. By default this lasts 10 minutes on
+  production sites when robots already run something, and is skipped on benches.
+- **approve**: an activation request to the site.
+- **switch**: each robot changes at its next task boundary.
+
+A rollback skips to approve and switch, back to what each robot ran before its last live rollout.
+The driver advances on every operation report and on a periodic sweep. Its states are checking,
+preparing, shadow_testing, awaiting_approval, switching, live, stopped and cancelled.
+
+Timing comes from the site's measurement, never from a guess:
+- `refill = ceil((2·pass + rtt + 20 ms) / period) + 1`
+- `dispatch = max(100 ms, pass + rtt + 20 ms)`
+- `acceptance = max(150 ms, dispatch + 2·pass + rtt + 20 ms)`
+- `timeout = acceptance + 50 ms`
+
+Here `pass` is the p99 at a batch the size of the robot count. Until the site has measured, the
+revision is prepared with the nominal pass time for the policy's type. When that would not fit the
+chunk, it uses the slowest pass that would, so an estimate never refuses a policy; the measurement
+decides. If the measured profile differs, the revision is prepared again.
+
+Rollouts on overlapping robots are refused. Robots are shared by deployment, with subset
+activation.
+
+### 29.5 Robots a site finds
+
+The agent reports the robots it drives (`RobotInventory`):
+- simulated arms (`sim-N`);
+- a robots file (name, driver, port, cameras, or a customer command);
+- plugged-in SO-101 adapters (`/dev/serial/by-id/*1a86*`), reported as needing setup.
+
+The control plane registers their robot profiles and creates the robots. A name that is taken gets
+the site's name as a prefix. A robot that disappears is shown as missing, never deleted. The agent
+issues each robot's credentials and supervises its process, with backoff.
+
+### 29.6 Workspaces
+
+A workspace is an organization and its default project. `GET /v1/workspace` tells a client which
+one it is in. With `self_signup` on (Neura's cloud for individuals), a first SSO sign-in gets its
+own workspace. Off (a company's deployment), only people an admin added get in. Activity names
+people by their verified email and tokens by their name.
+
+Tests:
+- The quickstart runs end to end against a live control plane and a real agent started by the CLI
+  (join, push, try, deploy, rollback, logs, doctor).
+- The browser sign-in.
+- The rollout driver: deploy to live, shadow and rollback, an inferior shadow, a failed prepare,
+  timing that does not fit, overlap and cancel.
+- Robot discovery and self-signup.
+
+Not built yet:
+- the one-line installer;
+- the console's four pages;
+- the `python` and `container` adapters at the site, and stateful policies;
+- a ROS 2 bridge.
+
+---
+
 ## 27. Remaining open items (these need real customer workloads)
 
 - Customer-specific timing envelope, controller interface and validated local fault responses.

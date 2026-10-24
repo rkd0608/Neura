@@ -442,10 +442,10 @@ def test_install_commands_trust_the_workspaces_keys(bench: Fleet) -> None:
         == 200
     )
     token = bench.c.post(f"/v1/sites/{bench.site}/enrollment-tokens", {}).json()
-    assert token["install_command"].startswith("curl -fsSL http://127.0.0.1:8080/install.sh | ")
-    assert f"--trust {public}" in token["install_command"]
-    assert token["install_command"].endswith(" --bench")
+    assert token["install_command"].startswith("neura-agent enroll --control-plane ")
     assert token["join_command"].startswith("neura site join plant-1 --control-plane ")
+    assert f"--trust {public}" in token["join_command"]
+    assert token["join_command"].endswith(" --bench")
     assert token["enroll_command"].startswith("neura-agent enroll --control-plane ")
 
 

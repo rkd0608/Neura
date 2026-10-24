@@ -137,6 +137,7 @@ function NewSiteDialog({
               name: slug(name) || "site",
               display_name: name.trim(),
               offline_authorization_hours: hours,
+              kind: "production",
             },
           },
         }),

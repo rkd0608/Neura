@@ -189,7 +189,7 @@ def _lerobot(reference: str, robot: Mapping[str, Any]) -> Source:
 
 def _from_hub(repository: str) -> Path:
     try:
-        from huggingface_hub import snapshot_download  # type: ignore[import-not-found]
+        from huggingface_hub import snapshot_download
     except ImportError as error:
         raise CliError(
             f"{repository} is not a directory here.",

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import array
+import errno
+import fcntl
 import os
+import sys
 import time
 from collections.abc import Iterator
 from dataclasses import replace
@@ -208,6 +212,39 @@ def test_an_arm_that_does_not_match_its_calibration_is_refused(
 def test_a_camera_missing_from_the_configuration_is_refused(config: So101Config) -> None:
     with pytest.raises(ArmError, match="wrist"):
         So101Arm(replace(config, cameras={"front": CAMERAS["front"]}), _profile()).connect()
+
+
+TIOCGEXCL = 0x80045440  # Linux: _IOR('T', 0x40, int)
+
+
+def _exclusive(port: str) -> bool:
+    """Whether the serial port refuses new opens (TIOCEXCL). Root opens it regardless and can
+    ask; anyone else is refused with EBUSY."""
+    try:
+        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except OSError as error:
+        if error.errno == errno.EBUSY:
+            return True
+        raise
+    try:
+        flag = array.array("i", [0])
+        fcntl.ioctl(fd, TIOCGEXCL, flag)
+        return bool(flag[0])
+    finally:
+        os.close(fd)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="TIOCGEXCL is Linux's")
+def test_closing_lets_the_port_be_opened_again(
+    config: So101Config, emulator: SO101Emulator
+) -> None:
+    arm = So101Arm(config, _profile())
+    arm.connect()
+    assert _exclusive(emulator.port)  # nobody else drives it while Neura does
+    arm.close()
+    # The emulator keeps the terminal open, as a USB adapter's driver may: the flag must be
+    # cleared before the port closes, or nothing could open it again.
+    assert not _exclusive(emulator.port)
 
 
 def test_close_holds_or_releases(config: So101Config, emulator: SO101Emulator) -> None:

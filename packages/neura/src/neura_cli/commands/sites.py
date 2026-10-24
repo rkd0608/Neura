@@ -54,7 +54,11 @@ def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         "name the site; on a machine that is not, use the command the console shows.",
     )
     join.add_argument("name")
-    join.add_argument("--control-plane", help="from the console's join command")
+    join.add_argument(
+        "--control-plane",
+        help="the agent endpoint (host:port): from the console's join command, or to reach "
+        "Neura by another address than the one it advertises",
+    )
     join.add_argument("--token", help="from the console's join command (single use)")
     join.add_argument("--trust", action="append", default=[], help="a publisher key to trust")
     join.add_argument("--bench", action="store_true", help="from the console's join command")
@@ -194,7 +198,9 @@ def run_install_command(args: argparse.Namespace, ctx: Context) -> int:
     token = session.client.create_enrollment_token(site["metadata"]["id"], body={})
     out.data(token)
     out.line()
-    out.line(f"  On the server, as its administrator ({out.s.quiet('works once, for an hour')}):")
+    out.line(
+        f"  On the server, once the agent is installed ({out.s.quiet('works once, for an hour')}):"
+    )
     out.line()
     out.line(f"    {token['install_command']}")
     out.line()
@@ -249,7 +255,7 @@ def run_join(args: argparse.Namespace, ctx: Context) -> int:
         site = session.site(args.name)
         issued = session.client.create_enrollment_token(site["metadata"]["id"], body={})
         parsed = _parse_join(issued.get("join_command", ""))
-        endpoint, token = parsed["control_plane"], issued["secret"]
+        endpoint, token = args.control_plane or parsed["control_plane"], issued["secret"]
         trust += parsed["trust"]
         bench = site["spec"].get("kind") == "bench"
         # Versions this machine pushes run here without anything else to set up.

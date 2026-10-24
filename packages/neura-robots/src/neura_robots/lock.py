@@ -80,11 +80,17 @@ class ActuatorLock:
             return False
         return True
 
-    def release(self) -> None:
+    def release_port(self) -> None:
+        """Let other programs open the serial port again (TIOCNXCL). Call it while the port is
+        still open: the flag belongs to the terminal, and outlives a closed descriptor whenever
+        anything else keeps the terminal open."""
         if self._serial_fd is not None:
             with contextlib.suppress(OSError):
                 fcntl.ioctl(self._serial_fd, termios.TIOCNXCL)
             self._serial_fd = None
+
+    def release(self) -> None:
+        self.release_port()
         if self._fd is not None:
             with contextlib.suppress(OSError):
                 fcntl.flock(self._fd, fcntl.LOCK_UN)

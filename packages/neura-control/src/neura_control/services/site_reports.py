@@ -25,6 +25,7 @@ from neura_contracts import (
     signing,
 )
 from neura_control.clock import iso, utcnow
+from neura_control.db.locks import SITE_ROW
 from neura_control.db.models import (
     ActivationRequest,
     ContractDocument,
@@ -514,7 +515,7 @@ async def set_active_revision(
 async def report_site(
     session: AsyncSession, site_id: str, *, connected: bool, agent_version: str | None
 ) -> None:
-    site = await session.get(Site, site_id, with_for_update=True)
+    site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         return
     site.observed = {
@@ -532,7 +533,7 @@ async def report_site_ack(
     session: AsyncSession, site_id: str, *, generation: int, accepted: bool, reason: str | None
 ) -> None:
     """The agent's verdict on a desired-state generation: committed, or refused and why."""
-    site = await session.get(Site, site_id, with_for_update=True)
+    site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         return
     site.observed = {
@@ -558,7 +559,7 @@ async def report_site_heartbeat(
     """Periodic site status. Refreshes ``observed_at`` (from which reads derive liveness) on every
     report, but changes the version and emits an event only when a fact changed, so a status every
     few seconds does not flood the event stream."""
-    site = await session.get(Site, site_id, with_for_update=True)
+    site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         return
     now = utcnow()
@@ -586,7 +587,7 @@ async def report_site_heartbeat(
 async def report_capture(session: AsyncSession, site_id: str, summary: dict[str, Any]) -> None:
     """The site's episode store, counts only (design §28.2): on the site, and per deployment
     over its revisions. Versions change, and events go out, only when a count changed."""
-    site = await session.get(Site, site_id, with_for_update=True)
+    site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         return
     capture = {

@@ -30,6 +30,7 @@ design and the build plan (§16.1).
 | `packages/neura-sim` | Simulated arms and networks, deterministic site simulator, invariant monitor, `neura-sim-robots`, `neura-sim-soak`, `neura-chaos` |
 | `packages/neura-robots` | Real robots: the SO-101 arm over LeRobot, a servo bus emulator, `neura-arm` (serve an arm), `neura-qualify` (hardware fault suite, parity, closed-loop episodes) |
 | `packages/neura-learn` | Evaluation and fine-tuning at the site: simulation and replay suites, the paired non-inferiority verdict, LeRobot fine-tunes (`neura-learn`) |
+| `packages/neura` | The `neura` command (sign in, sites, robots, push, deploy, approve, rollback) and `@neura.policy` for bringing any model |
 | `packages/neura-sdk` | Python client for the management API, generated from the spec |
 | `console/` | Web console: React + TypeScript, client generated from the spec, end-to-end tests |
 | `landing/` | The NucleiLabs site: what Neura is, how it works, how to become a design partner (static) |
@@ -161,6 +162,24 @@ Both `make soak` and `make chaos` are watched by an independent invariant monito
 duplicated or unauthorized action accepted, any action out of order or range, and any latched
 fault cleared without a reset fails the run (design §17.7). `neura-sim-soak --help` and
 `neura-chaos --help` list the faults; `--seed` reproduces a run.
+
+## The `neura` command
+
+From a fresh workspace to a simulated arm running your policy, on one machine (design §29):
+
+```bash
+# `make dev`'s control plane, with its development admin token
+grep -o 'ntk_tok_[A-Za-z0-9_-]*' deploy/compose/compose.yaml \
+  | uv run neura login --api http://127.0.0.1:8080 --with-token
+uv run neura site create lab --bench
+uv run neura site join lab --simulate 1 --mock-policies --control-plane 127.0.0.1:8081
+uv run neura policy push ./my_policy.py --name pick   # a @neura.policy class, a LeRobot checkpoint,
+                                                     # or an image@sha256:... with --declare
+uv run neura try pick --on sim-1
+uv run neura status
+```
+
+The same run is a test: `packages/neura-control/tests/test_neura_cli.py`.
 
 ## Installing a site agent
 

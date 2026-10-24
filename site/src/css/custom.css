@@ -1,25 +1,347 @@
-:root {
-  --ifm-color-primary: #1f4f8b;
-  --ifm-color-primary-dark: #1c477d;
-  --ifm-color-primary-darker: #1a4376;
-  --ifm-color-primary-darkest: #153761;
-  --ifm-color-primary-light: #225799;
-  --ifm-color-primary-lighter: #245ba0;
-  --ifm-color-primary-lightest: #2a67b5;
-  --ifm-code-font-size: 95%;
+/* The docs in the NucleiLabs design: the console's and the site's tokens (tokens.css, loaded
+   first), mapped onto Docusaurus's theme variables, with the site's navigation, type and footer. */
+
+:root,
+[data-theme="dark"],
+[data-theme="light"] {
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
+  --ifm-background-color: var(--bg);
+  --ifm-background-surface-color: var(--bg);
+  --ifm-font-color-base: var(--text);
+  --ifm-font-color-secondary: var(--text-2);
+  --ifm-heading-color: var(--text);
+  --ifm-color-emphasis-100: var(--surface-2);
+  --ifm-color-emphasis-200: var(--surface-3);
+  --ifm-color-emphasis-300: var(--border);
+  --ifm-color-emphasis-600: var(--text-3);
+  --ifm-color-emphasis-700: var(--text-2);
+  --ifm-toc-border-color: var(--border);
+  --ifm-hr-border-color: var(--border);
+  --ifm-table-border-color: var(--border);
+  --ifm-table-stripe-background: var(--surface);
+  --ifm-table-head-background: var(--surface-2);
+
+  --ifm-color-primary: var(--accent);
+  --ifm-color-primary-dark: var(--accent);
+  --ifm-color-primary-darker: var(--accent);
+  --ifm-color-primary-darkest: var(--accent);
+  --ifm-color-primary-light: var(--accent-strong);
+  --ifm-color-primary-lighter: var(--accent-strong);
+  --ifm-color-primary-lightest: var(--accent-strong);
+  --ifm-link-color: var(--accent);
+  --ifm-link-hover-color: var(--accent-strong);
+  --ifm-link-hover-decoration: none;
+
+  --ifm-navbar-background-color: color-mix(in srgb, var(--bg) 78%, transparent);
+  --ifm-navbar-height: 64px;
+  --ifm-navbar-shadow: none;
+  --ifm-navbar-link-color: var(--text-2);
+  --ifm-navbar-link-hover-color: var(--text);
+  --ifm-dropdown-background-color: var(--surface);
+
+  --ifm-menu-color: var(--text-2);
+  --ifm-menu-color-active: var(--text);
+  --ifm-menu-color-background-active: var(--accent-soft);
+  --ifm-menu-color-background-hover: var(--hover);
+
+  --ifm-code-font-size: 90%;
+  --ifm-code-background: var(--surface-2);
+  --ifm-code-border-radius: var(--radius-xs);
+  --ifm-pre-background: var(--surface);
+  --ifm-global-radius: var(--radius-sm);
+  --ifm-card-background-color: var(--surface);
+
+  --ifm-alert-background-color: var(--surface);
+  --ifm-color-info-contrast-background: var(--info-soft);
+  --ifm-color-success-contrast-background: var(--ok-soft);
+  --ifm-color-warning-contrast-background: var(--warn-soft);
+  --ifm-color-danger-contrast-background: var(--danger-soft);
+
+  --docsearch-searchbox-background: var(--surface-2);
+  --ifm-h1-font-size: 2.4rem;
+  --ifm-line-height-base: 1.65;
 }
 
-[data-theme="dark"] {
-  --ifm-color-primary: #6fa0e0;
-  --ifm-color-primary-dark: #5591db;
-  --ifm-color-primary-darker: #4889d8;
-  --ifm-color-primary-darkest: #2a70c7;
-  --ifm-color-primary-light: #89b0e5;
-  --ifm-color-primary-lighter: #96b8e8;
-  --ifm-color-primary-lightest: #bdd2f0;
+body {
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* --- navigation: the site's bar -------------------------------------------------------------- */
+.navbar {
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+  padding: 0 24px;
+}
+.navbar__inner {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.navbar__brand {
+  gap: 10px;
+  margin-right: 24px;
+}
+.navbar__logo {
+  height: 26px;
+  margin-right: 0;
+}
+.navbar__title {
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.navbar__item.navbar__link {
+  font-size: 14px;
+  font-weight: 450;
+  padding: 0 10px;
+}
+.navbar__link--active {
+  color: var(--text);
+}
+
+/* The site's buttons, as navigation items. */
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  margin-left: 8px;
+  padding: 0 15px !important;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.15s var(--ease),
+    box-shadow 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.nav-button.ghost:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.nav-button.primary {
+  background: var(--accent);
+  color: var(--on-accent) !important;
+}
+.nav-button.primary:hover {
+  background: var(--accent-strong);
+  box-shadow: var(--glow);
+  transform: translateY(-1px);
+}
+.nav-button svg,
+.site-link svg {
+  display: none; /* no external-link marks on the site's own pages */
+}
+
+/* The home page's glow, faintly, at the top of every page. */
+.main-wrapper {
+  background:
+    radial-gradient(60% 420px at 50% -120px, rgb(124 99 255 / 16%), transparent 70%) no-repeat,
+    var(--bg);
+}
+[data-theme="light"] .main-wrapper {
+  background:
+    radial-gradient(60% 420px at 50% -120px, rgb(90 65 216 / 7%), transparent 70%) no-repeat,
+    var(--bg);
+}
+
+/* --- the announcement: the site's pill ------------------------------------------------------- */
+div[class*="announcementBar"] {
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+/* --- reading ----------------------------------------------------------------------------------- */
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+.markdown h1 {
+  letter-spacing: -0.035em;
+}
+.markdown h2 {
+  margin-top: 2.4rem;
+  padding-top: 0.4rem;
+}
+.markdown > p:first-of-type {
+  color: var(--text-2);
+}
+.markdown a {
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+}
+.markdown a:hover {
+  border-bottom-color: var(--accent-strong);
+}
+
+code {
+  border: 1px solid var(--border);
+  padding: 0.1em 0.35em;
+}
+pre code,
+.prism-code code {
+  border: 0;
+}
+div[class*="codeBlockContainer"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+div[class*="codeBlockTitle"] {
+  background: var(--surface-2) !important;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
 }
 
 table {
   display: table;
   width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 14.5px;
+}
+table thead tr {
+  border-bottom: 0;
+}
+table th {
+  text-align: left;
+  font-weight: 600;
+}
+table th,
+table td {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* --- side navigation and contents ----------------------------------------------------------- */
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--border) !important;
+}
+.menu {
+  padding: 16px 12px !important;
+  font-size: 14px;
+}
+.menu__link {
+  border-radius: 7px;
+}
+.menu__link--active:not(.menu__link--sublist) {
+  font-weight: 550;
+}
+.menu__list-item-collapsible .menu__link--sublist {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.table-of-contents {
+  font-size: 13px;
+}
+.table-of-contents__link--active {
+  color: var(--accent);
+}
+.pagination-nav__link {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.pagination-nav__link:hover {
+  border-color: var(--accent-line);
+}
+
+/* --- footer: the site's ----------------------------------------------------------------------- */
+.site-footer {
+  margin-top: 40px;
+  padding: 56px 24px 32px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 14px;
+}
+.site-footer a {
+  color: inherit;
+}
+.site-footer a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.site-footer .wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.site-footer .inner {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+.site-footer .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 650;
+  font-size: 16px;
+}
+.site-footer .brand img {
+  width: 22px;
+  height: 22px;
+}
+.site-footer .tagline {
+  margin: 12px 0 0;
+  color: var(--text-3);
+}
+.site-footer nav {
+  display: flex;
+  gap: 64px;
+  flex-wrap: wrap;
+}
+.site-footer nav div {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.site-footer nav span {
+  color: var(--text);
+  font-weight: 600;
+}
+.site-footer .base {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+@media (max-width: 996px) {
+  .nav-button {
+    display: none;
+  }
 }

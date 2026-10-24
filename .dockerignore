@@ -9,3 +9,9 @@ docs
 tests
 **/tests
 examples
+**/node_modules
+**/dist
+site/build
+site/.docusaurus
+console/test-results
+console/playwright-report

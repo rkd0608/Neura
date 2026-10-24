@@ -22,5 +22,5 @@ neura-gateway = "neura_server.__main__:main"
 neura-worker = "neura_server.worker:main"
 
 [build-system]
-requires = ["uv_build>=0.11,<0.12"]
+requires = ["uv_build>=0.11,<0.14"]
 build-backend = "uv_build"

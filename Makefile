@@ -135,7 +135,7 @@ docs-setup: ## Install the docs site's dependencies (pnpm)
 	cd site && pnpm install --frozen-lockfile
 
 .PHONY: docs
-docs: ## Docs site dev server on http://127.0.0.1:3000/neura/
+docs: ## Docs site dev server on http://127.0.0.1:3000/docs/
 	cd site && pnpm run start
 
 .PHONY: docs-check

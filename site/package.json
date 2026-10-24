@@ -2,14 +2,14 @@
   "name": "@neura/site",
   "private": true,
   "version": "0.1.0",
-  "description": "NucleiLabs developer documentation, starting with Neura (design §26).",
+  "description": "NucleiLabs developer documentation, starting with Neura (design \u00a726).",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12"
   },
   "scripts": {
     "start": "docusaurus start",
-    "build": "docusaurus build",
+    "build": "docusaurus build && node scripts/csp.mjs",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
     "typecheck": "tsc --noEmit"
@@ -32,7 +32,7 @@
     "@docusaurus/types": "3.10.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "browserslist": {
     "production": [

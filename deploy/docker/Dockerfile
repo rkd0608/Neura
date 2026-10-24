@@ -149,10 +149,10 @@ EXPOSE 8090 8095 50051
 CMD ["neura-agent"]
 
 # --- NucleiLabs site (static) -------------------------------------------------------------------
-FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS landing-build
+FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS landing-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
-    corepack enable && corepack prepare pnpm@10.28.0 --activate
+    npm install --global --no-fund --no-audit pnpm@10.28.0
 WORKDIR /src/landing
 COPY landing/package.json landing/pnpm-lock.yaml ./
 RUN --mount=type=secret,id=ca_bundle,required=false \
@@ -164,10 +164,28 @@ COPY console/src/styles/tokens.css /src/console/src/styles/tokens.css
 ARG VITE_CONSOLE_URL VITE_DOCS_URL VITE_CONTACT_URL
 RUN pnpm run build
 
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS neura-landing
+# The developer docs, served by the site at /docs/ in its design.
+FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS docs-build
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    npm install --global --no-fund --no-audit pnpm@10.28.0
+WORKDIR /src/site
+COPY site/package.json site/pnpm-lock.yaml ./
+RUN --mount=type=secret,id=ca_bundle,required=false \
+    if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    pnpm install --frozen-lockfile
+COPY site ./
+COPY console/src/styles/tokens.css /src/console/src/styles/tokens.css
+ARG NEURA_SITE_URL NEURA_CONSOLE_URL NEURA_CONTACT_URL
+RUN pnpm run build
+
+FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS neura-landing
 COPY deploy/landing/default.conf /etc/nginx/conf.d/default.conf
-COPY deploy/landing/security-headers.inc /etc/nginx/conf.d/security-headers.inc
+COPY deploy/landing/base-headers.inc deploy/landing/security-headers.inc \
+    deploy/landing/docs-headers.inc /etc/nginx/conf.d/
 COPY --from=landing-build /src/landing/dist /usr/share/nginx/html
+COPY --from=docs-build /src/site/build /usr/share/nginx/html/docs
+RUN mv /usr/share/nginx/html/docs/csp.inc /etc/nginx/conf.d/docs-csp.inc
 RUN sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
     && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d
 USER nginx
@@ -175,10 +193,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["wget", "-qO-", "http://127.0.0.1:8080/healthz"]
 
 # --- web console --------------------------------------------------------------------------------
-FROM node:22.20-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS console-build
+FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS console-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
-    corepack enable && corepack prepare pnpm@10.28.0 --activate
+    npm install --global --no-fund --no-audit pnpm@10.28.0
 WORKDIR /src/console
 COPY console/package.json console/pnpm-lock.yaml ./
 RUN --mount=type=secret,id=ca_bundle,required=false \
@@ -188,7 +206,7 @@ COPY console ./
 COPY api /src/api
 RUN pnpm run build
 
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS neura-console
+FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS neura-console
 COPY deploy/console/default.conf.template deploy/console/security-headers.inc.template \
     /etc/nginx/templates/
 COPY --from=console-build /src/console/dist /usr/share/nginx/html

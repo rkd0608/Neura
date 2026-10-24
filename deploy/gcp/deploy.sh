@@ -94,7 +94,7 @@ MACHINE_TYPE=${NEURA_MACHINE_TYPE:-e2-micro}
 SQL_TIER=${NEURA_SQL_TIER:-db-f1-micro}
 ORGANIZATION=${NEURA_ORGANIZATION:-NucleiLabs}
 CONTACT_URL=${NEURA_CONTACT_URL:-mailto:hello@nucleilabs.ai}
-DOCS_URL=https://rkd0608.github.io/neura/
+DOCS_URL=/docs/  # the site serves the developer docs itself
 
 VM=neura
 SA_NAME=neura-host
@@ -294,6 +294,9 @@ build_images() {
             --build-arg "VITE_CONSOLE_URL=https://console.$domain/sign-in" \
             --build-arg "VITE_DOCS_URL=$DOCS_URL" \
             --build-arg "VITE_CONTACT_URL=$CONTACT_URL" \
+            --build-arg "NEURA_SITE_URL=https://$domain" \
+            --build-arg "NEURA_CONSOLE_URL=https://console.$domain/sign-in" \
+            --build-arg "NEURA_CONTACT_URL=$CONTACT_URL" \
             -t "$REGISTRY/$target:$tag" . >/dev/null
         docker push --quiet "$REGISTRY/$target:$tag" >/dev/null
     done

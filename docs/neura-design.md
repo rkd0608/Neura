@@ -1652,7 +1652,7 @@ Content that stays internal and is never published: customer targets, pricing, d
 
 - A **static site**: Markdown sources, built to plain HTML, no server and no database.
 - Recommended generator: **Docusaurus**, for built-in docs versioning (needed once there are releases), Mermaid diagram support (the diagrams in this document can be reused) and MDX for the status banner component. Astro Starlight is an equally valid choice if a lighter build is preferred; decide once and do not migrate without reason.
-- Hosting on a static host (GitHub Pages or Cloudflare Pages) with a **preview build for every pull request**. Domain to be decided.
+- Hosted with the NucleiLabs site, at `/docs/`, in its design, with a **preview build for every pull request**.
 - Search built into the static build; no third-party tracking scripts.
 
 ### 26.7 CI checks for the docs
@@ -1688,7 +1688,7 @@ Until the first release, the site shows a single "next" version with a site-wide
   - external links answer, and links into this repository must name a path in the checkout;
   - the quickstart's blocks marked `quickstart` run in one shell and must succeed;
   - the build fails on any broken link, anchor or image.
-- **Hosting.** The `Docs site` workflow publishes `main` to GitHub Pages. Every pull request uploads the built site as a downloadable preview. The URL and base path are repository variables until a domain is chosen.
+- **Hosting.** The site's image (`neura-landing`) builds the docs and serves them at `/docs/`, next to the home page and in its design: the console's tokens, the site's navigation and footer. Its scripts are held to the site's policy: no inline script runs except the few Docusaurus writes, allowed by their hashes (`site/scripts/csp.mjs`). Every pull request uploads the built docs as a downloadable preview (the CI `docs` job).
 
 ---
 

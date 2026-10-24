@@ -1,18 +1,24 @@
 // NucleiLabs developer docs (design §26). Docs only, built to static HTML: no server, no
-// database, no third-party scripts. Every page carries a status label (see src/theme).
+// database, no third-party scripts. Every page carries a status label (see src/theme). They are
+// served at /docs/ on the NucleiLabs site, in its design (src/css, src/theme/Footer).
 import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
+
+// Where the site's other pages are: the console (sign in) and contact, as the home page has them.
+const CONSOLE_URL = process.env.NEURA_CONSOLE_URL ?? "http://127.0.0.1:3000/sign-in";
+const CONTACT_URL = process.env.NEURA_CONTACT_URL ?? "mailto:hello@nucleilabs.ai";
 
 const config: Config = {
   title: "NucleiLabs developer docs",
   tagline: "Neura: serving robot policies from the customer's own GPU servers",
   favicon: "img/favicon.svg",
-  url: process.env.NEURA_DOCS_URL ?? "https://rkd0608.github.io",
-  baseUrl: process.env.NEURA_DOCS_BASE_URL ?? "/neura/",
+  url: process.env.NEURA_SITE_URL ?? "https://nucleilabs.ai",
+  baseUrl: "/docs/",
   organizationName: "rkd0608",
   projectName: "neura",
   trailingSlash: false,
+  customFields: { consoleUrl: CONSOLE_URL, contactUrl: CONTACT_URL },
 
   // The build fails on any broken link, anchor or image (design §26.7).
   onBrokenLinks: "throw",
@@ -33,11 +39,13 @@ const config: Config = {
         docs: {
           routeBasePath: "/",
           sidebarPath: "./sidebars.ts",
-          editUrl: "https://github.com/rkd0608/neura/edit/main/site/",
           showLastUpdateTime: false,
         },
         blog: false,
-        theme: { customCss: "./src/css/custom.css" },
+        theme: {
+          // The design system's tokens, shared with the console and the home page.
+          customCss: ["../console/src/styles/tokens.css", "./src/css/custom.css"],
+        },
       } satisfies Preset.Options,
     ],
   ],
@@ -57,24 +65,28 @@ const config: Config = {
         "Neura is in early development. Nothing described here is a released product; every page says how far along it is.",
       isCloseable: false,
     },
-    colorMode: { respectPrefersColorScheme: true },
+    colorMode: { defaultMode: "dark", respectPrefersColorScheme: false },
     navbar: {
       title: "NucleiLabs",
-      logo: { alt: "NucleiLabs", src: "img/favicon.svg" },
+      logo: { alt: "NucleiLabs", src: "img/favicon.svg", href: "pathname:///" },
       items: [
-        { type: "docSidebar", sidebarId: "docs", position: "left", label: "Neura" },
+        { type: "docSidebar", sidebarId: "docs", position: "left", label: "Docs" },
+        { to: "/deploy-a-policy", label: "Deploy a policy", position: "left" },
         { to: "/reference/api", label: "Reference", position: "left" },
-        { to: "/status", label: "Development status", position: "left" },
-        { href: "https://github.com/rkd0608/neura", label: "GitHub", position: "right" },
+        { to: "/status", label: "Status", position: "left" },
+        { href: "pathname:///#neura", label: "Neura", position: "left", className: "site-link" },
+        { href: CONSOLE_URL, label: "Sign in", position: "right", className: "nav-button ghost" },
+        {
+          href: "pathname:///#partner",
+          label: "Become a design partner",
+          position: "right",
+          className: "nav-button primary",
+        },
       ],
     },
-    footer: {
-      style: "dark",
-      copyright: `Copyright © ${new Date().getFullYear()} NucleiLabs. Built from the Neura repository.`,
-    },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: prismThemes.oneLight,
+      darkTheme: prismThemes.oneDark,
       additionalLanguages: ["bash", "protobuf", "yaml", "json"],
     },
   } satisfies Preset.ThemeConfig,

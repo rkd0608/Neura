@@ -92,7 +92,9 @@ signed upgrades, and the local site API.
   `packages/neura-server/src/neura_server/worker.py`,
   `packages/neura-server/src/neura_server/sandbox.py`
 - Tests: `packages/neura-server/tests/test_gateway.py`, `packages/neura-server/tests/test_scheduler.py`,
-  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py`
+  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py`,
+  `tests/integration/test_shutdown.py` (stopped with SIGTERM, it stops its workers and leaves
+  nothing behind)
 - Model adapters: `packages/neura-adapters/src/neura_adapters/` (LeRobot, Python classes, LoRA
   batching); their real-model tests need `make models-setup`, then `make test-models`
 

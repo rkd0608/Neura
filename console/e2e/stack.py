@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 import sys
 import uuid
 from pathlib import Path
@@ -30,6 +31,12 @@ from neura_control.services.bootstrap import generate_token_value
 def with_database(url: str, name: str) -> str:
     parts = urlsplit(url)
     return urlunsplit(parts._replace(path=f"/{name}"))
+
+
+def exit_on_sigterm(*_: object) -> None:
+    """SIGTERM ends this process the way Ctrl-C does, through its cleanup. uvicorn handles the
+    signal, stops serving, then raises it again: by default that kills the process first."""
+    raise SystemExit(0)
 
 
 def main() -> int:
@@ -92,6 +99,7 @@ def main() -> int:
         print("READY", flush=True)
         await task
 
+    signal.signal(signal.SIGTERM, exit_on_sigterm)
     try:
         asyncio.run(serve())
     finally:

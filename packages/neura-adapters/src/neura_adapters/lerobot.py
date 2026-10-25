@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import tempfile
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
@@ -40,6 +42,28 @@ POLICY_TYPES = {
 # Policies whose inference is deterministic given their inputs (ACT samples no noise at eval).
 DETERMINISTIC = frozenset({"act"})
 LANGUAGE_KEY = "task"
+
+
+_SCRATCH = threading.Lock()
+
+
+def policy_config(checkpoint: Path | str) -> Any:
+    """A LeRobot checkpoint's policy configuration (``PreTrainedConfig.from_pretrained``), without
+    the file LeRobot leaves behind.
+
+    LeRobot 0.6.1 writes the configuration to a temporary file it never deletes: one file in the
+    system's temporary directory for every model loaded, so every policy worker start at a site.
+    It is loaded here with a temporary directory of its own, removed afterwards. Every Neura
+    caller loads configurations through this function.
+    """
+    from lerobot.configs.policies import PreTrainedConfig
+
+    with _SCRATCH, tempfile.TemporaryDirectory(prefix="neura-lerobot-") as scratch:
+        previous, tempfile.tempdir = tempfile.tempdir, scratch
+        try:
+            return PreTrainedConfig.from_pretrained(checkpoint)
+        finally:
+            tempfile.tempdir = previous
 
 
 def _torch() -> Any:
@@ -71,7 +95,6 @@ class LeRobotAdapter:
         seed: int = 0,
     ) -> None:
         torch = _torch()
-        from lerobot.configs.policies import PreTrainedConfig
         from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
         expected_type = POLICY_TYPES.get(name)
@@ -79,7 +102,7 @@ class LeRobotAdapter:
             raise PolicyError(f"{name!r} is not a LeRobot adapter")
         if not (checkpoint / "config.json").is_file():
             raise PolicyError(f"{checkpoint} is not a LeRobot policy checkpoint (no config.json)")
-        config = PreTrainedConfig.from_pretrained(checkpoint)
+        config = policy_config(checkpoint)
         if config.type != expected_type:
             raise PolicyError(
                 f"the checkpoint is a {config.type!r} policy but the artifact names {name!r}"

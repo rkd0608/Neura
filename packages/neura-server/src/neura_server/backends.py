@@ -141,6 +141,9 @@ class WorkerBackend:
         self._channel: grpc.aio.Channel | None = None
         self._stub: worker_pb2_grpc.PolicyWorkerStub | None = None
         self._supervisor: asyncio.Task[None] | None = None
+        # Container removals under way: shielded from the supervisor's cancellation, so stop()
+        # waits for them itself.
+        self._removals: set[asyncio.Future[None]] = set()
         self._stopping = False
         self.ready = asyncio.Event()
 
@@ -170,6 +173,8 @@ class WorkerBackend:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._supervisor
             self._supervisor = None
+        if self._removals:
+            await asyncio.gather(*self._removals, return_exceptions=True)
         await self._disconnect()
         self.state = "stopped"
 
@@ -218,7 +223,10 @@ class WorkerBackend:
                 if drain is not None:
                     drain.cancel()
                 # A killed launcher process (a hung worker) can leave its container running.
-                await asyncio.shield(self.launcher.remove(run))
+                removal = asyncio.ensure_future(self.launcher.remove(run))
+                self._removals.add(removal)
+                removal.add_done_callback(self._removals.discard)
+                await asyncio.shield(removal)
             if self._stop_requested():  # stop() may have run while we waited
                 return
             self.restarts += 1

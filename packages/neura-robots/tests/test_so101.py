@@ -111,12 +111,21 @@ def test_commands_move_the_arm_within_the_per_command_limit(
 
 
 def test_hold_is_confirmed_and_holds(arm: So101Arm, emulator: SO101Emulator) -> None:
+    # A slow joint (10 degrees take about 0.4 s), so the hold lands mid-move however busy the
+    # machine is. The hold sets the goal to the position it read; the joint may travel on a
+    # little before the write lands, then comes back to it. So a hold is judged by where the joint
+    # comes to rest, not by a sample taken while the hold was being written.
+    emulator.set_fault("elbow_flex", max_speed=300.0)
     assert arm.command(_vector(arm, elbow_flex=-5.0)).ok
-    time.sleep(0.01)  # mid-move
+    time.sleep(0.05)
     assert arm.apply_response(FaultResponse.HOLD_POSITION)
-    stopped = emulator.positions()["elbow_flex"]
     _settle()
-    assert emulator.positions()["elbow_flex"] == pytest.approx(stopped, abs=0.5)
+    held = emulator.positions()["elbow_flex"]
+    elbow = emulator.servo("elbow_flex")
+    assert abs(elbow.goal_actual() - elbow.actual) <= 1.0  # at rest on the goal the hold wrote
+    assert -15.0 < held < -6.0  # stopped on its way from -15 to -5
+    _settle()
+    assert emulator.positions()["elbow_flex"] == pytest.approx(held, abs=0.5)  # and stays
     assert arm.apply_response(FaultResponse.CONTROLLED_STOP)
     assert not arm.apply_response(FaultResponse.BRAKE)  # dropping torque is not a stop here
 

@@ -245,9 +245,17 @@ class PolicyServerProcess:
         ]
         if self.similarity_atol is not None:
             command += ["--similarity-atol", repr(self.similarity_atol)]
+        # LeRobot leaves a file in TMPDIR for every policy it loads: give it the directory its
+        # log is in, which whoever runs this removes.
+        scratch = self.log.with_suffix(".tmp")
+        scratch.mkdir(exist_ok=True)
         with self.log.open("ab") as log:
             self.process = subprocess.Popen(  # noqa: S603 - our own module
-                command, stdout=log, stderr=log, start_new_session=True
+                command,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+                env={**os.environ, "TMPDIR": str(scratch)},
             )
 
     def wait_listening(self, timeout_s: float = 180.0) -> None:

@@ -116,15 +116,14 @@ function playwright() {
   throw new Error("Playwright is not installed: run `make console-setup`");
 }
 
-async function launch(chromium) {
+// NEURA_CHROMIUM, else Playwright's own browser when it is installed, else /opt/pw-browsers'.
+// Chosen before launching: a launch that fails leaves its profile behind in the temp directory.
+function launch(chromium) {
+  const fallback = "/opt/pw-browsers/chromium";
   const own = process.env.NEURA_CHROMIUM;
-  try {
-    return await chromium.launch(own ? { executablePath: own } : {});
-  } catch (error) {
-    const fallback = "/opt/pw-browsers/chromium";
-    if (own || !existsSync(fallback)) throw error;
-    return chromium.launch({ executablePath: fallback });
-  }
+  if (own) return chromium.launch({ executablePath: own });
+  if (existsSync(chromium.executablePath()) || !existsSync(fallback)) return chromium.launch();
+  return chromium.launch({ executablePath: fallback });
 }
 
 function docsPages() {

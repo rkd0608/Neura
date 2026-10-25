@@ -33,8 +33,11 @@ test.beforeAll(async () => {
   });
 });
 
-test.afterAll(() => {
-  site?.kill("SIGTERM");
+test.afterAll(async () => {
+  if (!site || site.exitCode !== null) return;
+  const exited = new Promise((resolve) => site?.on("exit", resolve));
+  site.kill("SIGTERM");
+  await exited; // it removes its episodes as it exits
 });
 
 test("the site's operator watches and labels a recorded episode", async ({ page }) => {

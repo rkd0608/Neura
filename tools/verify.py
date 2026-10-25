@@ -68,6 +68,7 @@ class Check:
     cwd: Path = ROOT
     env: dict[str, str] = field(default_factory=dict)
     after: tuple[str, ...] = ()  # checks that must finish first (their builds)
+    clean: bool = False  # run with an empty TMPDIR, and fail on anything left in it
     status: str = "not run"
     seconds: float = 0.0
     detail: str = ""
@@ -236,7 +237,14 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
         env = {}
     if tests is None or tests:
         checks.append(
-            Check("pytest", [*python, "-m", "pytest", "-q", "-ra", *(tests or [])], why, env=env)
+            Check(
+                "pytest",
+                [*python, "-m", "pytest", "-q", "-ra", f"--basetemp={LOGS / 'pytest-tmp'}"]
+                + (tests or []),
+                why,
+                env=env,
+                clean=True,
+            )
         )
     if has("console/", TOKENS, "api/openapi.yaml"):
         checks.append(
@@ -321,6 +329,13 @@ def run(check: Check) -> None:
         check.log.write_text(problem + "\n", encoding="utf-8")
         return
     env = {**os.environ, **check.env}
+    scratch = LOGS / f"tmp-{check.name}"
+    if check.clean:
+        shutil.rmtree(scratch, ignore_errors=True)
+        scratch.mkdir(parents=True)
+        env["TMPDIR"] = str(scratch)
+        # PyTorch keeps its compiled kernels under TMPDIR by default: a cache, kept between runs.
+        env.setdefault("TORCHINDUCTOR_CACHE_DIR", str(LOGS / "torch-cache"))
     with check.log.open("w", encoding="utf-8") as log:
         log.write(f"$ (cd {check.cwd.relative_to(ROOT) or '.'}) {' '.join(check.command)}\n\n")
         log.flush()
@@ -336,6 +351,13 @@ def run(check: Check) -> None:
     check.seconds = time.monotonic() - started
     check.status = "passed" if result.returncode == 0 else "failed"
     check.detail = summary_of(check)
+    left = sorted(p.name for p in scratch.iterdir()) if check.clean else []
+    if left:
+        # Something did not clean up after itself: every run would leave this behind.
+        check.status = "failed"
+        check.detail = f"left {len(left)} in TMPDIR ({', '.join(left[:3])}); {check.detail}"
+        with check.log.open("a", encoding="utf-8") as log:
+            log.write(f"\nLeft in {scratch}, which was empty before:\n" + "\n".join(left) + "\n")
 
 
 def summary_of(check: Check) -> str:

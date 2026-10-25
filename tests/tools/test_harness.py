@@ -238,6 +238,17 @@ def test_a_check_that_cannot_run_fails(logs: Path) -> None:
     assert "not installed" in check.detail
 
 
+def test_a_check_that_leaves_temporary_files_fails(logs: Path) -> None:
+    leaky = "import tempfile; tempfile.mkdtemp(prefix='leak-')"
+    check = verify.Check("pytest", [sys.executable, "-c", leaky], "why", clean=True)
+    verify.run(check)
+    assert check.status == "failed"
+    assert "left 1 in TMPDIR (leak-" in check.detail
+    tidy = verify.Check("pytest", [sys.executable, "-c", "pass"], "why", clean=True)
+    verify.run(tidy)
+    assert tidy.status == "passed"
+
+
 def test_a_check_that_breaks_verify_is_reported_not_lost(
     logs: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

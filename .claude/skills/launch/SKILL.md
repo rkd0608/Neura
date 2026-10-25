@@ -29,6 +29,10 @@ Then drive it as `site/docs/deploy-a-policy.md` does (`neura policy push`, `neur
 
 ## The whole dev stack, in Docker
 
+If `docker info` says the daemon is not running, start it: `dockerd > /tmp/dockerd.log 2>&1 &`.
+Behind a TLS-intercepting proxy, image builds need its CA: `NEURA_BUILD_CA_BUNDLE=<ca file> make dev`.
+The stack's Postgres takes 127.0.0.1:5432: stop a local one first (`service postgresql stop`).
+
 ```bash
 make dev          # Postgres, control plane, site agent with its data plane, simulated robots, console
 make dev-logs     # follow every service's log

@@ -27,6 +27,10 @@ Postgres: tests that need it skip without it. `make verify` uses 127.0.0.1:5432 
 if it says Postgres is not answering, start it (`service postgresql start`) and run again. A
 skipped test proves nothing: read the skip reasons in `.verify/pytest.log`.
 
+The tests run with an empty TMPDIR of their own, and the check fails if anything is left in it:
+a test or a process that does not clean up after itself would leave the same on every run, and
+on a customer's server.
+
 ## 2. A failure is information, not an obstacle
 
 Read the failing check's log from the top of its first error, find the cause (the debug skill),

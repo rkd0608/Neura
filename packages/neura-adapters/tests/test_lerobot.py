@@ -3,6 +3,7 @@ shapes, batching, determinism, and LeRobot's own processors applied (design §12
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -218,3 +219,18 @@ def test_a_gated_tokenizer_is_substituted_and_the_pipeline_says_so(tmp_path: Pat
     saved = json.loads((tmp_path / "checkpoint" / "policy_preprocessor.json").read_text())
     names = [s["config"].get("tokenizer_name") for s in saved["steps"]]
     assert names == [local]  # loading it asks for the tokenizer it was built with
+
+
+def test_loading_a_configuration_leaves_no_file_behind(
+    checkpoint: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lerobot.configs.policies import PreTrainedConfig
+
+    from neura_adapters.lerobot import policy_config
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    assert policy_config(checkpoint).type == "act"
+    assert list(tmp_path.iterdir()) == []
+    assert tempfile.gettempdir() == str(tmp_path)  # the caller's temporary directory, restored
+    PreTrainedConfig.from_pretrained(checkpoint)  # what this guards against: LeRobot's own leaves
+    assert [p.suffix for p in tmp_path.iterdir()] == [".json"]

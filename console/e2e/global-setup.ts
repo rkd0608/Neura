@@ -1,6 +1,6 @@
 // Start the backend (e2e/stack.py) once for the run and stop it afterwards.
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -40,5 +40,6 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   return async () => {
     stack.kill("SIGTERM");
     await new Promise((resolve) => stack.on("exit", resolve));
+    rmSync(STATE_FILE, { force: true }); // it holds the run's admin token
   };
 }

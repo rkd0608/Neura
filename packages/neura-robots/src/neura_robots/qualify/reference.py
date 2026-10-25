@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from neura_adapters.lerobot import policy_config
 from neura_contracts import ImageInput, LanguageInput, ModelArtifact, RobotProfile, StateInput
 from neura_runtime.interfaces import SensorSnapshot
 
@@ -38,12 +39,11 @@ class LeRobotReference:
         device: str = "cpu",
     ) -> None:
         import torch
-        from lerobot.configs.policies import PreTrainedConfig
         from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
         self._torch = torch
         self.artifact = artifact
-        config = PreTrainedConfig.from_pretrained(checkpoint)
+        config = policy_config(checkpoint)
         config.device = device
         self.device = torch.device(device)
         self.policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)

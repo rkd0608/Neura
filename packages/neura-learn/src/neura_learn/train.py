@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from neura_adapters.lerobot import policy_config
+
 Progress = Callable[[str], None]
 log = logging.getLogger("neura.learn")
 
@@ -143,7 +145,6 @@ def fine_tune(
     """Train from ``base`` on the dataset at ``dataset_root``; the new checkpoint is
     ``out/checkpoint``. ``out`` must not exist."""
     from lerobot.configs.default import DatasetConfig
-    from lerobot.configs.policies import PreTrainedConfig
     from lerobot.configs.train import TrainPipelineConfig
     from lerobot.scripts import lerobot_train
 
@@ -151,7 +152,7 @@ def fine_tune(
     if recipe.normalization == "base":
         kept = keep_base_normalization(dataset_root, base)
         progress(f"keeping the base model's normalization for {', '.join(sorted(kept))}")
-    policy = PreTrainedConfig.from_pretrained(base)
+    policy = policy_config(base)
     policy.pretrained_path = base
     policy.device = device
     policy.push_to_hub = False

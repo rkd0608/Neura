@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from neura_adapters.lerobot import policy_config
+
 
 def checkpoint_path(spec: str | Path, workdir: Path) -> tuple[Path, bool]:
     """(local checkpoint, migrated). A checkpoint saved before LeRobot 0.4 has its normalization
@@ -48,11 +50,10 @@ def checkpoint_path(spec: str | Path, workdir: Path) -> tuple[Path, bool]:
 class LocalPolicy:
     def __init__(self, checkpoint: Path, device: str = "cpu") -> None:
         import torch
-        from lerobot.configs.policies import PreTrainedConfig
         from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
         self._torch = torch
-        config = PreTrainedConfig.from_pretrained(checkpoint)
+        config = policy_config(checkpoint)
         config.device = device
         if getattr(config, "pretrained_backbone_weights", None) is not None:
             # Every weight comes from the checkpoint: building the backbone must not fetch

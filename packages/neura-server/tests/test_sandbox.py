@@ -1,12 +1,15 @@
-"""The worker sandbox's command line (design §12): what a container worker may and may not do."""
+"""The worker sandbox (design §12): what a container worker may and may not do, and removing its
+container when it stops."""
 
 from __future__ import annotations
 
+import asyncio
+import sys
 from pathlib import Path
 
-from neura_server.backends import WorkerSpec
+from neura_server.backends import WorkerBackend, WorkerSpec
 from neura_server.config import SandboxConfig
-from neura_server.sandbox import ContainerLauncher, ProcessLauncher, launcher_for
+from neura_server.sandbox import ContainerLauncher, Invocation, ProcessLauncher, launcher_for
 
 IMAGE = "registry.example/neura/act@sha256:" + "a" * 64
 
@@ -84,3 +87,30 @@ def test_the_process_launcher_runs_the_worker_command_with_host_paths(tmp_path: 
     assert args[:4] == ["python", "-m", "neura_server.worker", "serve"]
     assert flag(args, "--socket") == [str(tmp_path / "s.sock")]
     assert flag(args, "--checkpoint") == [str(tmp_path / "checkpoint")]
+
+
+class SlowToRemove:
+    """A worker that exits by itself, and a container runtime slow to remove what it leaves."""
+
+    def __init__(self) -> None:
+        self.removed: list[str] = []
+
+    def command(self, name: str, invocation: Invocation) -> list[str]:
+        return [sys.executable, "-c", "import time; time.sleep(0.2)"]
+
+    async def remove(self, name: str) -> None:
+        await asyncio.sleep(1.0)
+        self.removed.append(name)
+
+
+async def test_stopping_a_worker_waits_until_its_container_is_removed(tmp_path: Path) -> None:
+    launcher = SlowToRemove()
+    backend = WorkerBackend(
+        "g1", spec(tmp_path, "cpu"), socket_dir=tmp_path, start_timeout_s=30, launcher=launcher
+    )
+    await backend.start()
+    await asyncio.sleep(0.6)  # the worker has exited; its container is being removed
+    await backend.stop()
+    # A gateway exits once its workers are stopped: a removal still under way would never finish
+    # and leave the container running.
+    assert launcher.removed == ["g1-1"]

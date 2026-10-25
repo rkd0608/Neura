@@ -1,4 +1,5 @@
-"""Entry point: ``neura-gateway --config site.yaml``. SIGHUP reloads devices and deployments."""
+"""Entry point: ``neura-gateway --config site.yaml``. SIGHUP reloads devices and deployments;
+SIGTERM and SIGINT stop the gateway, its workers with it."""
 
 from __future__ import annotations
 
@@ -38,12 +39,14 @@ def main() -> None:
             except Exception:
                 logging.getLogger("neura.gateway").exception("reload failed; keeping old config")
 
+        stopping = asyncio.Event()
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(signal.SIGHUP, reload)
-        await server.serve_forever()
+            for stop in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(stop, stopping.set)
+        await server.serve_forever(until=stopping)  # stops everything it started
 
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run())
+    asyncio.run(run())
 
 
 if __name__ == "__main__":

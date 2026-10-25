@@ -8,6 +8,7 @@ Prints READY once serving, and runs until terminated. The operator credential is
 from __future__ import annotations
 
 import hashlib
+import signal
 import sys
 import tempfile
 from pathlib import Path
@@ -48,7 +49,14 @@ def binding() -> ExecutionBinding:
     return ExecutionBinding(model, arm, execution)
 
 
+def exit_on_sigterm(*_: object) -> None:
+    """SIGTERM ends this process the way Ctrl-C does, through its cleanup. uvicorn handles the
+    signal, stops serving, then raises it again: by default that kills the process first."""
+    raise SystemExit(0)
+
+
 def main(port: int) -> None:
+    signal.signal(signal.SIGTERM, exit_on_sigterm)
     with tempfile.TemporaryDirectory() as scratch:
         work = Path(scratch)
         store = EpisodeStore(work / "episodes")

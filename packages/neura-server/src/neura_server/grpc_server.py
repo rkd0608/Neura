@@ -17,7 +17,7 @@ import random
 import shutil
 import tempfile
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -93,6 +93,19 @@ class SimulatedLatency:
         return outputs
 
 
+class EmbeddedServer(uvicorn.Server):
+    """A uvicorn server inside the gateway's process, which leaves the process's signals alone.
+
+    uvicorn takes SIGTERM and SIGINT for itself and raises them again once it has stopped, which
+    kills the process before the gateway stops its workers and removes their directory. The
+    gateway's entry point owns those signals; this server stops when the gateway stops it.
+    """
+
+    @contextlib.contextmanager
+    def capture_signals(self) -> Iterator[None]:
+        yield
+
+
 @dataclass(slots=True)
 class _Group:
     key: str
@@ -124,8 +137,13 @@ class GatewayServer:
             self._worker_dir = config.serving.worker_dir
         else:
             self._worker_dir = self._owned_worker_dir = Path(tempfile.mkdtemp(prefix="neura-w-"))
-        deployments, groups, backends = self._build(config, set())
-        shadows, self._shadows = self._build_shadows(config, {})
+        try:
+            deployments, groups, backends = self._build(config, set())
+            shadows, self._shadows = self._build_shadows(config, {})
+        except BaseException:
+            if self._owned_worker_dir is not None:  # nothing will ever stop() this server
+                shutil.rmtree(self._owned_worker_dir, ignore_errors=True)
+            raise
         # A store the server opens itself is closed by stop(); a caller's store stays the caller's.
         self._owned_store: SqliteGenerationStore | None = None
         if generation_store is None:
@@ -146,6 +164,7 @@ class GatewayServer:
         self._tasks: list[asyncio.Task[None]] = []
         self._server: grpc.aio.Server | None = None
         self._status_server: uvicorn.Server | None = None
+        self._status_task: asyncio.Task[None] | None = None
         self.bound_port: int | None = None
         self.started_at = time.time()
         self.metrics = GatewayMetrics(
@@ -427,15 +446,18 @@ class GatewayServer:
         self._tasks.append(asyncio.create_task(self._sweep(), name="lease-sweeper"))
         if self.config.status_listen:
             host, _, port = self.config.status_listen.rpartition(":")
-            self._status_server = uvicorn.Server(
+            self._status_server = EmbeddedServer(
                 uvicorn.Config(self.status_app(), host=host, port=int(port), log_level="warning")
             )
-            self._tasks.append(asyncio.create_task(self._status_server.serve(), name="status-http"))
+            self._status_task = asyncio.create_task(self._status_server.serve(), name="status-http")
         log.info("gateway listening on %s (port %s)", self.config.listen, self.bound_port)
 
     async def stop(self) -> None:
-        if self._status_server is not None:
+        if self._status_server is not None and self._status_task is not None:
+            # Asked to exit, it finishes its requests and its lifespan; cancelled, it cannot.
             self._status_server.should_exit = True
+            await asyncio.wait({self._status_task}, timeout=5)
+            self._status_task.cancel()
         tasks = [
             *self._tasks,
             *(g.task for g in self._groups.values() if g.task is not None),
@@ -458,10 +480,22 @@ class GatewayServer:
             self._owned_store.close()
             self._owned_store = None
 
-    async def serve_forever(self) -> None:
+    async def serve_forever(self, until: asyncio.Event | None = None) -> None:
+        """Serve until ``until`` is set (the entry point sets it on SIGTERM), then stop everything.
+
+        Stopping is asked for, never done by cancelling this task: stop() waits with timeouts,
+        and a task being cancelled has every timeout it waits on cancelled too.
+        """
         await self.start()
         assert self._server is not None
-        await self._server.wait_for_termination()
+        stopped = asyncio.ensure_future(self._server.wait_for_termination())
+        asked = asyncio.ensure_future((until or asyncio.Event()).wait())
+        try:
+            await asyncio.wait({stopped, asked}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            asked.cancel()
+            await self.stop()
+            stopped.cancel()
 
     # --- routing ------------------------------------------------------------------------------
 

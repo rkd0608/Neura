@@ -521,4 +521,4 @@ Under `tools/`:
 
 Tests that span packages: the API spec, integration and the tools.
 
-Tests, under `tests/`: `api/test_openapi.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`
+Tests, under `tests/`: `api/test_openapi.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_shutdown.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`

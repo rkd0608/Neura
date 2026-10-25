@@ -1,3 +1,5 @@
+// The console's routes and providers: every page, loaded on first visit, under the sign-in and
+// project frames.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense, lazy, useEffect, type ComponentType, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router";

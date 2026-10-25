@@ -1,3 +1,4 @@
+/* The status label at the top of every docs page, one color per label. */
 .banner {
   border-left: 4px solid var(--status-color);
   background: var(--status-background);

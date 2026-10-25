@@ -1,3 +1,4 @@
+/* The episode viewer's styles: a plain page in the system's light or dark scheme. */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;

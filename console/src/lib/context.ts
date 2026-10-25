@@ -1,3 +1,5 @@
+// Where the console is (the organization and project in the URL) and what the signed-in
+// principal may do there.
 import { useParams } from "react-router";
 
 import { useMe } from "../api/queries";

@@ -258,7 +258,10 @@ The full walkthrough is in the docs: [Deploy a policy](site/docs/deploy-a-policy
 ## 🛠 Development
 
 ```bash
+make verify           # the checks your change can break, then what was not checked
 make check            # lint, strict types, generated files, tests: what CI runs
+make shots            # the website and docs in Chromium; fails on any error, keeps screenshots
+make dev-report       # what is running here and what went wrong, errors first
 make console-check    # the console: format, lint, types, unit tests
 make console-e2e      # the console's journeys in Chromium, against the real backend
 make docs             # the docs on http://127.0.0.1:3000/docs/
@@ -271,6 +274,11 @@ make chaos            # faults in a real gateway, its workers and the network
 
 Control-plane tests need Postgres: `docker compose -f deploy/compose/compose.yaml up -d postgres`,
 then `NEURA_TEST_DATABASE_URL=postgresql://neura:neura@127.0.0.1:5432/neura make test`.
+
+Find your way with [docs/codemap.md](docs/codemap.md) (every file and what it is for, generated)
+and [docs/features.md](docs/features.md) (each feature's code, tests and docs).
+[CLAUDE.md](CLAUDE.md) is how coding agents work here: plan first, prove every change, fix causes
+rather than symptoms, and keep files small; its skills are in `.claude/skills/`.
 
 <details>
 <summary><b>Operating a site by hand</b>: the agent CLI, weights, signing, sealing, telemetry</summary>

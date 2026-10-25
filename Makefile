@@ -26,6 +26,7 @@ gen: ## Regenerate code and reference docs from proto/, catalog/, contract model
 	$(UV) run python tools/gen_sdk.py
 	$(UV) run python tools/gen_docs.py
 	cd console && pnpm run gen
+	$(UV) run python tools/codemap.py
 
 .PHONY: examples
 examples: ## Refresh example execution-profile bindings to current digests
@@ -41,6 +42,7 @@ check-generated: ## Fail if any generated file is stale
 	$(UV) run python tools/refresh_example_bindings.py --check
 	$(UV) run python tools/gen_sdk.py --check
 	$(UV) run python tools/gen_docs.py --check
+	$(UV) run python tools/codemap.py --check
 
 .PHONY: fmt
 fmt: ## Format code
@@ -48,9 +50,10 @@ fmt: ## Format code
 	$(UV) run ruff check --fix .
 
 .PHONY: lint
-lint: ## Lint and check formatting
+lint: ## Lint, check formatting, and keep files under the size budget
 	$(UV) run ruff check .
 	$(UV) run ruff format --check .
+	$(UV) run python tools/check_sizes.py
 
 .PHONY: typecheck
 typecheck: ## Strict type checking
@@ -62,6 +65,22 @@ test: ## Run the test suite
 
 .PHONY: check
 check: lint typecheck check-generated test ## Everything CI runs, except the dev-stack smoke test
+
+VERIFY ?=
+
+.PHONY: verify
+verify: ## Prove a change works: the checks for what changed since origin/main (VERIFY="--e2e --models --all --plan")
+	$(UV) run python tools/verify.py $(VERIFY)
+
+.PHONY: shots
+shots: ## Build the NucleiLabs site and docs, open every page in Chromium, fail on errors (.verify/shots)
+	cd landing && pnpm run build
+	cd site && pnpm run build
+	node tools/shoot.mjs
+
+.PHONY: dev-report
+dev-report: ## What is running here and what went wrong: dev stack, local sites, logs, errors first
+	$(UV) run python tools/dev_report.py
 
 .PHONY: test-models
 test-models: ## Model tests: LeRobot adapters, real workers, benchmarks, the SO-101 integration, evaluation and fine-tuning, the improvement loop end to end (needs models-setup; the loop's tests also NEURA_TEST_DATABASE_URL)

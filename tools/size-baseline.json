@@ -1,0 +1,19 @@
+{
+  "budget": 800,
+  "about": "Files over the budget when it was set, with their size. Shrink them; never grow them (tools/check_sizes.py).",
+  "files": {
+    "console/src/components/ui.tsx": 831,
+    "console/src/pages/Improve.tsx": 838,
+    "console/src/pages/Release.tsx": 1128,
+    "console/src/pages/Settings.tsx": 827,
+    "console/src/styles/app.css": 1628,
+    "landing/src/landing.css": 865,
+    "packages/neura-agent/src/neura_agent/core.py": 1221,
+    "packages/neura-agent/tests/test_core.py": 1165,
+    "packages/neura-bench/src/neura_bench/suite.py": 826,
+    "packages/neura-control/src/neura_control/grpc_site.py": 923,
+    "packages/neura-control/src/neura_control/services/rollouts.py": 1090,
+    "packages/neura-control/tests/test_site_control.py": 856,
+    "packages/neura-robots/src/neura_robots/qualify/harness.py": 1107
+  }
+}

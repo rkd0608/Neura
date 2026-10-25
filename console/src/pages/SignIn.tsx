@@ -1,3 +1,5 @@
+// Sign in (design §20.7): with the organization's SSO when the control plane publishes one, or
+// with an API token.
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 

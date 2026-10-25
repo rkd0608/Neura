@@ -1,3 +1,5 @@
+// Sites & servers: the project's sites, their servers and connection state, and the dialog that
+// adds a site (design §19.3).
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 

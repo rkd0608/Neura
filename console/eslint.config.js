@@ -1,3 +1,4 @@
+// The console's lint rules: TypeScript, React hooks and accessibility (jsx-a11y).
 import js from "@eslint/js";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";

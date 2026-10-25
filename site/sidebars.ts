@@ -1,3 +1,4 @@
+// The docs' side navigation: every page, in reading order.
 import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 
 const sidebars: SidebarsConfig = {

@@ -1,3 +1,4 @@
+// The console's entry point: applies the remembered theme and mounts the app.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 

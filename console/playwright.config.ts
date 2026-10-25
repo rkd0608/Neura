@@ -1,7 +1,10 @@
-import { defineConfig, devices } from "@playwright/test";
-
 // End-to-end tests drive the real console against the real backend: control plane, site agent,
 // gateway and simulated robots (see e2e/stack.py and e2e/site.ts).
+import { defineConfig, devices } from "@playwright/test";
+
+// A Chromium of your own (NEURA_CHROMIUM=/path/to/chrome) when Playwright's is not installed.
+const executablePath = process.env.NEURA_CHROMIUM || undefined;
+
 export default defineConfig({
   testDir: "e2e",
   timeout: 240_000,
@@ -17,7 +20,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"], launchOptions: { executablePath } } },
+  ],
   webServer: {
     command: "pnpm run build && pnpm exec vite preview --host 127.0.0.1 --port 4173 --strictPort",
     url: "http://127.0.0.1:4173/sign-in",

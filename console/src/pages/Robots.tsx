@@ -1,3 +1,5 @@
+// Robots: the project's robots, and one robot's page with its sessions, faults and what it runs
+// (design §19.3).
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 

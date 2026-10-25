@@ -1,3 +1,4 @@
+// A clock for ages and countdowns.
 import { useEffect, useState } from "react";
 
 /** The current time, re-rendering every `intervalMs` (for ages and countdowns). */

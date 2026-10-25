@@ -1,3 +1,5 @@
+// Deployments: every deployment in the project, filtered and searched, and the dialog that
+// creates one (design §19.3).
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 

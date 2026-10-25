@@ -17,7 +17,13 @@ import gen_reason_codes  # noqa: E402
 
 @pytest.mark.parametrize(
     "script",
-    ["gen_reason_codes.py", "gen_proto.py", "gen_schemas.py", "refresh_example_bindings.py"],
+    [
+        "gen_reason_codes.py",
+        "gen_proto.py",
+        "gen_schemas.py",
+        "refresh_example_bindings.py",
+        "codemap.py",
+    ],
 )
 def test_generated_files_are_current(script: str) -> None:
     result = subprocess.run(

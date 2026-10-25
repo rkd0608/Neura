@@ -1,3 +1,5 @@
+"""`python -m neura_cli`: the `neura` command."""
+
 from __future__ import annotations
 
 import sys

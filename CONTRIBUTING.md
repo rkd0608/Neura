@@ -17,7 +17,13 @@ For real models (PyTorch and LeRobot, about 5 GB): `make models-setup`.
 
 ## Before you push
 
-Run what CI runs for the parts you changed:
+`make verify` works out what your change can break from its diff against `origin/main` and runs
+those checks: lint, types, the tests of every package you touched and of everything that depends
+on it, the generated files, and the console, website and docs checks, with the website and docs
+opened in Chromium. It ends with what it did not check. `make verify VERIFY=--e2e` adds the
+console's end-to-end journey; `make verify VERIFY=--all` runs everything.
+
+Each part's own commands, which CI runs:
 
 | Changed | Run |
 | --- | --- |
@@ -43,6 +49,10 @@ Control-plane tests need Postgres:
 - **Claims carry evidence.** A doc page or README line that states a number links the report,
   benchmark or test it comes from, losing cases included. Docs pages carry a status label.
 - **Design first for big changes.** Decisions are recorded in [docs/neura-design.md](docs/neura-design.md).
+- **Files stay small and say what they are for.** A source file stays under 800 lines
+  (`make lint`), and starts with a docstring or comment saying what it is for:
+  [docs/codemap.md](docs/codemap.md) is built from those (`make gen`). What each feature touches
+  is in [docs/features.md](docs/features.md); update its row when the feature moves.
 
 ## Branches and pull requests
 

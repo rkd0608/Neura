@@ -1,3 +1,4 @@
+// The NucleiLabs site's entry point: mounts the page.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 

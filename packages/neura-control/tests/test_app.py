@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml
@@ -8,6 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
 
 from neura_control import ControlPlaneSettings, create_app
+from neura_control import app as app_module
 from neura_control.app import iter_routes
 from neura_control.database import database_reachable
 from neura_control.problems import PROBLEM_MEDIA_TYPE
@@ -103,6 +107,37 @@ def test_unexpected_errors_carry_a_request_id_and_are_counted(
     assert counted == [("/readyz", "500", 1.0)]
     logged = [r for r in caplog.records if r.exc_info and "req-boom" in r.getMessage()]
     assert len(logged) == 1  # logged once, with the request id that ties it to the response
+
+
+class FailingSessions:
+    """A session factory whose database is gone: every use raises. Stops the loop after two."""
+
+    def __init__(self, stop: asyncio.Event) -> None:
+        self.stop = stop
+        self.uses = 0
+
+    def __call__(self) -> Any:
+        self.uses += 1
+        if self.uses == 2:
+            self.stop.set()
+        raise OSError("connection refused")
+
+    begin = __call__
+
+
+@pytest.mark.parametrize("loop", ["_prune", "_sweep_rollouts"])
+async def test_background_loops_log_a_failed_pass_and_run_the_next(
+    loop: str, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(app_module, "PRUNE_INTERVAL_S", 0.01)
+    settings = ControlPlaneSettings(environment="test", rollout_sweep_interval_s=0.01)
+    stop = asyncio.Event()
+    sessions = FailingSessions(stop)
+    app = SimpleNamespace(state=SimpleNamespace(sessions=sessions))
+    await asyncio.wait_for(getattr(app_module, loop)(app, settings, stop), timeout=10)
+    assert sessions.uses == 2  # the first failure did not end the loop
+    failures = [r for r in caplog.records if r.exc_info and r.exc_info[0] is OSError]
+    assert len(failures) == 2
 
 
 def test_implemented_routes_are_in_the_published_spec() -> None:

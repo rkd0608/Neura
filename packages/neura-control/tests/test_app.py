@@ -80,6 +80,31 @@ def test_unexpected_errors_do_not_leak_details() -> None:
     assert response.json()["reason"] == "API_INTERNAL_ERROR"
 
 
+def test_unexpected_errors_carry_a_request_id_and_are_counted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def probe(url: PostgresDsn, timeout_s: float) -> bool:
+        raise RuntimeError("probe failed")
+
+    app = create_app(ControlPlaneSettings(environment="test"), database_probe=probe)
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/readyz", headers={"X-Request-Id": "req-boom"}
+    )
+    assert response.status_code == 500
+    assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert response.json()["reason"] == "API_INTERNAL_ERROR"
+    assert response.headers["X-Request-Id"] == "req-boom"
+    counted = [
+        (s.labels["route"], s.labels["status"], s.value)
+        for family in app.state.metrics.registry.collect()
+        for s in family.samples
+        if s.name == "neura_http_requests_total"
+    ]
+    assert counted == [("/readyz", "500", 1.0)]
+    logged = [r for r in caplog.records if r.exc_info and "req-boom" in r.getMessage()]
+    assert len(logged) == 1  # logged once, with the request id that ties it to the response
+
+
 def test_implemented_routes_are_in_the_published_spec() -> None:
     """Spec-first: every public route the service exposes must be declared in api/openapi.yaml."""
     app = create_app(ControlPlaneSettings(environment="test"))

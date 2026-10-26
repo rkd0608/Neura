@@ -276,6 +276,8 @@ def create_app(
             else secrets.token_hex(12)
         )
         request.state.request_id = request_id
+        started = time.perf_counter()
+        wait = None
         if request.url.path.startswith("/v1/") and request.url.path != "/v1/meta":
             now = time.monotonic()
             address = request.client.host if request.client else ""
@@ -283,15 +285,17 @@ def create_app(
             credential = request.headers.get("Authorization")
             if wait is None and credential:
                 wait = limiter.take(hashlib.sha256(credential.encode()).hexdigest(), now)
-            if wait is not None:
-                response: Response = problem_response(
-                    ReasonCode.API_RATE_LIMITED, instance=request.url.path
-                )
-                response.headers["Retry-After"] = str(max(1, round(wait)))
-                response.headers["X-Request-Id"] = request_id
-                return response
-        started = time.perf_counter()
-        response = await call_next(request)
+        response: Response
+        if wait is not None:
+            response = problem_response(ReasonCode.API_RATE_LIMITED, instance=request.url.path)
+            response.headers["Retry-After"] = str(max(1, round(wait)))
+        else:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                # Answered here, not by the outermost error middleware, so that a 500 carries
+                # its request id and is counted like every other response.
+                response = await handle_unexpected(request, exc)
         response.headers["X-Request-Id"] = request_id
         metrics.request(
             route_template(request.scope),

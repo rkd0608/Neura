@@ -709,6 +709,9 @@ def test_rate_limit(make_api: AppFactory) -> None:
     limited = client.get(f"/v1/organizations/{org}")
     assert int(limited.headers["Retry-After"]) >= 1
     assert limited.json()["reason"] == "API_RATE_LIMITED"
+    assert len(limited.headers["X-Request-Id"]) == 24
+    counted = client.client.app.state.metrics.requests.collect()[0].samples
+    assert any(s.labels["status"] == "429" and s.value == 3 for s in counted)
 
 
 def test_request_ids_are_returned(api: Api) -> None:

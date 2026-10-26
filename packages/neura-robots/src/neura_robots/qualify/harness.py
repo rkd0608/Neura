@@ -559,9 +559,10 @@ class Qualification:
     def report(self, started: float, finished: float) -> dict[str, Any]:
         global_checks = self._global_checks()
         scenarios_passed = all(r.passed for r in self.results if r.skipped is None)
-        complete = {r.name for r in self.results if r.skipped is None} == set(SCENARIOS)
-        parity_passed = bool(self.parity.get("passed"))
         emulated = self.config.emulator is not None
+        ran = {r.name for r in self.results if r.skipped is None}
+        complete = set(required(emulated)) <= ran
+        parity_passed = bool(self.parity.get("passed"))
         return {
             "kind": "neura-hardware-qualification",
             "version": 1,
@@ -1009,6 +1010,13 @@ SCENARIOS: dict[str, tuple[Scenario, str]] = {
     "second_runtime_blocked": (second_runtime_blocked, "any"),
     "actuator_lock_lost": (actuator_lock_lost, "any"),  # last: the arm is no longer ours
 }
+
+
+def required(emulated: bool) -> list[str]:
+    """The scenarios a complete run includes: all of them on the emulator; on hardware, all
+    but those only the emulator can induce (a servo overload). ``report()["complete"]`` and
+    promotion both use it."""
+    return [name for name, (_, needs) in SCENARIOS.items() if emulated or needs != "emulator"]
 
 
 def write_report(report: dict[str, Any], path: Path) -> None:

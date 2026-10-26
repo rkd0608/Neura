@@ -32,7 +32,13 @@ from typing import Any
 
 from neura_robots.qualify.episodes import add_parser as add_episodes_parser
 from neura_robots.qualify.episodes import run as run_episodes
-from neura_robots.qualify.harness import SCENARIOS, Qualification, QualifyConfig, write_report
+from neura_robots.qualify.harness import (
+    SCENARIOS,
+    Qualification,
+    QualifyConfig,
+    required,
+    write_report,
+)
 from neura_robots.so101 import CameraConfig, So101Config
 
 ROOT = Path(__file__).resolve().parents[5]
@@ -188,9 +194,12 @@ def promotion_problems(report: dict[str, Any], episodes: dict[str, Any]) -> list
     if not report.get("passed"):
         problems.append("the fault suite or parity did not pass")
     ran = {s["name"] for s in report.get("scenarios", []) if not s.get("skipped")}
-    missing = [name for name in SCENARIOS if name not in ran]
-    if missing or not report.get("complete"):
-        problems.append(f"scenarios did not run: {', '.join(missing)} (all must; see --manual)")
+    missing = [name for name in required(emulated=False) if name not in ran]
+    if missing:
+        problems.append(
+            f"scenarios did not run: {', '.join(missing)} (every scenario hardware can run "
+            "must; see --manual)"
+        )
     if episodes.get("kind") != "neura-closed-loop-episodes":
         problems.append("the episodes file is not a closed-loop episodes report")
     else:

@@ -7,9 +7,11 @@ api/openapi.yaml by the conformance client.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
 from test_onboarding_flow import site_ack
 
@@ -221,6 +223,31 @@ def test_versions_number_themselves_and_a_repush_is_the_same_version(bench: Flee
     assert [v["status"]["number"] for v in listed] == [2, 1]  # newest first
     policy = bench.c.get(f"/v1/policies/{bench.policy}").json()
     assert policy["status"] == {"versions": 2, "latest_version": 2}
+
+
+def test_a_repush_signed_by_another_key_adds_its_signature_audited(bench: Fleet) -> None:
+    first = bench.push("v1", "a")
+    artifact_id = first["spec"]["model_artifact_id"]
+    before = bench.c.get(f"/v1/model-artifacts/{artifact_id}").json()
+    bench.key = signing.load_private_key(signing.generate_key())
+    again = bench.push("v1", "a")
+    assert again["metadata"]["id"] == first["metadata"]["id"]  # still the same version
+    after = bench.c.get(f"/v1/model-artifacts/{artifact_id}").json()
+    assert len(after["signatures"]) == 2
+    assert after["metadata"]["version"] == "2"
+    assert datetime.fromisoformat(after["metadata"]["updated_at"]) > datetime.fromisoformat(
+        before["metadata"]["updated_at"]
+    )
+    audit = bench.c.get(
+        f"/v1/projects/{bench.project}/audit-records", params={"page_size": 200}
+    ).json()["items"]
+    assert [r["target"] for r in audit if r["action"] == "model_artifact.sign"] == [artifact_id]
+    with psycopg.connect(bench.db) as conn:
+        events = conn.execute(
+            "SELECT type, resource_version FROM events WHERE resource = %s ORDER BY cursor",
+            (artifact_id,),
+        ).fetchall()
+    assert events == [("resource.created", "1"), ("resource.updated", "2")]
 
 
 def test_a_versions_source_must_match_its_adapter(bench: Fleet) -> None:

@@ -42,7 +42,7 @@ from neura_control.api import (
 from neura_control.clock import utcnow
 from neura_control.database import database_reachable
 from neura_control.db.engine import create_engine, session_factory
-from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey
+from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey, LoginSession
 from neura_control.grpc_site import start_agent_server
 from neura_control.metrics import ControlPlaneMetrics, route_template
 from neura_control.problems import (
@@ -136,10 +136,14 @@ async def _prune_once(
         await session.execute(
             delete(EnrollmentToken).where(EnrollmentToken.expires_at < now - timedelta(days=1))
         )
+        await session.execute(
+            delete(LoginSession).where(LoginSession.expires_at < now - timedelta(days=1))
+        )
 
 
 async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event) -> None:
-    """Drop events past retention, old idempotency records and expired enrollment tokens."""
+    """Drop events past retention, old idempotency records, and enrollment tokens and CLI login
+    sessions a day past their expiry."""
     await _every(
         PRUNE_INTERVAL_S, stop, lambda: _prune_once(app.state.sessions, settings), "pruning"
     )

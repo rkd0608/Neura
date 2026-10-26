@@ -50,7 +50,7 @@ need; when you change one, move code out of it rather than adding to it.
 - `packages/neura-control/src/neura_control/grpc_site.py` (923 lines)
 - `packages/neura-control/src/neura_control/services/rollouts.py` (1090 lines)
 - `packages/neura-control/tests/test_site_control.py` (856 lines)
-- `packages/neura-robots/src/neura_robots/qualify/harness.py` (1107 lines)
+- `packages/neura-robots/src/neura_robots/qualify/harness.py` (1016 lines)
 
 ## packages/neura
 
@@ -289,7 +289,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/evidence/local.py`: The in-process baselines: the policy and the scene in one process, no Neura.
 - `neura_robots/evidence/policy.py`: A LeRobot checkpoint, run the way ``lerobot-eval`` runs it (LeRobot 0.6): the environment's observation through ``preprocess_observation``, the checkpoint's own preprocessor, ``select_action`` (which …
 - `neura_robots/evidence/results.py`: Episode results and their summaries.
-- `neura_robots/evidence/served.py`: Episodes served by Neura: the simulated ALOHA behind the robot runtime and ``neura-arm``'s process, a site gateway with its policy worker processes (``qualify.harness.LocalSite``), and gRPC over TCP …
+- `neura_robots/evidence/served.py`: Episodes served by Neura: the simulated ALOHA behind the robot runtime and ``neura-arm``'s process, a site gateway with its policy worker processes (``qualify.site.LocalSite``), and gRPC over TCP …
 - `neura_robots/evidence/synthetic.py`: A LeRobot ACT checkpoint shaped like the published ALOHA ones (the top camera at 640x480, the 14-value state, 14 actions, chunks of 100), with random weights: for testing the evidence pipeline where …
 - `neura_robots/lock.py`: One actuator authority per robot (design §6.3).
 - `neura_robots/process.py`: The robot-side process for an arm (design §7): the runtime, the session client and the gateway connection around a connected arm (``arm.Arm``: the SO-101, or the simulated ALOHA), driven by a local …
@@ -297,6 +297,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/qualify/episodes.py`: Closed-loop parity: operator-scored episodes served by Neura and by LeRobot alone (design §7.1).
 - `neura_robots/qualify/harness.py`: Hardware qualification: the fault suite and open-loop parity on a real arm (design §7.1).
 - `neura_robots/qualify/reference.py`: The policy as LeRobot runs it on its own: the reference for parity (design §10).
+- `neura_robots/qualify/site.py`: The site a robot connects to during qualification and the evidence runs: the site's gateway process, with its real policy workers, behind the TCP fault proxy, on this machine (design §7.1).
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
 Tests, under `packages/neura-robots/tests/`: `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_evidence.py`, `test_process.py`, `test_qualify.py`, `test_so101.py`

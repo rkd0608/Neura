@@ -1,5 +1,5 @@
 """Episodes served by Neura: the simulated ALOHA behind the robot runtime and ``neura-arm``'s
-process, a site gateway with its policy worker processes (``qualify.harness.LocalSite``), and
+process, a site gateway with its policy worker processes (``qualify.site.LocalSite``), and
 gRPC over TCP through the fault proxy between them.
 
 Each episode resets the scene with its seed, arms the robot as an operator would, lets it run
@@ -28,7 +28,7 @@ from neura_robots.aloha.contracts import Deployment
 from neura_robots.aloha.world import LockstepWorld, RealTimeWorld
 from neura_robots.evidence.results import EpisodeResult
 from neura_robots.process import ArmProcess
-from neura_robots.qualify.harness import REVISION, ROBOT_ID, TOKEN, LocalSite
+from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_runtime import tensors
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
 from neura_sim.chaos import FaultProxy

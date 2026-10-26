@@ -296,7 +296,11 @@ class _ProxyThread:
 
     def start(self) -> None:
         self.thread.start()
-        asyncio.run_coroutine_threadsafe(self.proxy.start(), self.loop).result(timeout=5)
+        try:
+            asyncio.run_coroutine_threadsafe(self.proxy.start(), self.loop).result(timeout=5)
+        except BaseException:
+            self.stop()  # the loop's thread, which runs until stopped
+            raise
 
     def call(self, function: Callable[[], None]) -> None:
         self.loop.call_soon_threadsafe(function)
@@ -354,10 +358,16 @@ class AsyncRun:
         self.camera = _Camera(world)
 
     def __enter__(self) -> AsyncRun:
-        self.server.start()
-        self.server.wait_listening()
-        self.proxy.start()
-        self.camera.start()
+        # What has started is stopped if a later step fails (the proxy's port taken, a server
+        # that never listens): __exit__ does not run then.
+        with contextlib.ExitStack() as started:
+            self.server.start()
+            started.callback(self.server.stop)
+            self.server.wait_listening()
+            self.proxy.start()
+            started.callback(self.proxy.stop)
+            self.camera.start()
+            started.pop_all()
         return self
 
     def __exit__(self, *_: object) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ import pytest
 from neura_robots.qualify.cli import promotion_problems
 from neura_robots.qualify.episodes import newcombe_lower, schedule, wilson
 from neura_robots.qualify.harness import SCENARIOS
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_wilson_and_newcombe_match_the_published_example() -> None:
@@ -123,6 +126,33 @@ def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:
             "evidence": "https://example.org/qualification/2",
         }
     ]
+
+
+def test_a_site_that_cannot_start_leaves_nothing_running(tmp_path: Path) -> None:
+    from neura_robots.qualify.site import LocalSite
+
+    contracts = ROOT / "examples" / "contracts"
+    site = LocalSite(
+        contracts / "act-so101.artifact.yaml",
+        contracts / "so101.robot.yaml",
+        contracts / "act-so101-30hz.profile.yaml",
+        None,
+        "cpu",
+        tmp_path / "site",
+    )
+
+    async def start() -> None:
+        with socket.socket() as taken:  # another program has the proxy's port
+            taken.bind(("127.0.0.1", site.proxy.listen_port))
+            taken.listen()
+            with pytest.raises(OSError, match="address already in use"):
+                async with site:
+                    pass
+        supervisor = site.gateway._task
+        assert supervisor is None or supervisor.done(), "a gateway would start after the error"
+        assert site.gateway.pid is None
+
+    asyncio.run(start())
 
 
 # --- on the emulated arm (needs LeRobot) ----------------------------------------------------------

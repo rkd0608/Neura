@@ -44,14 +44,15 @@ def run_login(args: argparse.Namespace, ctx: Context) -> int:
     config, out = ctx.config, ctx.out
     if args.api:
         config.api_url = args.api.rstrip("/")
+    approved: str | None = None
     if args.with_token:
         token = sys.stdin.readline().strip()
         if not token:
             raise CliError("No token on stdin.", "echo $NEURA_TOKEN | neura login --with-token")
     else:
-        token = _browser_login(ctx, open_browser=not args.no_browser)
+        token, approved = _browser_login(ctx, open_browser=not args.no_browser)
     config.token = token
-    config.organization_id = args.workspace
+    config.organization_id = args.workspace or approved
     config.project_id = None
     try:
         session = ctx.session()
@@ -69,12 +70,13 @@ def run_login(args: argparse.Namespace, ctx: Context) -> int:
     return 0
 
 
-def _browser_login(ctx: Context, *, open_browser: bool) -> str:
+def _browser_login(ctx: Context, *, open_browser: bool) -> tuple[str, str]:
     with public_client(ctx.config) as client:
         return _wait_for_approval(ctx, client, open_browser=open_browser)
 
 
-def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> str:
+def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> tuple[str, str]:
+    """The token issued once the person approves, and the workspace they approved it for."""
     out = ctx.out
     started = client.create_login_session(body={"client_name": _client_name()})
     url = started["verification_url"]
@@ -97,8 +99,7 @@ def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> s
             raise CliError(
                 "The sign-in expired before it was approved.", "Run: neura login"
             ) from error
-        ctx.config.organization_id = granted["organization_id"]
-        return granted["token"]
+        return granted["token"], granted["organization_id"]
     raise CliError("The sign-in expired before it was approved.", "Run: neura login")
 
 

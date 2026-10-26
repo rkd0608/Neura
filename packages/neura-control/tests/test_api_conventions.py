@@ -10,6 +10,7 @@ from typing import Any
 import jwt
 import psycopg
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from conftest import VALIDATOR, AppFactory, ConformanceClient, OidcIssuer, contract
@@ -710,7 +711,9 @@ def test_rate_limit(make_api: AppFactory) -> None:
     assert int(limited.headers["Retry-After"]) >= 1
     assert limited.json()["reason"] == "API_RATE_LIMITED"
     assert len(limited.headers["X-Request-Id"]) == 24
-    counted = client.client.app.state.metrics.requests.collect()[0].samples
+    app = client.client.app
+    assert isinstance(app, FastAPI)
+    counted = app.state.metrics.requests.collect()[0].samples
     assert any(s.labels["status"] == "429" and s.value == 3 for s in counted)
 
 

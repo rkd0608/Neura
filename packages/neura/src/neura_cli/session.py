@@ -51,9 +51,6 @@ class Session:
         config.project_id = workspace["project_id"]
         return cls(config, client, config.organization_id, config.project_id)
 
-    def console_url(self, path: str = "") -> str:
-        return self.config.api_url.rstrip("/") + path
-
     # --- lookups ----------------------------------------------------------------------------
 
     def sites(self) -> list[dict[str, Any]]:

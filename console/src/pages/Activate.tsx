@@ -7,7 +7,8 @@ import { useSearchParams } from "react-router";
 import { api, idempotent, unwrap } from "../api/client";
 import { useApiMutation, useMe } from "../api/queries";
 import { TerminalIcon } from "../components/Icons";
-import { Callout, Card, ErrorState, Field, Loading, PageHeader } from "../components/ui";
+import { Field } from "../components/Field";
+import { Callout, Card, ErrorState, Loading, PageHeader } from "../components/ui";
 
 const CODE = /^[A-Z0-9]{4}-?[A-Z0-9]{4}$/;
 
@@ -62,10 +63,8 @@ export function Activate() {
           >
             <Field id={codeId} label="Code" hint="As the terminal shows it, like BCDF-2345">
               <input
-                id={codeId}
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                aria-describedby={`${codeId}-hint`}
                 autoComplete="off"
                 spellCheck={false}
                 required
@@ -73,7 +72,7 @@ export function Activate() {
             </Field>
             {organizations.length > 1 ? (
               <Field id={orgId} label="Workspace">
-                <select id={orgId} value={chosen} onChange={(e) => setOrg(e.target.value)}>
+                <select value={chosen} onChange={(e) => setOrg(e.target.value)}>
                   {organizations.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.display_name}

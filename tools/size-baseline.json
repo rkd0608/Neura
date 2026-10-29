@@ -2,10 +2,9 @@
   "budget": 800,
   "about": "Files over the budget when it was set, with their size. Shrink them; never grow them (tools/check_sizes.py).",
   "files": {
-    "console/src/components/ui.tsx": 831,
-    "console/src/pages/Improve.tsx": 838,
-    "console/src/pages/Release.tsx": 1128,
-    "console/src/pages/Settings.tsx": 827,
+    "console/src/pages/Improve.tsx": 823,
+    "console/src/pages/Release.tsx": 1120,
+    "console/src/pages/Settings.tsx": 809,
     "console/src/styles/app.css": 1628,
     "landing/src/landing.css": 865,
     "packages/neura-agent/src/neura_agent/core.py": 1221,

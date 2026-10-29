@@ -6,13 +6,13 @@ import { api, idempotent, unwrap, type Schemas } from "../api/client";
 import { useApiMutation, useRobots, useRollouts, useSites } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { BotIcon, PlusIcon, ServerIcon } from "../components/Icons";
+import { Field } from "../components/Field";
 import {
   Badge,
   Callout,
   Card,
   CopyField,
   ErrorState,
-  Field,
   Loading,
   PageHeader,
   Time,
@@ -239,13 +239,7 @@ function NewSite({ open, onClose }: { open: boolean; onClose: () => void }) {
           label="Name"
           hint={name ? `Its identifier: ${slug(name) || "site"}` : undefined}
         >
-          <input
-            id={nameId}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-describedby={name ? `${nameId}-hint` : undefined}
-            required
-          />
+          <input value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
         <fieldset className="stack" style={{ gap: 6 }}>
           <legend>Kind</legend>

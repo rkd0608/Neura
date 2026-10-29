@@ -8,13 +8,13 @@ import { useApiMutation, useEvaluations, useTrainingJobs } from "../api/queries"
 import { Dialog } from "../components/Dialog";
 import { CpuIcon, GaugeIcon, PlusIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
+import { Field } from "../components/Field";
 import {
   Badge,
   Callout,
   Card,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   Reason,
@@ -557,7 +557,7 @@ function FineTune({
             </Callout>
           ) : null}
           <Field id="ft-base" label="Start from">
-            <select id="ft-base" value={base} onChange={(e) => setBase(e.target.value)}>
+            <select value={base} onChange={(e) => setBase(e.target.value)}>
               {revisions.map((r) => (
                 <option key={r.metadata.id} value={r.metadata.id}>
                   {revisionLabel(r, running)}
@@ -587,7 +587,6 @@ function FineTune({
           <div className="row" style={{ gap: 12 }}>
             <Field id="ft-steps" label="Steps">
               <input
-                id="ft-steps"
                 type="number"
                 min={1}
                 max={10_000_000}
@@ -597,7 +596,6 @@ function FineTune({
             </Field>
             <Field id="ft-batch" label="Batch size">
               <input
-                id="ft-batch"
                 type="number"
                 min={1}
                 max={4096}
@@ -612,7 +610,6 @@ function FineTune({
             hint="Optional. By default, the base's version followed by -ft and the job."
           >
             <input
-              id="ft-version"
               type="text"
               pattern="[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}"
               value={version}
@@ -713,11 +710,7 @@ function Evaluate({
       >
         <div className="dialog-body">
           <Field id="ev-candidate" label="Candidate">
-            <select
-              id="ev-candidate"
-              value={candidate}
-              onChange={(e) => setCandidate(e.target.value)}
-            >
+            <select value={candidate} onChange={(e) => setCandidate(e.target.value)}>
               {candidates.map((r) => (
                 <option key={r.metadata.id} value={r.metadata.id}>
                   {revisionLabel(r, running)}
@@ -726,7 +719,7 @@ function Evaluate({
             </select>
           </Field>
           <Field id="ev-baseline" label="Against">
-            <select id="ev-baseline" value={baseline} onChange={(e) => setBaseline(e.target.value)}>
+            <select value={baseline} onChange={(e) => setBaseline(e.target.value)}>
               <option value="">What the robots run now</option>
               {candidates.map((r) => (
                 <option key={r.metadata.id} value={r.metadata.id}>
@@ -736,11 +729,7 @@ function Evaluate({
             </select>
           </Field>
           <Field id="ev-kind" label="Suite">
-            <select
-              id="ev-kind"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as SuiteKind)}
-            >
+            <select value={kind} onChange={(e) => setKind(e.target.value as SuiteKind)}>
               <option value="replay">Replay on recorded episodes</option>
               <option value="shadow">Shadow on live observations</option>
               <option value="simulation">Simulation (ALOHA transfer cube)</option>
@@ -754,7 +743,6 @@ function Evaluate({
                 hint="How long the candidate shadows the robots running the revision it would replace."
               >
                 <input
-                  id="ev-minutes"
                   type="number"
                   min={0.1}
                   max={10_080}
@@ -769,7 +757,6 @@ function Evaluate({
                 hint="Fewer compared than this is inconclusive."
               >
                 <input
-                  id="ev-observations"
                   type="number"
                   min={1}
                   max={10_000_000}
@@ -787,7 +774,6 @@ function Evaluate({
             <div className="row" style={{ gap: 12 }}>
               <Field id="ev-scenes" label="Scenes">
                 <input
-                  id="ev-scenes"
                   type="number"
                   min={1}
                   max={10_000}
@@ -801,7 +787,6 @@ function Evaluate({
                 hint="The largest drop in success rate still called no worse."
               >
                 <input
-                  id="ev-margin"
                   type="number"
                   min={0}
                   max={0.99}

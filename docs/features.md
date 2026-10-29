@@ -169,7 +169,8 @@ ledger and its allowlist.
 
 Fleet, Policies, Rollouts and Settings, on the public API only.
 
-- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts; large),
+- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts),
+  `console/src/components/Field.tsx` (a form field wired to its label, hint and error),
   `console/src/styles/app.css` (large), `console/src/styles/tokens.css` (shared with the site
   and docs)
 - Tests: `console/src/lib/fleet.test.ts` and the other unit tests (`make console-check`);

@@ -24,12 +24,12 @@ import {
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
 import { BotIcon, CubeIcon, PlusIcon, SlidersIcon } from "../components/Icons";
+import { Field } from "../components/Field";
 import {
   Badge,
   Card,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -374,11 +374,9 @@ function Signatures({ artifact, projectId }: { artifact: Artifact; projectId: st
           <div className="dialog-body">
             <Field id="signature-text" label="Signature" error={error}>
               <textarea
-                id="signature-text"
                 value={text}
                 spellCheck={false}
                 rows={6}
-                aria-invalid={error ? true : undefined}
                 onChange={(event) => {
                   setText(event.target.value);
                   setError(null);

@@ -80,7 +80,7 @@ def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> s
     url = started["verification_url"]
     out.header("Sign in to Neura")
     out.line(f"  Open    {url}")
-    out.line(f"  Check   the page shows {out.s.bold(started['user_code'])}, then approve")
+    out.line(f"  Type    {out.s.bold(started['user_code'])} on that page, then approve")
     out.line()
     if open_browser and sys.stdout.isatty():
         webbrowser.open(url)

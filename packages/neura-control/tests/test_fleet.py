@@ -515,6 +515,34 @@ def test_the_cli_signs_in_through_the_browser(make_api: AppFactory) -> None:
     assert anonymous.post(exchange, {"secret": login["secret"]}).status_code == 404  # once
 
 
+def test_a_person_sees_what_a_code_signs_in_before_approving_it(make_api: AppFactory) -> None:
+    """Anyone can start a sign-in and send its link: the console shows what is waiting for the
+    code (what started it and when) before a person approves it."""
+    issuer = OidcIssuer()
+    client, _ = make_api(oidc_verifier=issuer.verifier, memberships={ADMIN: Role.ADMIN})
+    anonymous = client.as_token(None)
+    login = anonymous.post("/v1/login-sessions", {"client_name": "neura CLI on eve@far-away"})
+    assert login.status_code == 201, login.text
+    code = login.json()["user_code"]
+    lookup = f"/v1/login-codes/{code}"
+
+    assert anonymous.get(lookup).status_code == 401
+    # Only people approve codes, so only people look them up.
+    assert client.get(lookup).status_code == 403
+    ada = client.as_token(issuer.token("ada"))
+    found = ada.get(f"/v1/login-codes/{code.replace('-', '').lower()}")
+    assert found.status_code == 200, found.text
+    waiting = found.json()
+    assert waiting["user_code"] == code
+    assert waiting["client_name"] == "neura CLI on eve@far-away"
+    assert waiting["created_at"] < waiting["expires_at"] == login.json()["expires_at"]
+    assert "secret" not in waiting
+
+    assert ada.get("/v1/login-codes/BCDF-2345").status_code == 404
+    assert ada.post("/v1/login-approvals", {"user_code": code}).status_code == 200
+    assert ada.get(lookup).status_code == 404  # approved: nothing waits for it any more
+
+
 def report_inventory(database_url: str, site_id: str, robots: list[dict[str, Any]]) -> None:
     """What a site's agent sends: the robots its server drives."""
     import asyncio

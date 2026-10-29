@@ -393,23 +393,62 @@ test("the four pages: a site finds its arm, a pushed policy is deployed and appr
     ).toBeVisible();
     await expect(page.getByText("sim-1 now runs hold v1")).toBeVisible();
     await expectAccessible(page, "rollout, live");
-
-    // --- signing a CLI in: only a person may approve its code ---------------------------------
-    const started = (await (
-      await fetch(`${stackState().api_url}/v1/login-sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": `e2e-${Date.now()}` },
-        body: JSON.stringify({ client_name: "neura CLI on the e2e machine" }),
-      })
-    ).json()) as { user_code: string };
-    await page.goto(`/activate?code=${started.user_code}`);
-    await expect(page.getByLabel("Code")).toHaveValue(started.user_code);
-    await expectAccessible(page, "activate");
-    await page.getByRole("button", { name: "Approve" }).click();
-    // The console is signed in with an API token here: tokens cannot mint tokens.
-    await expect(page.getByText("only a signed-in person can approve a sign-in")).toBeVisible();
   } finally {
     site.stop();
     rmSync(work, { recursive: true, force: true });
   }
+});
+
+/** What `neura login` does first: start a sign-in, as anyone can, and get its link's code. */
+async function startCliSignIn(): Promise<{ id: string; user_code: string; secret: string }> {
+  const response = await fetch(`${stackState().api_url}/v1/login-sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": `e2e-${Date.now()}` },
+    body: JSON.stringify({ client_name: "neura CLI on the e2e machine" }),
+  });
+  expect(response.status).toBe(201);
+  return (await response.json()) as { id: string; user_code: string; secret: string };
+}
+
+test("signing a CLI in: a person types the code their terminal shows, sees what it signs in, and approves it", async ({
+  page,
+}) => {
+  const started = await startCliSignIn();
+  // Signed in with an API token: tokens cannot mint tokens.
+  await page.goto("/sign-in");
+  await page.getByLabel("API token").fill(stackState().token);
+  await page.getByRole("button", { name: "Sign in with token" }).click();
+  await expect(page.getByRole("navigation", { name: /Project|Organization/ })).toBeVisible();
+  await page.goto(`/activate?code=${started.user_code}`);
+  await expect(page.getByText("Only a person can approve a sign-in")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+
+  // A person, signed in with the stack's SSO issuer. Its sign-in is a redirect to an identity
+  // provider this stack does not run, so the test hands the console the person's access token.
+  await page.evaluate((token) => {
+    sessionStorage.setItem("neura.apiToken", token);
+  }, stackState().person_token);
+  await page.goto(`/activate?code=${started.user_code}`);
+  // The link alone approves nothing: its code is shown to compare, not filled in.
+  const code = page.getByLabel("Code");
+  await expect(code).toHaveValue("");
+  await expect(page.getByText(`The link you opened is for ${started.user_code}`)).toBeVisible();
+  const approve = page.getByRole("button", { name: "Approve" });
+  await expect(approve).toBeDisabled();
+  await code.fill(started.user_code.toLowerCase().replace("-", ""));
+  await expect(page.getByText("neura CLI on the e2e machine")).toBeVisible();
+  await expect(page.getByText(/It gets admin access to .*, for 30 days/)).toBeVisible();
+  await expect(approve).toBeEnabled();
+  await expectAccessible(page, "activate");
+  await approve.click();
+  await expect(page.getByText(/neura CLI on the e2e machine now has admin access/)).toBeVisible();
+
+  // The CLI, polling with the secret only it holds, gets its token once.
+  const exchange = await fetch(`${stackState().api_url}/v1/login-sessions/${started.id}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": `e2e-${Date.now()}` },
+    body: JSON.stringify({ secret: started.secret }),
+  });
+  expect(exchange.status).toBe(200);
+  expect(((await exchange.json()) as { token: string }).token).toMatch(/^ntk_/);
 });

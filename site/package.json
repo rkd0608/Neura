@@ -8,9 +8,9 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "start": "docusaurus start",
+    "start": "docusaurus start --host 127.0.0.1 --port 5175",
     "build": "docusaurus build && node scripts/csp.mjs",
-    "serve": "docusaurus serve",
+    "serve": "docusaurus serve --host 127.0.0.1 --port 5175",
     "clear": "docusaurus clear",
     "typecheck": "tsc --noEmit"
   },

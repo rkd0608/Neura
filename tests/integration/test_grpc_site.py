@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 
+import grpc
 import pytest
 
+from neura.v1 import dataplane_pb2, dataplane_pb2_grpc
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
     DeploymentConfig,
@@ -71,6 +74,39 @@ async def test_robots_run_through_a_live_gateway() -> None:
     # A wrong token never gets a session.
     assert intruder.runtime.session_id is None
     assert intruder.runtime.dispatched == 0
+
+
+async def test_a_stream_the_gateway_fails_on_ends_with_an_error_and_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = GatewayServer(gateway_config(["robot-0"]))
+    await server.start()
+
+    def broken(*args: object) -> None:
+        raise RuntimeError("the core failed on this message")
+
+    monkeypatch.setattr(server.core, "receive", broken)
+    held = asyncio.Event()
+
+    async def messages() -> AsyncIterator[dataplane_pb2.RobotMessage]:
+        yield dataplane_pb2.RobotMessage(observation=dataplane_pb2.Observation())
+        await held.wait()  # the robot keeps its stream open
+
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{server.bound_port}") as channel:
+            call = dataplane_pb2_grpc.RobotGatewayStub(channel).Stream(
+                messages(), metadata=[("authorization", "Bearer token-robot-0")]
+            )
+            with pytest.raises(grpc.aio.AioRpcError) as failed:
+                async for _ in call:
+                    pass
+    finally:
+        held.set()
+        await server.stop()
+    assert failed.value.code() is grpc.StatusCode.INTERNAL
+    (record,) = [r for r in caplog.records if r.getMessage() == "stream from robot-0 failed"]
+    assert record.exc_info is not None
+    assert "the core failed on this message" in str(record.exc_info[1])
 
 
 async def test_gateway_closes_sessions_when_robots_stop() -> None:

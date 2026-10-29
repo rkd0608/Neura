@@ -23,8 +23,10 @@ _FROM_NUMPY: dict[str, common_pb2.Dtype] = {
     dt.str.lstrip("<|"): code for code, dt in _TO_NUMPY.items()
 }
 
-# Upper bound on elements in any one tensor; a guard against hostile or corrupted shapes.
+# Upper bounds on elements and dimensions in any one tensor; a guard against hostile or corrupted
+# shapes. Every numpy release builds arrays of this many dimensions.
 MAX_ELEMENTS = 64 * 1024 * 1024
+MAX_DIMS = 32
 
 
 class TensorError(ValueError):
@@ -54,6 +56,8 @@ def decode(
     declared = tuple(int(d) for d in tensor.shape)
     if not declared:
         raise TensorError("tensor has no shape")
+    if len(declared) > MAX_DIMS:
+        raise TensorError(f"tensor has {len(declared)} dimensions, more than {MAX_DIMS}")
     elements = math.prod(declared)
     if elements > MAX_ELEMENTS:
         raise TensorError(f"tensor has {elements} elements, more than {MAX_ELEMENTS}")
@@ -61,7 +65,10 @@ def decode(
         raise TensorError(f"shape {declared} does not match expected {shape}")
     if len(tensor.data) != elements * dtype.itemsize:
         raise TensorError(f"{len(tensor.data)} bytes do not match shape {declared} of {dtype.name}")
-    array = np.frombuffer(tensor.data, dtype=dtype).reshape(declared)
+    try:
+        array = np.frombuffer(tensor.data, dtype=dtype).reshape(declared)
+    except ValueError as exc:  # whatever else numpy refuses is still a malformed tensor
+        raise TensorError(f"shape {declared}: {exc}") from exc
     if require_finite and np.issubdtype(dtype, np.floating) and not np.isfinite(array).all():
         raise TensorError("tensor contains NaN or infinity")
     return array

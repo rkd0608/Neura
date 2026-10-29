@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,7 @@ from neura.v1 import common_pb2, dataplane_pb2, dataplane_pb2_grpc
 if TYPE_CHECKING:
     from neura_server.grpc_server import GatewayServer
 
+log = logging.getLogger("neura.gateway")
 STREAM_QUEUE = 256
 
 
@@ -122,3 +124,9 @@ class RobotService(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[mis
                 if task is not None and not task.done():
                     task.cancel()
             server.unbind_stream(outbox)
+        # The robot ended its stream, or the gateway failed on one of its messages: that is a bug,
+        # and the robot is told so instead of seeing a stream that ended normally.
+        failure = reader.exception()
+        if failure is not None:
+            log.error("stream from %s failed", robot_id, exc_info=failure)
+            await context.abort(grpc.StatusCode.INTERNAL, "the gateway failed on a message")

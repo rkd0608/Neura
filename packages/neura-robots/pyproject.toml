@@ -32,7 +32,7 @@ so101 = [
 # gym-aloha's dm_control uses, so the simulation is step-for-step identical to the one LeRobot
 # evaluates its published ALOHA policies on (neura_robots.aloha.fidelity).
 sim = [
-    "mujoco==3.16.0",
+    "mujoco==3.17.0",
     # The robot cell's page (aloha.cell) sends its cameras as JPEG.
     "pillow>=11",
 ]

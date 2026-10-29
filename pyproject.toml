@@ -45,7 +45,7 @@ dev = [
     "neura-robots",
     "neura-learn",
     "neura",
-    "grpcio-tools==1.84.0",
+    "grpcio-tools==1.84.1",
     "httpx2>=0.1",
     "hypothesis>=6.169",
     "mypy>=2.4",

@@ -466,7 +466,7 @@ Under `site/`:
 - `docusaurus.config.ts`: NucleiLabs developer docs (design §26).
 - `scripts/csp.mjs`: After a build: the Content-Security-Policy the docs are served with (deploy/landing).
 - `sidebars.ts`: The docs' side navigation: every page, in reading order.
-- `src/components/StatusBanner.module.css`: The status label at the top of every docs page, one color per label.
+- `src/components/StatusBanner.module.css`: The status label at the top of every docs page, one color per label: the design tokens' status colors (tokens.css), so the label reads in both themes.
 - `src/components/StatusBanner.tsx`: The status label every page carries (design §26.2), shown above the page's content.
 - `src/components/SupportedTable.tsx`: The Supported combinations table (design §26.5): rendered from data/supported.json, which only qualification runs write, so nobody can add a supported combination by hand.
 - `src/css/custom.css`: The docs in the NucleiLabs design: the console's and the site's tokens (tokens.css, loaded first), mapped onto Docusaurus's theme variables, with the site's navigation, type and footer.

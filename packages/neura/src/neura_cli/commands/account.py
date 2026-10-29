@@ -71,11 +71,15 @@ def run_login(args: argparse.Namespace, ctx: Context) -> int:
 
 
 def _browser_login(ctx: Context, *, open_browser: bool) -> tuple[str, str]:
-    with public_client(ctx.config) as client:
-        return _wait_for_approval(ctx, client, open_browser=open_browser)
+    # This loop asks again, at the pace the control plane sets (interval_s), while the answer is
+    # a retryable problem (API_LOGIN_PENDING until approved), so its client does not repeat.
+    with public_client(ctx.config) as client, public_client(ctx.config, max_retries=0) as poll:
+        return _wait_for_approval(ctx, client, poll, open_browser=open_browser)
 
 
-def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> tuple[str, str]:
+def _wait_for_approval(
+    ctx: Context, client: Client, poll: Client, *, open_browser: bool
+) -> tuple[str, str]:
     """The token issued once the person approves, and the workspace they approved it for."""
     out = ctx.out
     started = client.create_login_session(body={"client_name": _client_name()})
@@ -90,11 +94,9 @@ def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> t
     while time.time() < deadline:
         time.sleep(max(1, started["interval_s"]))
         try:
-            granted = client.exchange_login_session(
-                started["id"], body={"secret": started["secret"]}
-            )
+            granted = poll.exchange_login_session(started["id"], body={"secret": started["secret"]})
         except NeuraApiError as error:
-            if error.reason == "API_LOGIN_PENDING":
+            if error.retryable:
                 continue
             raise CliError(
                 "The sign-in expired before it was approved.", "Run: neura login"

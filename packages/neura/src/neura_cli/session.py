@@ -27,9 +27,9 @@ def client_for(config: Config, *, token: str | None = None) -> Client:
     return Client(config.api_url, token=token or config.token or "", user_agent="neura-cli/0.1")
 
 
-def public_client(config: Config) -> Client:
+def public_client(config: Config, *, max_retries: int = 3) -> Client:
     """For what needs no sign-in: starting a sign-in, the API's metadata."""
-    return Client(config.api_url, token="", user_agent="neura-cli/0.1")
+    return Client(config.api_url, token="", user_agent="neura-cli/0.1", max_retries=max_retries)
 
 
 @dataclass

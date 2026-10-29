@@ -149,7 +149,7 @@ EXPOSE 8090 8095 50051
 CMD ["neura-agent"]
 
 # --- NucleiLabs site (static) -------------------------------------------------------------------
-FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS landing-build
+FROM node:26.12-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS landing-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     npm install --global --no-fund --no-audit pnpm@10.28.0
@@ -165,7 +165,7 @@ ARG VITE_CONSOLE_URL VITE_DOCS_URL VITE_CONTACT_URL
 RUN pnpm run build
 
 # The developer docs, served by the site at /docs/ in its design.
-FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS docs-build
+FROM node:26.12-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS docs-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     npm install --global --no-fund --no-audit pnpm@10.28.0
@@ -193,7 +193,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["wget", "-qO-", "http://127.0.0.1:8080/healthz"]
 
 # --- web console --------------------------------------------------------------------------------
-FROM node:26.11-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS console-build
+FROM node:26.12-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS console-build
 RUN --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     npm install --global --no-fund --no-audit pnpm@10.28.0

@@ -202,23 +202,26 @@ async def _apply_outcome(session: AsyncSession, operation: Operation) -> None:
                 .with_for_update()
             )
         ).first()
-        if request is not None:
-            if succeeded:
-                request.state = "Activated"
-                request.approved_by = operation.result.get("approved_by")
-            elif operation.reason == ReasonCode.AGENT_BOUNDARY_DENIED.value or operation.result.get(
-                "refused"
-            ):
-                request.state = "Refused"
-            else:
-                request.state = "Cancelled" if operation.state == "Cancelled" else "Failed"
-            _touch(request)
-            await _emit(session, request.project_id, request)
+        if request is None:
+            log.warning("operation %s has no activation request", operation.id)
+            return
         if succeeded:
-            revision_id = operation.result.get("revision_id")
-            robot_ids = operation.result.get("robot_ids", [])
-            if revision_id:
-                await set_active_revision(session, revision_id, list(robot_ids))
+            request.state = "Activated"
+            request.approved_by = operation.result.get("approved_by")
+        elif operation.reason == ReasonCode.AGENT_BOUNDARY_DENIED.value or operation.result.get(
+            "refused"
+        ):
+            request.state = "Refused"
+        else:
+            request.state = "Cancelled" if operation.state == "Cancelled" else "Failed"
+        _touch(request)
+        await _emit(session, request.project_id, request)
+        if succeeded:
+            # What switched is what the request asked for: its revision, and those of its robots
+            # the site reports switched. Nothing else the site names is taken (design §17.8).
+            reported = set(operation.result.get("robot_ids") or [])
+            robot_ids = [r for r in request.robot_ids if r in reported]
+            await set_active_revision(session, operation, request.revision_id, robot_ids)
     elif operation.kind in ("evaluate", "train"):
         row = await _job(session, operation)
         if row is None:
@@ -476,32 +479,41 @@ async def _policy_version_of(session: AsyncSession, revision: Revision) -> dict[
 
 
 async def set_active_revision(
-    session: AsyncSession, revision_id: str, robot_ids: list[str]
+    session: AsyncSession, operation: Operation, revision_id: str, robot_ids: list[str]
 ) -> None:
-    """Record the revision robots acknowledged at a task boundary."""
+    """Record the revision robots acknowledged at a task boundary. Only the operation's own
+    deployment changes: a revision of another site's deployment, or a robot not in it, is
+    refused."""
     revision = await session.get(Revision, revision_id)
-    if revision is None:
-        return
-    deployment = await session.get(Deployment, revision.deployment_id, with_for_update=True)
-    if deployment is None:
+    deployment = (
+        await session.get(Deployment, revision.deployment_id, with_for_update=True)
+        if revision is not None
+        else None
+    )
+    robots = [await session.get(Robot, r, with_for_update=True) for r in robot_ids]
+    if (
+        revision is None
+        or deployment is None
+        or (deployment.project_id, deployment.site_id) != (operation.project_id, operation.site_id)
+        or any(r is None or r.id not in deployment.robot_ids for r in robots)
+    ):
+        log.warning("refused %s: switching %s to %s", operation.id, robot_ids, revision_id)
         return
     now = iso(utcnow())
     active = dict(
         deployment.observed.get("active_revision_ids", dict.fromkeys(deployment.robot_ids))
     )
     running = await _policy_version_of(session, revision)
-    for robot_id in robot_ids:
-        active[robot_id] = revision_id
-        robot = await session.get(Robot, robot_id, with_for_update=True)
-        if robot is not None:
-            robot.observed = {
-                **robot.observed,
-                "active_revision_id": revision_id,
-                **running,
-                "observed_at": now,
-            }
-            _touch(robot)
-            await _emit(session, robot.project_id, robot)
+    for robot in filter(None, robots):
+        active[robot.id] = revision_id
+        robot.observed = {
+            **robot.observed,
+            "active_revision_id": revision_id,
+            **running,
+            "observed_at": now,
+        }
+        _touch(robot)
+        await _emit(session, robot.project_id, robot)
     deployment.observed = {
         **deployment.observed,
         "active_revision_ids": active,

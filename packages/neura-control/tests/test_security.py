@@ -12,6 +12,7 @@ from test_api_conventions import new_project
 
 from conftest import ConformanceClient, contract
 from neura_control.db.engine import create_engine, session_factory
+from neura_control.db.models import Operation
 from neura_control.services import site_reports
 
 Api = tuple[ConformanceClient, str]
@@ -107,6 +108,76 @@ def test_a_site_cannot_update_another_robots_session(api: Api, database_url: str
     assert row == (robot_a, "Running")
 
 
+def _other_organization(database_url: str) -> tuple[str, str]:
+    from neura_control.services import bootstrap
+
+    async def create() -> tuple[str, str]:
+        engine = create_engine(database_url, pool_size=1)
+        try:
+            async with session_factory(engine).begin() as session:
+                other = await bootstrap.ensure_organization(session, "Other Robotics")
+                token = await bootstrap.create_api_token(
+                    session, other.id, display_name="other admin", scopes=["admin"]
+                )
+                return other.id, token
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(create())
+
+
+def test_a_site_cannot_switch_robots_it_was_not_asked_to(api: Api, settings: Any) -> None:
+    from test_onboarding_flow import onboard, prepared_deployment, site_ack
+
+    client, org = api
+    ours = onboard(client, org)
+    our_deployment, our_revision = prepared_deployment(client, ours, settings)
+    other_org, other_token = _other_organization(str(settings.database_url))
+    stranger = client.as_token(other_token)
+    theirs = onboard(stranger, other_org)
+    their_deployment, their_revision = prepared_deployment(stranger, theirs, settings)
+    activation = stranger.post(
+        f"/v1/deployments/{their_deployment}/activation-requests", {"revision_id": their_revision}
+    )
+    assert activation.status_code == 202, activation.text
+
+    # Their site acknowledges its own activation, naming our revision and our robot alongside
+    # one of theirs: only what the activation asked for, of what the site reports, switches.
+    site_ack(
+        str(settings.database_url),
+        activation.json()["metadata"]["id"],
+        "Succeeded",
+        result={"revision_id": our_revision, "robot_ids": [ours["robots"][0], theirs["robots"][0]]},
+    )
+    robot = client.get(f"/v1/robots/{ours['robots'][0]}").json()["status"]
+    assert robot["active_revision_id"] is None
+    status = client.get(f"/v1/deployments/{our_deployment}").json()["status"]
+    assert set(status["active_revision_ids"].values()) == {None}
+    status = stranger.get(f"/v1/deployments/{their_deployment}").json()["status"]
+    assert status["active_revision_ids"] == {
+        theirs["robots"][0]: their_revision,
+        theirs["robots"][1]: None,
+    }
+
+    # And the writer itself refuses a revision or robots outside the operation's site.
+    async def switch(revision_id: str, robot_ids: list[str]) -> None:
+        engine = create_engine(str(settings.database_url), pool_size=1)
+        try:
+            async with session_factory(engine).begin() as session:
+                operation = await session.get(Operation, activation.json()["metadata"]["id"])
+                assert operation is not None
+                await site_reports.set_active_revision(session, operation, revision_id, robot_ids)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(switch(our_revision, [ours["robots"][0]]))
+    asyncio.run(switch(their_revision, [ours["robots"][1]]))
+    for robot_id in ours["robots"][:2]:
+        assert client.get(f"/v1/robots/{robot_id}").json()["status"]["active_revision_id"] is None
+    status = client.get(f"/v1/deployments/{our_deployment}").json()["status"]
+    assert set(status["active_revision_ids"].values()) == {None}
+
+
 def test_oversized_bodies_are_refused_before_they_are_read(api: Api) -> None:
     client, org = api
     huge = {"spec": {"name": "x", "display_name": "x" * (5 * 1024 * 1024)}}
@@ -148,24 +219,9 @@ def test_event_streams_are_capped(make_api: Any) -> None:
 
 
 def test_organizations_cannot_see_each_other(api: Api, database_url: str) -> None:
-    from neura_control.services import bootstrap
-
     client, org = api
     project = new_project(client, org, "ours")["metadata"]["id"]
-
-    async def other_organization() -> tuple[str, str]:
-        engine = create_engine(database_url, pool_size=1)
-        try:
-            async with session_factory(engine).begin() as session:
-                other = await bootstrap.ensure_organization(session, "Other Robotics")
-                token = await bootstrap.create_api_token(
-                    session, other.id, display_name="other admin", scopes=["admin"]
-                )
-                return other.id, token
-        finally:
-            await engine.dispose()
-
-    other_org, other_token = asyncio.run(other_organization())
+    other_org, other_token = _other_organization(database_url)
     assert other_org != org
     stranger = client.as_token(other_token)
     for path in (

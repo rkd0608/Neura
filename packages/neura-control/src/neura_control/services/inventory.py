@@ -141,17 +141,17 @@ async def report(session: AsyncSession, site_id: str, inventory: site_pb2.RobotI
                 robot_id=row.id,
             )
             continue
-        observed = _observed(item, row.observed)
+        previous, observed = row.observed, _observed(item, row.observed)
         changed = (
             row.hardware != hardware
             or row.robot_profile_id != profile_row.id
-            or {k: row.observed.get(k) for k in ("present", "setup", "phase")}
+            or {k: previous.get(k) for k in ("present", "setup", "phase")}
             != {k: observed.get(k) for k in ("present", "setup", "phase")}
         )
         row.observed = observed
         if not changed:
             continue
-        returned = row.observed.get("present") is False
+        returned = previous.get("present") is False
         row.hardware, row.robot_profile_id = hardware, profile_row.id
         row.version += 1
         row.updated_at = utcnow()

@@ -602,6 +602,15 @@ def test_robots_a_site_finds_are_registered_and_kept(bench: Fleet) -> None:
     assert "sim-2 is no longer connected to plant-1's server" in summaries
     assert "plant-1 found a simulated so101-follower: sim-1" in summaries
 
+    # One that comes back is present again, and said to be.
+    report_inventory(bench.db, bench.site, found)
+    back = bench.c.get(f"/v1/robots/{discovered['sim-2']['metadata']['id']}").json()["status"]
+    assert (back["present"], back["phase"]) == (True, "Ready")
+    summaries = [
+        a["summary"] for a in bench.c.get(f"/v1/projects/{bench.project}/activity").json()["items"]
+    ]
+    assert "sim-2 is connected to plant-1 again" in summaries
+
     # Another site's sim-1 does not take this one's name.
     other = bench.c.post(
         f"/v1/projects/{bench.project}/sites",

@@ -998,9 +998,9 @@ An activation for more robots than the server can serve at the revision's execut
 
 - **Pinned inputs.**
   - Python and JavaScript dependencies are locked (`uv.lock`, `pnpm-lock.yaml`) and installed frozen.
-  - Base images are pinned by digest in `deploy/docker/Dockerfile`.
+  - Base images are pinned by digest in `deploy/docker/Dockerfile`, and so is every other image production runs (the edge, the database, certbot, the Cloud SQL proxy), in the compose files under `deploy/gcp`: none is pinned in a script, where no updater would see it.
   - Every GitHub Action is pinned to a commit SHA, with its version in a comment.
-  - Dependabot proposes updates for all of them weekly, through CI.
+  - Dependabot proposes updates for all of them weekly, through CI (`.github/dependabot.yml`: the Dockerfile, the compose files of `deploy/gcp` and of the dev stack).
 - **Dependency audit** (`tools/audit_dependencies.py`, the `supply-chain` CI job). It checks every package in `uv.lock` (all groups, PyTorch and LeRobot included) with `pip-audit`, and the console's and docs site's lockfiles with `pnpm audit`. A finding fails CI unless it is fixed or listed in `security/vulnerability-exceptions.yaml` with the reason it does not affect Neura and an expiry date; an expired entry fails too.
   - The first run found six advisories in the docs site's build toolchain (fixed by overriding to patched versions) and one in the console's `yaml` (upgraded).
   - Three are accepted until 2027-01-15, each because the latest compatible upstream release cannot take the fix:

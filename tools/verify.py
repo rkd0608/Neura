@@ -44,6 +44,8 @@ FRONTENDS = ("console/", "landing/", "site/")
 COVERED_BY = {
     "deploy/install/": ["tests/integration/test_install_upgrade.py"],
     "deploy/console/": ["tests/integration/test_console_proxy.py"],
+    "deploy/": ["tests/tools/test_supply_chain.py"],
+    ".github/dependabot.yml": ["tests/tools/test_supply_chain.py"],
     "deploy/observability/": ["tests/integration/test_observability.py"],
     "api/openapi.yaml": ["tests/api", "packages/neura-control/tests"],
     "catalog/": ["tests/tools", "packages/neura-contracts/tests"],

@@ -43,6 +43,7 @@ FRONTENDS = ("console/", "landing/", "site/")
 # Files outside Python whose tests are not found by imports.
 COVERED_BY = {
     "deploy/install/": ["tests/integration/test_install_upgrade.py"],
+    "deploy/console/": ["tests/integration/test_console_proxy.py"],
     "deploy/observability/": ["tests/integration/test_observability.py"],
     "api/openapi.yaml": ["tests/api", "packages/neura-control/tests"],
     "catalog/": ["tests/tools", "packages/neura-contracts/tests"],

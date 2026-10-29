@@ -2084,6 +2084,10 @@ in it (`NEURA_CONTROL_AGENT_RELEASE_*`): the bundle's address and SHA-256, and t
 A control plane with no release configured shows the enroll command for an agent installed with
 `deploy/install/install.sh`, and `/install.sh` answers 404.
 
+`<neura>` is the control plane's public URL, which on the cloud deployment is the console's
+address: the console's nginx passes `/install.sh` to the API with `/v1/`. A test runs that nginx
+and asks it for every route the API serves.
+
 ### 29.3 Policy sources, one declaration
 
 A `PolicyDeclaration` says what a policy reads and returns:

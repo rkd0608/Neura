@@ -31,7 +31,7 @@ from cryptography.hazmat.primitives.serialization import (
 from cryptography.x509.oid import NameOID
 from sqlalchemy import update
 
-from conftest import AppFactory, contract
+from conftest import AppFactory, contract, until
 from neura.v1 import common_pb2, site_pb2, site_pb2_grpc
 from neura_agent.agent_tls import AgentTls
 from neura_agent.artifacts import ArtifactError, ArtifactStore
@@ -124,6 +124,9 @@ class Harness:
         response = self.enroll(self.token(), key)
         assert response.WhichOneof("result") == "enrolled"
         return response.enrolled, key
+
+    def serving(self, server_id: str) -> bool:
+        return server_id in self.client.app.state.site_control.connected
 
     def db(self, statement: Any) -> None:
         async def run() -> None:
@@ -257,7 +260,7 @@ def test_deleting_a_server_ends_its_stream_and_its_credential(harness: Harness) 
 
     async def scenario() -> None:
         async def delete_soon() -> None:
-            await asyncio.sleep(0.5)
+            await until(lambda: harness.serving(enrolled.server_id), "the stream to open")
             version = (await asyncio.to_thread(harness.client.get, path)).json()["metadata"]
             response = await asyncio.to_thread(
                 harness.client.delete, path, version=version["version"]
@@ -294,7 +297,7 @@ def test_a_new_stream_from_a_server_replaces_its_previous_one(harness: Harness) 
                 until=lambda r: False,  # ends only if the control plane closes it
             )
         )
-        await asyncio.sleep(0.5)
+        await until(lambda: harness.serving(enrolled.server_id), "the first stream to open")
         assert not first.done()
         second = await connect(
             harness.endpoint,
@@ -799,12 +802,8 @@ def test_agent_streams_need_their_client_certificate_and_renew_it(
     async def run_agent() -> str:
         await agent.start()
         try:
-            for _ in range(200):
-                if agent.connection is not None and agent.connection.connected:
-                    break
-                await asyncio.sleep(0.05)
+            await until(lambda: agent.connection and agent.connection.connected, "a connection")
             assert agent.connection is not None
-            assert agent.connection.connected
             # Renewal: the agent asks for a new certificate over the stream and installs it.
             agent.connection.tls.needs_renewal = lambda: True  # type: ignore[method-assign]
             agent.connection._renew_if_due()

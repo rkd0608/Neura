@@ -7,6 +7,7 @@ import { useApiMutation, useMe, useProjects } from "../api/queries";
 import { FolderIcon } from "../components/Icons";
 import { Field } from "../components/Field";
 import { Card, ErrorState, Loading, PageHeader } from "../components/ui";
+import { usePermissions } from "../lib/context";
 import { slug } from "../lib/format";
 
 export function Start() {
@@ -124,6 +125,7 @@ export function NewProjectForm({
 export function Projects() {
   const { orgId = "" } = useParams();
   const projects = useProjects(orgId);
+  const can = usePermissions(orgId);
   const first = new URLSearchParams(window.location.search).has("first");
   return (
     <>
@@ -165,7 +167,11 @@ export function Projects() {
                 ))
           : null}
         <Card title="Create a project">
-          <NewProjectForm orgId={orgId} />
+          {can.admin ? (
+            <NewProjectForm orgId={orgId} />
+          ) : (
+            <p className="secondary">An admin of this organization creates projects.</p>
+          )}
         </Card>
       </div>
     </>

@@ -67,7 +67,7 @@ export function ReleasePage() {
   const artifacts = useArtifacts(projectId);
   const robotProfiles = useRobotProfiles(projectId);
   const executionProfiles = useExecutionProfiles(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [dialog, setDialog] = useState<"revision" | "activate" | "rollback" | null>(null);
   const [tracking, setTracking] = useState<string | null>(null);
   const robotIds = deployment.data?.spec.robot_ids ?? [];

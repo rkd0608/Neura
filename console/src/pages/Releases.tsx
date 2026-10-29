@@ -27,7 +27,7 @@ export function Releases() {
   const { orgId, projectId, base } = useScope();
   const deployments = useDeployments(projectId);
   const sites = useSites(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const [query, setQuery] = useState("");

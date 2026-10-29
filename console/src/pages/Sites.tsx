@@ -16,7 +16,7 @@ export function Sites() {
   const { orgId, projectId, base } = useScope();
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 

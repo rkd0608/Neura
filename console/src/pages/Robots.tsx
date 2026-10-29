@@ -51,7 +51,7 @@ export function Robots() {
   const sites = useSites(projectId);
   const profiles = useRobotProfiles(projectId);
   const sessions = useSessions(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -378,7 +378,7 @@ export function RobotPage() {
   const sessions = useSessions(projectId);
   const faults = useFaults(projectId);
   const deployments = useDeployments(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [confirming, setConfirming] = useState(false);
   const mineCount = (sessions.data ?? []).filter((x) => x.robot_id === robotId).length;
   const faultCount = (faults.data ?? []).filter(

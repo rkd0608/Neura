@@ -29,7 +29,7 @@ export function Fleet() {
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
   const rollouts = useRollouts(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [adding, setAdding] = useState(false);
 
   if (sites.isPending || robots.isPending) return <Loading />;

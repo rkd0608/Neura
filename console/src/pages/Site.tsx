@@ -44,7 +44,7 @@ export function SitePage() {
   const [connecting, setConnecting] = useState(search.has("connect"));
   const servers = useServers(projectId, siteId, connecting);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [editing, setEditing] = useState(false);
   const tabs: TabSpec[] = [
     { id: "overview", label: "Overview" },

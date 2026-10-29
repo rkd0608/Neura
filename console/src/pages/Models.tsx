@@ -85,7 +85,7 @@ export function Models() {
   const artifacts = useArtifacts(projectId);
   const robots = useRobotProfiles(projectId);
   const profiles = useExecutionProfiles(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [registering, setRegistering] = useState<Kind | null>(null);
   const tabs: TabSpec[] = [
     { id: "artifacts", label: "Model artifacts", count: artifacts.data?.length ?? null },
@@ -295,7 +295,7 @@ function Signed({ signatures }: { signatures: Signature[] }) {
 
 function Signatures({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
   const { orgId } = useScope();
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const toasts = useToasts();
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");

@@ -99,7 +99,7 @@ export function PolicyPage() {
   const policy = usePolicy(projectId, policyId);
   const versions = usePolicyVersions(projectId, policyId);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [deploying, setDeploying] = useState<Version | null>(null);
   if (policy.isPending || versions.isPending) return <Loading />;
   if (policy.isError) return <ErrorState error={policy.error} />;

@@ -61,7 +61,8 @@ The public management API (spec first), auth, audit, change events, and the site
   reference docs), `packages/neura-control/src/neura_control/api/`,
   `packages/neura-control/src/neura_control/grpc_site.py` (the site side; large)
 - Tests: `tests/api/test_openapi.py`, `packages/neura-control/tests/test_api_conventions.py`,
-  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`
+  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`,
+  `packages/neura-control/tests/test_site_servers.py` (sites with several servers)
 - Docs: `site/docs/reference/api.md` (generated), `site/docs/architecture.md`
 - Needs Postgres: `NEURA_TEST_DATABASE_URL` (`make verify` sets it when Postgres answers)
 

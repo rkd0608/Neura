@@ -2158,6 +2158,13 @@ the site's name as a prefix. A robot that disappears is shown as missing (`prese
 deleted. One its server still reports, with nothing assigned, is ready. The agent issues each
 robot's credentials and supervises its process, with backoff.
 
+A site may have several servers. Each robot records the server that reports it
+(`hardware.server_id`), and only that server's inventory can mark it missing. The site is connected
+while any of its servers has a stream open: one server's stream ending changes only that server
+(`test_site_servers.py`). Two servers that give robots the same local name still share one robot:
+the manifest names robots by local name only, so telling them apart needs the server in the
+manifest and in the agent's match.
+
 ### 29.6 Workspaces
 
 A workspace is an organization and its default project. `GET /v1/workspace` tells a client which

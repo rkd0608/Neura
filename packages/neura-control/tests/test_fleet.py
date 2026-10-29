@@ -515,7 +515,12 @@ def test_the_cli_signs_in_through_the_browser(make_api: AppFactory) -> None:
     assert anonymous.post(exchange, {"secret": login["secret"]}).status_code == 404  # once
 
 
-def report_inventory(database_url: str, site_id: str, robots: list[dict[str, Any]]) -> None:
+def report_inventory(
+    database_url: str,
+    site_id: str,
+    robots: list[dict[str, Any]],
+    server_id: str = "srv_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+) -> None:
     """What a site's agent sends: the robots its server drives."""
     import asyncio
     import json
@@ -537,7 +542,7 @@ def report_inventory(database_url: str, site_id: str, robots: list[dict[str, Any
         engine = create_engine(database_url, pool_size=1)
         try:
             async with session_factory(engine).begin() as session:
-                await inventory.report(session, site_id, message)
+                await inventory.report(session, site_id, server_id, message)
         finally:
             await engine.dispose()
 

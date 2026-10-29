@@ -3,7 +3,9 @@
 Each inventory a server sends is the whole list of robots it drives. A robot it reports for the
 first time is created, with its robot profile registered by digest; one it reports again is
 updated (its hardware, its profile, whether it needs setting up); one it no longer reports is kept
-and shown as missing, never deleted: its history, rollouts and episodes stay attached to it.
+and shown as missing, never deleted: its history, rollouts and episodes stay attached to it. A site
+may have several servers: each robot records the server that drives it (``hardware.server_id``),
+and only that server's inventory can say it is gone.
 
 A robot's name in Neura is the name its server gives it, unless another robot of the workspace
 already has that name; then it is prefixed with its site's name. The robot keeps its server-side
@@ -31,8 +33,9 @@ log = logging.getLogger("neura.control.inventory")
 MAX_ROBOTS = 1000
 
 
-def _hardware(robot: site_pb2.DiscoveredRobot) -> dict[str, Any]:
+def _hardware(robot: site_pb2.DiscoveredRobot, server_id: str) -> dict[str, Any]:
     hardware: dict[str, Any] = {
+        "server_id": server_id,
         "local_name": robot.local_name,
         "driver": robot.driver,
         "simulated": robot.simulated,
@@ -72,7 +75,10 @@ def _observed(robot: site_pb2.DiscoveredRobot, previous: dict[str, Any]) -> dict
     return observed
 
 
-async def report(session: AsyncSession, site_id: str, inventory: site_pb2.RobotInventory) -> None:
+async def report(
+    session: AsyncSession, site_id: str, server_id: str, inventory: site_pb2.RobotInventory
+) -> None:
+    """Apply one server's inventory: the robots it drives, and only those."""
     site = await session.get(Site, site_id)
     if site is None:
         return
@@ -109,7 +115,7 @@ async def report(session: AsyncSession, site_id: str, inventory: site_pb2.RobotI
                 version=1,
             )
         row = by_local.get(local_name)
-        hardware = _hardware(item)
+        hardware = _hardware(item, server_id)
         if row is None:
             row = Robot(
                 id=new_id(Kind.ROBOT),
@@ -168,6 +174,9 @@ async def report(session: AsyncSession, site_id: str, inventory: site_pb2.RobotI
     for row in existing:
         if row.hardware.get("local_name") in reported or row.observed.get("present") is False:
             continue
+        if row.hardware.get("server_id", server_id) != server_id:
+            continue  # another server drives it (one found before servers were recorded is
+            # taken as this one's, until its own server reports it again)
         row.observed = {
             **row.observed,
             "present": False,

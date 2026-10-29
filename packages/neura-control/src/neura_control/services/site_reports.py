@@ -525,16 +525,26 @@ async def set_active_revision(
 
 
 async def report_site(
-    session: AsyncSession, site_id: str, *, connected: bool, agent_version: str | None
+    session: AsyncSession,
+    site_id: str,
+    server_id: str,
+    *,
+    connected: bool,
+    agent_version: str | None,
 ) -> None:
+    """A server's stream opened or ended. The site is connected while any of its servers is:
+    one server's stream ending says nothing about the others."""
     site = await session.get(Site, site_id, with_for_update=SITE_ROW)
     if site is None:
         return
+    servers = set(site.observed.get("connected_servers", [])) - {server_id}
+    servers |= {server_id} if connected else set()
     site.observed = {
         **site.observed,
-        "phase": "Ready" if connected else "Offline",
-        "connected": connected,
-        "agent_version": agent_version,
+        "phase": "Ready" if servers else "Offline",
+        "connected": bool(servers),
+        "connected_servers": sorted(servers),
+        "agent_version": agent_version if connected else site.observed.get("agent_version"),
         "observed_at": iso(utcnow()),
     }
     _touch(site)

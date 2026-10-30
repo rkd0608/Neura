@@ -360,6 +360,7 @@ Under `packages/neura-server/src/`:
 - `neura_server/leases.py`: Robot leases: who may be served (design §6.1).
 - `neura_server/metrics.py`: Prometheus metrics for the gateway, on its status listener at ``/metrics`` (design §18.2).
 - `neura_server/profiles.py`: Inference latency profiles indexed by batch size (design §9.2, §13).
+- `neura_server/robot_service.py`: The ``RobotGateway`` gRPC service robots call: who is calling, and their messages to and from the gateway core (design §6, §11).
 - `neura_server/sandbox.py`: Running policy workers (design §12): customer model code is untrusted executable code.
 - `neura_server/scheduler.py`: Per-batch-group request scheduling (design §9.2).
 - `neura_server/shadow.py`: Shadow serving (design §28.3): a candidate model on the observations robots send the model they run, its actions compared with the running model's and never sent to a robot.

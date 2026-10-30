@@ -66,15 +66,6 @@ export const useLoginCode = (userCode: string | null) =>
     { enabled: userCode !== null },
   );
 
-export const useOrganization = (orgId: string) =>
-  useApiQuery(["org", orgId], async () =>
-    unwrap(
-      await api.GET("/v1/organizations/{organization_id}", {
-        params: { path: { organization_id: orgId } },
-      }),
-    ),
-  );
-
 export const useProjects = (orgId: string) =>
   useApiQuery(["org", orgId, "projects"], () =>
     all(async (cursor) =>
@@ -289,22 +280,6 @@ export const useOperation = (projectId: string, operationId: string | null) =>
     },
   );
 
-export const useCompatibility = (
-  projectId: string,
-  request: S["CompatibilityCheckRequest"] | null,
-) =>
-  useApiQuery(
-    ["p", projectId, "compatibility", request],
-    async () =>
-      unwrap(
-        await api.POST("/v1/projects/{project_id}/compatibility-checks", {
-          params: { path: { project_id: projectId } },
-          body: request as S["CompatibilityCheckRequest"],
-        }),
-      ),
-    { enabled: request !== null, staleTime: 60_000 },
-  );
-
 export type MetricName = S["MetricsQuery"]["metric"];
 
 /** An aggregate metric over the last `windowSeconds`, refreshed every minute (design §18: only
@@ -341,15 +316,7 @@ export const useMetric = (
     { enabled: Boolean(projectId), refetchInterval: 60_000, staleTime: 30_000 },
   );
 
-// --- mutations ------------------------------------------------------------------------------------
-
-/** A mutation that refreshes the given query keys when it settles. */
 // --- the fleet (design §29): policies, their versions, rollouts, activity --------------------
-
-export const useWorkspace = (orgId: string) =>
-  useApiQuery(["org", orgId, "workspace"], async () =>
-    unwrap(await api.GET("/v1/workspace", { params: { query: { organization_id: orgId } } })),
-  );
 
 export const usePolicies = (projectId: string) =>
   useApiQuery(["p", projectId, "policies"], () =>
@@ -441,6 +408,9 @@ export const usePublisherKeys = (orgId: string) =>
     ),
   );
 
+// --- mutations ------------------------------------------------------------------------------------
+
+/** A mutation that refreshes the given query keys when it settles. */
 export function useApiMutation<TInput, TOutput>(
   fn: (input: TInput) => Promise<TOutput>,
   invalidate: QueryKey[] = [],

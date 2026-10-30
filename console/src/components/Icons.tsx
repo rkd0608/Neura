@@ -93,12 +93,6 @@ export const GaugeIcon = icon(
     <circle cx="12" cy="14" r="1.5" />
   </>,
 );
-export const ScrollIcon = icon(
-  <>
-    <path d="M8 3h11v15a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-2h11v2a3 3 0 0 0 3 3" />
-    <path d="M8 3a2 2 0 0 0-2 2v11M11 8h5M11 12h5" />
-  </>,
-);
 export const GearIcon = icon(
   <>
     <circle cx="12" cy="12" r="3" />
@@ -149,27 +143,6 @@ export const LogOutIcon = icon(
   </>,
 );
 export const CheckIcon = icon(<path d="M20 6 9 17l-5-5" />);
-export const XIcon = icon(<path d="M18 6 6 18M6 6l12 12" />);
-export const CopyIcon = icon(
-  <>
-    <rect x="9" y="9" width="12" height="12" rx="2" />
-    <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
-  </>,
-);
-export const KeyIcon = icon(
-  <>
-    <circle cx="7.5" cy="15.5" r="4.5" />
-    <path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2" />
-  </>,
-);
-export const UsersIcon = icon(
-  <>
-    <circle cx="9" cy="8" r="4" />
-    <path d="M2 21a7 7 0 0 1 14 0" />
-    <path d="M16 3.5a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3" />
-  </>,
-);
-export const ShieldIcon = icon(<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z" />);
 export const RewindIcon = icon(
   <>
     <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />

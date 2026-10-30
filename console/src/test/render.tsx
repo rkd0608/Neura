@@ -37,9 +37,42 @@ export function fakeGet(handlers: Record<string, Handler>) {
   return vi.spyOn(api, "GET").mockImplementation(answer("GET", handlers) as typeof api.GET);
 }
 
+/** The path templates a fake was asked for, in order. */
+export function asked(fake: { mock: { calls: unknown[][] } }): string[] {
+  return fake.mock.calls.map((call) => String(call[0]));
+}
+
 /** Answer api.POST by path template. */
 export function fakePost(handlers: Record<string, Handler>) {
   return vi.spyOn(api, "POST").mockImplementation(answer("POST", handlers) as typeof api.POST);
+}
+
+/** A server-sent-event stream that sends `text`, then stays open until the request is aborted. */
+export function openStream(text: string, signal?: AbortSignal | null): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      signal?.addEventListener("abort", () => {
+        controller.error(new DOMException("aborted", "AbortError"));
+      });
+    },
+  });
+  return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+}
+
+/** Answer what the console fetches beside the API client: /v1/meta (how to sign in) and each
+ *  project's event stream, which by default opens and sends nothing. */
+export function fakeFetch(
+  stream: (init: RequestInit | undefined) => Response = (init) => openStream("", init?.signal),
+) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.endsWith("/v1/meta")) {
+      return Promise.resolve(Response.json({ authentication: {}, service_version: "test" }));
+    }
+    if (url.endsWith("/events")) return Promise.resolve(stream(init));
+    return Promise.reject(new Error(`the test does not fetch ${url}`));
+  });
 }
 
 /** One page of a list, as the API returns it: page_size items from the cursor (an offset here). */

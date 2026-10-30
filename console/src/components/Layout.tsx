@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 
 import { useProjectEvents, type LiveState } from "../api/events";
-import { useFaults, useMe, useProjects } from "../api/queries";
+import { useMe, useProjects } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
 import { DOCS_URL } from "../lib/config";
 import { usePermissions, useScope } from "../lib/context";
@@ -47,9 +47,7 @@ function useShortcut(open: () => void) {
 
 export function Layout() {
   const { orgId, projectId, base } = useScope();
-  const faults = useFaults(projectId);
   const live = useProjectEvents(projectId);
-  const latched = (faults.data ?? []).filter((f) => f.latched && !f.cleared_at).length;
   const [palette, setPalette] = useState(false);
   const openPalette = useCallback(() => setPalette(true), []);
   const closePalette = useCallback(() => setPalette(false), []);
@@ -82,11 +80,6 @@ export function Layout() {
                 >
                   <link.icon />
                   {link.label}
-                  {link.to === "faults" && latched > 0 ? (
-                    <span className="nav-count" aria-label={`${latched} latched`}>
-                      {latched}
-                    </span>
-                  ) : null}
                 </NavLink>
               ))}
             </div>

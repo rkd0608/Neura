@@ -225,6 +225,7 @@ Under `packages/neura-control/src/`:
 - `neura_control/services/__init__.py`: Business logic shared by the API and site reports.
 - `neura_control/services/bootstrap.py`: Creating the first organization, memberships and tokens (CLI and development bootstrap).
 - `neura_control/services/contracts.py`: Registering contract documents (design §4, §29): found or added by digest, with publisher signatures merged one per key.
+- `neura_control/services/event_log.py`: The change-event log, read in the order its transactions wrote it (design §20.6.1).
 - `neura_control/services/inventory.py`: Robots a site's agent found (design §29.5): registered without anyone creating them.
 - `neura_control/services/manifests.py`: Desired-state manifests for sites (design §17.3, §20.8).
 - `neura_control/services/operations.py`: Starting site-dependent work: an Operation and the command its site receives (design §20.4).
@@ -238,7 +239,7 @@ Under `packages/neura-control/src/`:
 - `neura_control/settings.py`: Control-plane configuration, read from ``NEURA_CONTROL_*`` environment variables.
 - `neura_control/db/migrations/versions/`: the database migrations
 
-Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
+Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_events.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
 
 ## packages/neura-learn
 

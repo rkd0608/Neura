@@ -27,6 +27,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import traceback
@@ -338,10 +339,11 @@ def run(check: Check) -> None:
         check.log.write_text(problem + "\n", encoding="utf-8")
         return
     env = {**os.environ, **check.env}
-    scratch = LOGS / f"tmp-{check.name}"
+    scratch = Path()
     if check.clean:
-        shutil.rmtree(scratch, ignore_errors=True)
-        scratch.mkdir(parents=True)
+        # In the system's temporary directory, not the checkout: its path stays short, so the Unix
+        # sockets processes make under it fit (about 108 bytes), from any worktree.
+        scratch = Path(tempfile.mkdtemp(prefix=f"nv-{check.name}-"))
         env["TMPDIR"] = str(scratch)
         # PyTorch keeps its compiled kernels under TMPDIR by default: a cache, kept between runs.
         env.setdefault("TORCHINDUCTOR_CACHE_DIR", str(LOGS / "torch-cache"))
@@ -367,6 +369,8 @@ def run(check: Check) -> None:
         check.detail = f"left {len(left)} in TMPDIR ({', '.join(left[:3])}); {check.detail}"
         with check.log.open("a", encoding="utf-8") as log:
             log.write(f"\nLeft in {scratch}, which was empty before:\n" + "\n".join(left) + "\n")
+    if check.clean:
+        shutil.rmtree(scratch, ignore_errors=True)  # its contents are named in the log
 
 
 def summary_of(check: Check) -> str:

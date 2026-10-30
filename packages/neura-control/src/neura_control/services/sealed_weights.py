@@ -6,7 +6,8 @@ for the digest it is stored under, but holds no key and cannot open it. Site age
 files over their authenticated channel and open them with the customer's key at the site.
 
 Files live under ``<root>/<project_id>/sha256/<hex>``; uploads are staged and renamed into place,
-so a reader never sees a partial file.
+so a reader never sees a partial file. A file changes only after its record is committed
+(``place``): a change that fails before its commit leaves the file as its record says.
 """
 
 from __future__ import annotations
@@ -15,13 +16,21 @@ import hashlib
 import io
 import os
 import tempfile
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from neura_contracts import sealing
+from neura_control.db.models import SealedWeights
 
 CHUNK = 1 << 20
+# A staged upload is written to until it is moved into place. One untouched this long was left by a
+# process that stopped while receiving it; a newer one may be another replica's upload in progress.
+ABANDONED_S = 3600
 
 
 class SealedUploadError(ValueError):
@@ -64,6 +73,20 @@ class SealedWeightsStore:
     def __init__(self, root: Path, max_bytes: int) -> None:
         self.root = root
         self.max_bytes = max_bytes
+        self._clear_abandoned()
+
+    def _clear_abandoned(self) -> None:
+        incoming = self.root / ".incoming"
+        if not incoming.is_dir():
+            return
+        cutoff = time.time() - ABANDONED_S
+        for path in incoming.iterdir():
+            try:
+                abandoned = path.stat().st_mtime < cutoff
+            except FileNotFoundError:
+                continue  # moved into place or discarded meanwhile
+            if abandoned:
+                path.unlink(missing_ok=True)
 
     def path(self, project_id: str, digest: str) -> Path:
         return self.root / project_id / "sha256" / _hex(digest)
@@ -122,6 +145,26 @@ class SealedWeightsStore:
 
     def delete(self, project_id: str, digest: str) -> None:
         self.path(project_id, digest).unlink(missing_ok=True)
+
+
+async def place(
+    session: AsyncSession,
+    store: SealedWeightsStore,
+    project_id: str,
+    digest: str,
+    staged: Staged | None = None,
+) -> None:
+    """Make the stored file follow the committed record, in a transaction after the one that
+    changed it: an upload's staged file goes into place if the record is still that upload's, and
+    a file whose record is gone is removed. The file steps of one digest are serialized by an
+    advisory lock, which holds even when no row is left to lock."""
+    key = func.hashtextextended(f"sealed-weights:{project_id}/{digest}", 0)
+    await session.execute(select(func.pg_advisory_xact_lock(key)))
+    row = await session.get(SealedWeights, (project_id, digest), populate_existing=True)
+    if row is None:
+        store.delete(project_id, digest)
+    elif staged is not None and row.sealed_sha256 == staged.info.sealed_sha256:
+        store.commit(staged)
 
 
 def _header(head: bytes, digest: str, *, final: bool = False) -> sealing.Header | None:

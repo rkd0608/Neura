@@ -6,7 +6,12 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import pytest
 
 from conftest import AppFactory, ConformanceClient
 from neura_contracts import sealing
@@ -101,3 +106,76 @@ def test_the_registry_is_off_unless_configured(api: Api, tmp_path: Path) -> None
     )
     assert response.status_code == 404
     assert "own store" in response.json()["detail"]
+
+
+def test_a_failed_change_leaves_the_stored_file_as_its_record_says(
+    make_api: AppFactory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The file changes only after its record is committed: a failure before the commit leaves
+    the file as it was, under the record that describes it."""
+    from neura_control.api.scope import Ctx
+
+    registry = tmp_path / "registry"
+    client, org = make_api(settings_overrides={"sealed_weights_dir": registry})
+    project_id = project(client, org)
+    data = os.urandom(4000)
+    (tmp_path / "first").mkdir()
+    (tmp_path / "second").mkdir()
+    digest, first, _ = sealed(tmp_path / "first", data)
+    _, second, _ = sealed(tmp_path / "second", data)  # the same weights, sealed with another key
+    path = f"/v1/projects/{project_id}/sealed-weights/{digest}"
+    assert client.request("PUT", path, content=first).status_code == 201
+    stored = next(registry.rglob(digest.removeprefix("sha256:")))
+
+    async def failing(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected before the commit")
+
+    monkeypatch.setattr(Ctx, "record", failing)
+    assert client.request("PUT", path, content=second).status_code == 500
+    assert stored.read_bytes() == first  # not replaced under the first file's record
+    assert client.delete(path, version="1").status_code == 500
+    assert stored.read_bytes() == first  # not removed from under its record
+    monkeypatch.undo()
+    assert client.get(path).json()["sealed_sha256"] == hashlib.sha256(first).hexdigest()
+    assert not list((registry / ".incoming").iterdir())
+
+
+def test_concurrent_uploads_of_one_digest_leave_the_file_its_record_names(
+    make_api: AppFactory, tmp_path: Path
+) -> None:
+    registry = tmp_path / "registry"
+    client, org = make_api(settings_overrides={"sealed_weights_dir": registry})
+    project_id = project(client, org)
+    data = os.urandom(4000)
+    blobs = []
+    for name in ("a", "b", "c", "d"):
+        (tmp_path / name).mkdir()
+        digest, blob, _ = sealed(tmp_path / name, data)
+        blobs.append(blob)
+    path = f"/v1/projects/{project_id}/sealed-weights/{digest}"
+    barrier = threading.Barrier(len(blobs))
+
+    def upload(blob: bytes) -> int:
+        barrier.wait()
+        return client.request("PUT", path, content=blob).status_code
+
+    with ThreadPoolExecutor(len(blobs)) as pool:
+        assert sorted(pool.map(upload, blobs)) == [200, 200, 200, 201]
+    stored = next(registry.rglob(digest.removeprefix("sha256:"))).read_bytes()
+    assert client.get(path).json()["sealed_sha256"] == hashlib.sha256(stored).hexdigest()
+    assert not list((registry / ".incoming").iterdir())
+
+
+def test_opening_the_registry_clears_abandoned_uploads(
+    make_api: AppFactory, tmp_path: Path
+) -> None:
+    incoming = tmp_path / "registry" / ".incoming"
+    incoming.mkdir(parents=True)
+    abandoned, current = incoming / "tmp-abandoned", incoming / "tmp-current"
+    abandoned.write_bytes(b"part of an upload a stopped process left")
+    current.write_bytes(b"an upload another replica is receiving")
+    hours_ago = time.time() - 2 * 3600
+    os.utime(abandoned, (hours_ago, hours_ago))
+    make_api(settings_overrides={"sealed_weights_dir": tmp_path / "registry"})
+    assert not abandoned.exists()
+    assert current.exists()

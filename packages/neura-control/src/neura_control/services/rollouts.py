@@ -40,6 +40,7 @@ from neura_contracts.inference import (
     provisional_timing,
 )
 from neura_control.clock import iso, utcnow
+from neura_control.db.locks import SITE_ROW
 from neura_control.db.models import (
     ActivationRequest,
     ContractDocument,
@@ -328,6 +329,7 @@ async def plan_deploy(
 ) -> Rollout:
     """Start a deploy (or a try) of ``version`` to ``robots``. Raises a problem for what can be
     told at once; anything the site must establish stops the rollout with its reason."""
+    await session.get(Site, site.id, with_for_update=SITE_ROW)  # one plan per site at a time
     if not robots:
         raise ProblemError(ReasonCode.API_VALIDATION_FAILED, "name at least one robot")
     elsewhere = sorted(r.name for r in robots if r.site_id != site.id)
@@ -410,6 +412,7 @@ async def plan_rollback(
     robots: Sequence[Robot],
     note: str = "",
 ) -> Rollout:
+    await session.get(Site, site.id, with_for_update=SITE_ROW)  # one plan per site at a time
     if not robots:
         raise ProblemError(ReasonCode.API_VALIDATION_FAILED, "name at least one robot")
     targets = {r.id: await rollback_target(session, r) for r in robots}
@@ -503,21 +506,10 @@ async def cancel(session: AsyncSession, rollout: Rollout, principal: Principal) 
     if operation is not None and operation.state in ("Pending", "Running"):
         from neura_control.services.site_reports import update_operation
 
-        session.add(_cancel_command(operation))
+        session.add(operations.cancel_command(operation))
         await update_operation(
             session, operation.id, "Cancelled", message=f"cancelled by {principal.subject}"
         )
-
-
-def _cancel_command(operation: Operation) -> Any:
-    from neura_control.db.models import SiteCommand
-
-    return SiteCommand(
-        site_id=operation.site_id,
-        command_id=new_id(Kind.OPERATION).replace("op_", "cmd_", 1),
-        operation_id=operation.id,
-        command={"kind": "cancel", "operation_id": operation.id},
-    )
 
 
 # --- advancing ------------------------------------------------------------------------------

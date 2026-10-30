@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
 from neura_control.api import serializers
@@ -28,6 +29,7 @@ from neura_control.clock import iso
 from neura_control.db.models import AuditRecord, Event, Fault, MetricPoint, RobotSession
 from neura_control.problems import ProblemError, problem_response
 from neura_control.security.principal import Permission, Principal
+from neura_control.services import event_log
 from neura_control.settings import ControlPlaneSettings
 
 router = APIRouter()
@@ -182,36 +184,20 @@ def _event_json(row: Event) -> dict[str, object]:
 async def stream_events(
     project_id: str, request: Request, principal: Principal = Depends(authenticate)
 ) -> Response:
-    """Server-sent events, resumable with ``Last-Event-ID`` or ``cursor`` (design §20.6)."""
+    """Server-sent events, resumable with ``Last-Event-ID`` or ``cursor`` (design §20.6). The
+    log is read in commit order (``services.event_log``)."""
     settings: ControlPlaneSettings = request.app.state.settings
     raw_cursor = request.headers.get("Last-Event-ID") or request.query_params.get("cursor")
     async with transaction(request) as session:
         await Ctx(request, principal).project(session, project_id, Permission.READ)
-        latest = (
-            await session.scalar(
-                select(func.max(Event.cursor)).where(Event.project_id == project_id)
-            )
-            or 0
-        )
-        oldest = await session.scalar(
-            select(func.min(Event.cursor)).where(Event.project_id == project_id)
-        )
+        position = await _position(session, raw_cursor)
     streams: list[int] = request.app.state.event_streams
     if streams[0] >= settings.events_max_streams:
         limited = problem_response(ReasonCode.API_RATE_LIMITED, instance=request.url.path)
         limited.headers["Retry-After"] = "5"
         return limited
-    if raw_cursor is None:
-        position = latest
-    else:
-        try:
-            position = int(raw_cursor)
-        except ValueError as exc:
-            raise ProblemError(
-                ReasonCode.API_VALIDATION_FAILED, "cursor must be an event cursor"
-            ) from exc
-        if oldest is not None and position < oldest - 1:
-            return problem_response(ReasonCode.API_CURSOR_EXPIRED, instance=request.url.path)
+    if position is None:
+        return problem_response(ReasonCode.API_CURSOR_EXPIRED, instance=request.url.path)
 
     async def generate() -> AsyncIterator[bytes]:
         streams[0] += 1
@@ -228,33 +214,50 @@ async def stream_events(
     )
 
 
+async def _position(session: AsyncSession, raw_cursor: str | None) -> event_log.Position | None:
+    """Where a stream starts: now, or after a client's cursor (None when it has expired)."""
+    if raw_cursor is None:
+        return await event_log.now(session)
+    try:
+        cursor = int(raw_cursor)
+    except ValueError as exc:
+        raise ProblemError(
+            ReasonCode.API_VALIDATION_FAILED, "cursor must be an event cursor"
+        ) from exc
+    return await event_log.resume(session, cursor)
+
+
 async def _events(
-    request: Request, settings: ControlPlaneSettings, project_id: str, position: int
+    request: Request,
+    settings: ControlPlaneSettings,
+    project_id: str,
+    position: event_log.Position,
 ) -> AsyncIterator[bytes]:
     idle = 0.0
     deadline = asyncio.get_running_loop().time() + settings.events_max_stream_s
     # The starting position as an id-only message: a client that reconnects before any
     # event arrives resumes from here and misses nothing (SSE sets lastEventId from it).
-    yield f"retry: 1000\nid: {position}\n\n".encode()
+    sent = position.cursor
+    yield f"retry: 1000\nid: {sent}\n\n".encode()
     while asyncio.get_running_loop().time() < deadline and not await request.is_disconnected():
         async with transaction(request) as session:
-            rows = (
-                await session.scalars(
-                    select(Event)
-                    .where(Event.project_id == project_id, Event.cursor > position)
-                    .order_by(Event.cursor)
-                    .limit(200)
-                )
-            ).all()
-        for row in rows:
-            position = row.cursor
+            batch = await event_log.read(session, project_id, position)
+        for row in batch.events:
             payload = json.dumps(_event_json(row), separators=(",", ":"))
             yield f"id: {row.cursor}\nevent: {row.type}\ndata: {payload}\n\n".encode()
-        if rows:
+            sent = row.cursor
+        position = batch.position
+        if batch.events:
             idle = 0.0
             continue
         await asyncio.sleep(settings.events_poll_interval_s)
         idle += settings.events_poll_interval_s
         if idle >= settings.events_keepalive_s:
             idle = 0.0
-            yield b": keepalive\n\n"
+            # A position moved past other projects' events goes out as the keepalive: the
+            # client resumes from a recent cursor, not one pruned since (which has expired).
+            keepalive = (
+                f"id: {position.cursor}\n\n" if position.cursor != sent else ": keepalive\n\n"
+            )
+            yield keepalive.encode()
+            sent = position.cursor

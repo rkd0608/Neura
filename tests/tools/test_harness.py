@@ -250,6 +250,20 @@ def test_a_check_that_leaves_temporary_files_fails(logs: Path) -> None:
     assert tidy.status == "passed"
 
 
+def test_the_tests_temporary_directory_is_short_and_removed(logs: Path) -> None:
+    """Unix sockets made under TMPDIR must fit about 108 bytes, from any checkout or worktree."""
+    show = "import os, tempfile; print('TMPDIR=' + tempfile.gettempdir())"
+    check = verify.Check("pytest", [sys.executable, "-c", show], "why", clean=True)
+    verify.run(check)
+    (line,) = [
+        x for x in check.log.read_text(encoding="utf-8").splitlines() if x.startswith("TMPDIR=")
+    ]
+    used = Path(line.split("=", 1)[1])
+    assert not used.is_relative_to(ROOT)
+    assert len(str(used)) + len("/neura-w-xxxxxxxx/g1-12.sock") < 100
+    assert not used.exists()
+
+
 def test_timing_checks_run_alone(logs: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     running: set[str] = set()
     beside: dict[str, set[str]] = {}

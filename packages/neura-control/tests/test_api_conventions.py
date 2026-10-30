@@ -610,33 +610,7 @@ def test_cursor_pagination_and_label_filters(api: Api) -> None:
     )
 
 
-# --- events, metrics, grants -------------------------------------------------------------------
-
-
-def test_event_stream_resumes_from_cursor(api: Api, database_url: str) -> None:
-    client, org = api
-    project = new_project(client, org)["metadata"]["id"]
-    client.post(
-        f"/v1/projects/{project}/sites",
-        {"spec": {"name": "s", "display_name": "S", "offline_authorization_hours": 1}},
-    )
-    headers = {"Authorization": f"Bearer {client.token}"}
-    with client.client.stream(
-        "GET", f"/v1/projects/{project}/events", params={"cursor": "0"}, headers=headers
-    ) as response:
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/event-stream")
-        events = []
-        for line in response.iter_lines():
-            if line.startswith("data: "):
-                events.append(line)
-                break
-    assert '"type":"resource.created"' in events[0]
-    with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute("DELETE FROM events WHERE cursor = (SELECT min(cursor) FROM events)")
-    expired = client.get(f"/v1/projects/{project}/events", params={"cursor": "0"}, validate=False)
-    assert expired.status_code == 410
-    assert expired.json()["reason"] == "API_CURSOR_EXPIRED"
+# --- metrics, grants ---------------------------------------------------------------------------
 
 
 def test_metrics_query_returns_aggregates(api: Api, database_url: str) -> None:

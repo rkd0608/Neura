@@ -2,6 +2,6 @@
 # API's mutual TLS, through the proxy, with the VM's service account.
 services:
   db:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.27.0@sha256:7d156a5c466e31596afd6c8ed134f19c207a297418392fdad2686524ca4e7a3c
     command: ["--address=0.0.0.0", "--port=5432", "${SQL_INSTANCE:?}"]
     restart: unless-stopped

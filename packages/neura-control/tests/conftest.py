@@ -73,6 +73,7 @@ TABLES = [
     "policies",
     "idempotency_keys",
     "events",
+    "events_pruned",
     "audit_records",
     "metric_points",
     "faults",

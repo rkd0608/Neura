@@ -1318,6 +1318,9 @@ Organizations, projects, sites, compute servers, enrollment tokens, robots, robo
 ### 20.6.1 Implementation notes (M3)
 
 - Event streams end after a configured lifetime (5 minutes by default) and send `retry:`; clients reconnect with `Last-Event-ID`. Each stream starts with an id-only message carrying its position (M5), so a reconnect never skips events. This bounds connection age behind load balancers. A cursor older than the retention window returns `410 API_CURSOR_EXPIRED`.
+- The log is read in commit order (`services/event_log.py`). A cursor is taken when an event is written, but the event is seen only when its transaction commits, and transactions commit in any order: reading "cursors after the last one seen" skipped an event whose transaction committed after a later cursor's. Each event records its transaction (`xid`), and the stream reads in transaction order, only up to the oldest transaction still running (`pg_snapshot_xmin`), so whatever becomes visible later sorts after everything already sent.
+- A stream's position moves past other projects' events too, and its keepalive carries it, so a quiet project's cursor stays recent. A trigger keeps the newest event ever deleted (`events_pruned`): a cursor has expired exactly when an event after it was deleted, which holds when every event of the project was pruned too. A cursor whose own event was pruned, with nothing after it, resumes. `test_events.py` proves the three cases.
+- The activity list (`/activity`) is a page, newest first, by cursor. Following it by polling is not a feed and can miss an event that commits late; follow the stream instead.
 - The rate limiter is per process. Running several control-plane replicas needs a shared limiter (for example Redis) before production scale.
 - Organization memberships for SSO users are managed with the `neura-control bootstrap` CLI until the user-management API lands with the console (M5).
 

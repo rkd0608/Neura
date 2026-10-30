@@ -238,7 +238,7 @@ Under `packages/neura-control/src/`:
 - `neura_control/settings.py`: Control-plane configuration, read from ``NEURA_CONTROL_*`` environment variables.
 - `neura_control/db/migrations/versions/`: the database migrations
 
-Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_fleet.py`, `test_fleet.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
+Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
 
 ## packages/neura-learn
 

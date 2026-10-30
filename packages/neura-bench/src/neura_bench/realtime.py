@@ -39,7 +39,8 @@ from neura_server.config import (
     ServingConfig,
     token_digest,
 )
-from neura_server.grpc_server import GatewayServer, monotonic_us
+from neura_server.grpc_server import GatewayServer
+from neura_server.robot_service import monotonic_us
 from neura_server.scheduler import Batch, Policy
 from neura_sim.grpc_robots import SimulatedRobotProcess
 

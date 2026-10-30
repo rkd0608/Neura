@@ -72,6 +72,7 @@ class Check:
     env: dict[str, str] = field(default_factory=dict)
     after: tuple[str, ...] = ()  # checks that must finish first (their builds)
     clean: bool = False  # run with an empty TMPDIR, and fail on anything left in it
+    alone: bool = False  # its tests measure time: nothing else runs beside it
     status: str = "not run"
     seconds: float = 0.0
     detail: str = ""
@@ -247,6 +248,7 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
                 why,
                 env=env,
                 clean=True,
+                alone=True,
             )
         )
     if has("console/", TOKENS, "api/openapi.yaml"):
@@ -296,12 +298,16 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
                 "--e2e: the console's journey",
                 cwd=ROOT / "console",
                 env=e2e_env,
+                alone=True,
             )
         )
     if args.models:
         checks.append(
             Check(
-                "models", ["make", "--no-print-directory", "test-models"], "--models: real models"
+                "models",
+                ["make", "--no-print-directory", "test-models"],
+                "--models: real models",
+                alone=True,
             )
         )
     notes = uncovered(files)
@@ -401,9 +407,13 @@ def execute(checks: list[Check]) -> None:
     first = [c for c in checks if c.name in ("sizes", "maps", "ruff")]
     for check in first:
         guarded(check)
-    rest = [c for c in checks if c not in first and not c.after]
+    rest = [c for c in checks if c not in first and not c.after and not c.alone]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(guarded, rest))
+    # Timing tests (latency, deadlines, holds) are judged on a machine nothing else is loading:
+    # beside the builds they fail for the builds' sake, not their own.
+    for check in (c for c in checks if c.alone):
+        guarded(check)
     for check in (c for c in checks if c.after):
         blocked = [n for n in check.after if by_name[n].status != "passed"]
         if blocked:

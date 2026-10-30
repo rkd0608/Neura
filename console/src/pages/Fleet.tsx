@@ -6,7 +6,7 @@ import type { Schemas } from "../api/client";
 import { useRobots, useRollouts, useSites } from "../api/queries";
 import { BotIcon, PlusIcon, ServerIcon } from "../components/Icons";
 import { ConnectServer, NewSite } from "../components/SiteDialogs";
-import { Badge, Callout, Card, ErrorState, Loading, PageHeader, Time } from "../components/ui";
+import { Badge, Callout, Card, ErrorState, Loading, PageHeader } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { ROBOT_TONE, robotState, running } from "../lib/fleet";
 
@@ -118,7 +118,6 @@ function SiteSection({ site, robots, admin }: { site: Site; robots: Robot[]; adm
                 <th scope="col">Robot</th>
                 <th scope="col">State</th>
                 <th scope="col">Running</th>
-                <th scope="col">Since</th>
               </tr>
             </thead>
             <tbody>
@@ -137,9 +136,6 @@ function SiteSection({ site, robots, admin }: { site: Site; robots: Robot[]; adm
                       <Badge tone={ROBOT_TONE[state]}>{state}</Badge>
                     </td>
                     <td>{what ?? <span className="muted">Nothing yet</span>}</td>
-                    <td>
-                      <Time iso={robot.metadata.updated_at} />
-                    </td>
                   </tr>
                 );
               })}

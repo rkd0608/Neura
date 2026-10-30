@@ -41,7 +41,7 @@ from neura_agent.identity import atomic_write
 from neura_contracts import ModelArtifact, ReasonCode, parse_document, signing
 from neura_runtime.binding import ExecutionBinding
 from neura_server.capture.store import EpisodeFilter, StoreError
-from neura_server.sandbox import Invocation, launcher_for
+from neura_server.sandbox import Invocation, launcher_for, private_directory
 from neura_server.shadow import ShadowSuite, comparable, shadow_verdict
 
 if TYPE_CHECKING:
@@ -546,12 +546,15 @@ class SiteJobs:
     ) -> dict[str, Any]:
         spec_path = work / "spec.json"
         spec_path.write_text(json.dumps(spec), encoding="utf-8")
-        out = work / "out"
+        # Only its output is writable: the spec and the episodes (hard links into the site's
+        # store) are inputs, read-only.
+        out = private_directory(work / "out")
         invocation = Invocation(
             subcommand=subcommand,
             device=spec["device"],
             inputs=[("--spec", spec_path), *inputs],
-            outputs=[("--out", out)],
+            output_dir=out,
+            outputs=[("--out", "")],
         )
         from neura_agent.gateway import sandbox_config
 

@@ -105,9 +105,13 @@ signed upgrades, and the local site API.
   `packages/neura-server/src/neura_server/scheduler.py`,
   `packages/neura-server/src/neura_server/admission.py`,
   `packages/neura-server/src/neura_server/worker.py`,
-  `packages/neura-server/src/neura_server/sandbox.py`
+  `packages/neura-server/src/neura_server/backends.py` (supervising workers),
+  `packages/neura-server/src/neura_server/sandbox.py`,
+  `packages/neura-server/src/neura_server/robot_service.py` (the gRPC service robots call)
 - Tests: `packages/neura-server/tests/test_gateway.py`, `packages/neura-server/tests/test_scheduler.py`,
-  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py`,
+  `packages/neura-server/tests/test_sandbox.py` (each run may write only a directory of its own),
+  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py` (needs Docker
+  and a worker image: a worker sees only its own socket),
   `tests/integration/test_shutdown.py` (stopped with SIGTERM, it stops its workers and leaves
   nothing behind)
 - Model adapters: `packages/neura-adapters/src/neura_adapters/` (LeRobot, Python classes, LoRA

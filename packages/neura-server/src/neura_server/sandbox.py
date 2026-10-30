@@ -1,15 +1,17 @@
 """Running policy workers (design §12): customer model code is untrusted executable code.
 
 A worker run is described by an :class:`Invocation`: its subcommand, plain flags, the host paths
-it reads, and the host paths it writes (its gRPC socket, a profile). A launcher turns that into a
-command line:
+it reads, and the one directory it may write (its gRPC socket's, a job's output). That directory is
+made for the run alone (:func:`private_directory`) and removed after it: runs never share a
+writable directory, since every container runs as the same user. A launcher turns the invocation
+into a command line:
 
 - :class:`ProcessLauncher` runs ``neura-worker`` as a child process (development and tests).
 - :class:`ContainerLauncher` runs it in the artifact's runtime image, pinned by digest. The
   container has no network (the scheduler reaches it over a Unix socket in a mounted directory),
   a read-only root filesystem with a small tmpfs, no capabilities and no privilege escalation,
   memory, CPU and process limits, only the device it was placed on, its inputs mounted read-only
-  and only its output directories writable. Images are pulled at prepare
+  and only its own output directory writable. Images are pulled at prepare
   (:func:`ensure_image`), never when a worker starts.
 
 The container's stdin is attached, so a worker still exits when its supervisor closes stdin; a
@@ -24,9 +26,10 @@ import logging
 import os
 import re
 import secrets
+import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Protocol
 
 from neura_server.config import SandboxConfig
@@ -34,6 +37,7 @@ from neura_server.config import SandboxConfig
 log = logging.getLogger("neura.gateway.sandbox")
 
 LABEL = "dev.neura.worker"
+OUTPUT = "/neura/out"  # where a container sees its run's directory
 _CUDA = re.compile(r"^cuda:(\d+)$")
 
 
@@ -44,14 +48,36 @@ class Invocation:
     flags: list[str] = field(default_factory=list)
     # flag -> a host file or directory the worker reads.
     inputs: list[tuple[str, Path]] = field(default_factory=list)
-    # flag -> a host path the worker creates (its directory must exist).
-    outputs: list[tuple[str, Path]] = field(default_factory=list)
+    # The one directory the worker may write, made for this run (private_directory).
+    output_dir: Path | None = None
+    # flag -> a name inside output_dir the worker creates ("" for the directory itself).
+    outputs: list[tuple[str, str]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.outputs and self.output_dir is None:
+            raise ValueError("a run that writes needs a directory of its own (output_dir)")
+        for flag, name in self.outputs:
+            if name and (len(PurePath(name).parts) != 1 or name in (".", "..")):
+                raise ValueError(f"{flag} {name!r} is not a name inside the run's directory")
 
     def host_args(self) -> list[str]:
         args = [self.subcommand, *self.flags]
-        for flag, path in [*self.inputs, *self.outputs]:
+        for flag, path in self.inputs:
             args += [flag, str(path)]
+        for flag, name in self.outputs:
+            assert self.output_dir is not None
+            args += [flag, str(self.output_dir / name)]
         return args
+
+
+def private_directory(path: Path) -> Path:
+    """A fresh directory only its owner may enter, for one run to write in; whatever an earlier
+    run left at the same path is removed first. The caller removes it when the run is over."""
+    shutil.rmtree(path, ignore_errors=True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.mkdir(mode=0o700)
+    path.chmod(0o700)  # whatever the umask
+    return path
 
 
 class Launcher(Protocol):
@@ -133,10 +159,10 @@ class ContainerLauncher:
             target = f"/neura/in/{i}/{path.name}"
             args += ["--volume", f"{path.resolve()}:{target}:ro"]
             inner += [flag, target]
-        for i, (flag, path) in enumerate(invocation.outputs):
-            directory = f"/neura/out/{i}"
-            args += ["--volume", f"{path.parent.resolve()}:{directory}:rw"]
-            inner += [flag, f"{directory}/{path.name}"]
+        if invocation.output_dir is not None:
+            args += ["--volume", f"{invocation.output_dir.resolve()}:{OUTPUT}:rw"]
+        for flag, name in invocation.outputs:
+            inner += [flag, f"{OUTPUT}/{name}" if name else OUTPUT]
         return [*args, self.image, *c.entrypoint, *inner]
 
     async def remove(self, name: str) -> None:

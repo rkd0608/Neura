@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import os
 import sys
@@ -18,6 +19,7 @@ import pytest
 
 from neura_runtime.runtime import RuntimeState
 from neura_server import worker
+from neura_server.backends import WorkerBackend, WorkerSpec
 from neura_server.config import (
     DeploymentConfig,
     DeviceConfig,
@@ -26,6 +28,7 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
+from neura_server.sandbox import Invocation, ProcessLauncher
 from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
@@ -193,6 +196,40 @@ async def test_reloading_without_the_deployment_stops_its_worker() -> None:
         site.server.reload(cfg.model_copy(update={"deployments": []}))
         await until("the group to go", lambda: not site.server.status()["groups"])
         await until("the process to exit", lambda: not _alive(pid))
+
+
+class Impostor:
+    """Runs a real worker that loads another model than the one it was asked for."""
+
+    def __init__(self) -> None:
+        self._launcher = ProcessLauncher([sys.executable, "-m", "neura_server.worker"])
+
+    def command(self, name: str, invocation: Invocation) -> list[str]:
+        other = [
+            ("--artifact", EXAMPLES / "smolvla-so101.artifact.yaml"),
+            ("--robot-profile", ROBOT),
+            ("--execution-profile", EXAMPLES / "smolvla-so101-30hz.profile.yaml"),
+        ]
+        return self._launcher.command(name, dataclasses.replace(invocation, inputs=other))
+
+    async def remove(self, name: str) -> None:
+        del name
+
+
+async def test_a_worker_whose_socket_answers_for_another_model_is_not_used(tmp_path: Path) -> None:
+    spec = WorkerSpec(ARTIFACT, ROBOT, PROFILE, device="cpu", adapter="mock")
+    backend = WorkerBackend(
+        "g1", spec, socket_dir=tmp_path, start_timeout_s=60, launcher=Impostor()
+    )
+    await backend.start()
+    try:
+        await until("the refusal", lambda: backend.last_error is not None, timeout=60)
+        assert backend.last_error is not None
+        assert backend.last_error["code"] == "WORKER_LOAD_FAILED"
+        assert "answers for artifact" in backend.last_error["message"]
+        assert not backend.ready.is_set()
+    finally:
+        await backend.stop()
 
 
 def _alive(pid: int) -> bool:

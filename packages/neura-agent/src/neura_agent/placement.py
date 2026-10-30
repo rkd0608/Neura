@@ -4,7 +4,9 @@ A batch group (artifact, precision) is placed on one device and stays there: rev
 same artifact join its group, so their robots share forward passes. A new group goes to the
 allowed GPU with the fewest groups. At prepare, the group's worker is loaded on that device and
 profiled (`neura-worker profile`); the gateway's scheduler and admission control, and the
-capacity estimate reported to the cloud, then use the measured profile.
+capacity estimate reported to the cloud, then use the measured profile. The profiler runs the
+customer's code, so it may write nothing at the site: it prints the profile, and the agent keeps it
+with every other revision's.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from neura_agent.artifacts import ArtifactError
+from neura_agent.identity import atomic_write
 from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.config import profile_batch_sizes
@@ -101,9 +104,9 @@ async def measure(
     timeout_s: float,
     adapter: str | None = None,
 ) -> dict[str, Any]:
-    """Run `neura-worker profile` (in the worker sandbox) and return the measured profile.
-    Raises ArtifactError with the worker's reason when the model cannot be loaded or profiled
-    on the device."""
+    """Run `neura-worker profile` (in the worker sandbox), keep the profile it prints in ``out``
+    and return it. Raises ArtifactError with the worker's reason when the model cannot be loaded
+    or profiled on the device."""
     batches = ",".join(str(b) for b in profile_batch_sizes(max_batch))
     flags = ["--device", device, "--batch-sizes", batches, "--warmup", batches]
     flags += ["--iterations", str(iterations)]
@@ -116,10 +119,9 @@ async def measure(
     ]
     if checkpoint is not None:
         inputs.append(("--checkpoint", checkpoint))
-    invocation = Invocation("profile", device, flags, inputs, [("--out", out)])
+    invocation = Invocation("profile", device, flags, inputs)  # it writes nothing
     name = f"profile-{secrets.token_hex(4)}"
     args = launcher.command(name, invocation)
-    out.parent.mkdir(parents=True, exist_ok=True)
     process = await asyncio.create_subprocess_exec(
         *args,
         stdin=asyncio.subprocess.DEVNULL,
@@ -143,6 +145,8 @@ async def measure(
             continue
         if isinstance(message, dict) and "profile" in message:
             profile: dict[str, Any] = message["profile"]
+            data = json.dumps(profile, indent=2, sort_keys=True) + "\n"
+            await asyncio.to_thread(atomic_write, out, data.encode(), 0o644)
             return profile
         if isinstance(message, dict) and "error" in message:
             error = message["error"]

@@ -130,7 +130,7 @@ Under `packages/neura-agent/src/`:
 - `neura_agent/trust.py`: Publisher keys this server trusts (design §17.3, §17.4).
 - `neura_agent/upgrade.py`: Signed agent upgrades with automatic rollback (design §17.3).
 
-Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_outbound.py`, `test_preflight.py`, `test_robots.py`
+Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_jobs.py`, `test_outbound.py`, `test_placement.py`, `test_preflight.py`, `test_robots.py`
 
 ## packages/neura-bench
 

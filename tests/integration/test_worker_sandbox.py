@@ -144,7 +144,7 @@ async def test_robots_are_served_by_a_locked_down_container_worker(tmp_path: Pat
         assert inspected["Config"]["User"] == f"{os.getuid()}:{os.getgid()}"
         assert inspected["Image"] == IMAGE_ID
         mounts = {m["Destination"]: m["RW"] for m in inspected["Mounts"]}
-        assert mounts.pop("/neura/out/0") is True  # the socket's directory
+        assert mounts.pop("/neura/out") is True  # the directory made for this run
         assert mounts
         assert not any(mounts.values())  # every input read-only
 
@@ -159,6 +159,62 @@ async def test_robots_are_served_by_a_locked_down_container_worker(tmp_path: Pat
         await until("chunks after the restart", lambda: chunks(server) > before)
         assert len(workers()) == 1
     assert workers() == []  # stopping the gateway removes its containers
+
+
+async def test_a_worker_sees_only_its_own_socket_never_another_workers(tmp_path: Path) -> None:
+    # Two models, two batch groups, two containers running as the same user: neither may reach
+    # the other's socket, or it could answer for the other model.
+    shared = tmp_path / "w"
+    deployments = [
+        DeploymentConfig(
+            revision_id=f"rev_{model}",
+            artifact=EXAMPLES / f"{model}-so101.artifact.yaml",
+            robot_profile=ROBOT,
+            execution_profile=EXAMPLES / f"{model}-so101-30hz.profile.yaml",
+            robots=[f"robot-{model}"],
+            adapter="mock",
+            device="cpu",
+        )
+        for model in ("act", "smolvla")
+    ]
+    server = GatewayServer(
+        GatewayConfig(
+            listen="127.0.0.1:0",
+            status_listen=None,
+            devices=[
+                DeviceConfig(robot_id=d.robots[0], token_sha256=token_digest(d.revision_id))
+                for d in deployments
+            ],
+            deployments=deployments,
+            serving=ServingConfig(backend="workers", sandbox=sandbox(), worker_dir=shared),
+        )
+    )
+    await server.start()
+    try:
+        await until(
+            "both workers",
+            lambda: (
+                [g["worker"]["state"] for g in server.status()["groups"].values()]
+                == ["ready", "ready"]
+            ),
+        )
+        containers = workers()
+        assert len(containers) == 2
+        writable = set()
+        for container in containers:
+            inspected = json.loads(docker("inspect", container))[0]
+            (mount,) = [m for m in inspected["Mounts"] if m["RW"]]
+            writable.add(mount["Source"])
+            listed = docker(
+                "exec", container, "python", "-c", "import os; print(os.listdir('/neura/out'))"
+            )
+            assert listed == "['sock']"  # its own socket, nothing else
+        assert len(writable) == 2
+        assert str(shared.resolve()) not in writable  # never the directory every worker shares
+    finally:
+        await server.stop()
+    assert workers() == []
+    assert list(shared.iterdir()) == []
 
 
 async def test_inside_the_sandbox_there_is_no_network_no_writable_root_and_no_root_user(

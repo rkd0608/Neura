@@ -229,7 +229,7 @@ def test_onboarding_to_activation(api: tuple[ConformanceClient, str], settings: 
 def test_refused_activation_is_recorded(api: tuple[ConformanceClient, str], settings: Any) -> None:
     client, org = api
     ids = onboard(client, org)
-    deployment_id, revision_id = _prepared_deployment(client, ids, settings)
+    deployment_id, revision_id = prepared_deployment(client, ids, settings)
     activation = client.post(
         f"/v1/deployments/{deployment_id}/activation-requests", {"revision_id": revision_id}
     )
@@ -249,7 +249,7 @@ def test_refused_activation_is_recorded(api: tuple[ConformanceClient, str], sett
     assert set(status["active_revision_ids"].values()) == {None}
 
 
-def _prepared_deployment(
+def prepared_deployment(
     client: ConformanceClient, ids: dict[str, Any], settings: Any
 ) -> tuple[str, str]:
     deployment = client.post(
@@ -284,7 +284,7 @@ def _prepared_deployment(
 def test_rollback_and_cancel(api: tuple[ConformanceClient, str], settings: Any) -> None:
     client, org = api
     ids = onboard(client, org)
-    deployment_id, revision_id = _prepared_deployment(client, ids, settings)
+    deployment_id, revision_id = prepared_deployment(client, ids, settings)
     rollback = client.post(
         f"/v1/deployments/{deployment_id}/rollbacks", {"to_revision_id": revision_id}
     )

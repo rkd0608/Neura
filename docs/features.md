@@ -177,7 +177,8 @@ ledger and its allowlist.
   `packages/neura-contracts/src/neura_contracts/sealing.py`, `catalog/outbound.yaml` (the
   allowlist; `make gen`), `packages/neura-agent/src/neura_agent/ledger.py`
 - Tests: `packages/neura-contracts/tests/test_signing.py`, `packages/neura-contracts/tests/test_sealing.py`,
-  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`
+  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`,
+  `packages/neura-control/tests/test_sealed_weights.py` (Neura's registry of sealed weights)
 - Docs: `site/docs/privacy-and-access.md`, `SECURITY.md`
 
 ## Interfaces people use

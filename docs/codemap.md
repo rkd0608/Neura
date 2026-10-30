@@ -364,7 +364,7 @@ Under `packages/neura-server/src/`:
 - `neura_server/sandbox.py`: Running policy workers (design §12): customer model code is untrusted executable code.
 - `neura_server/scheduler.py`: Per-batch-group request scheduling (design §9.2).
 - `neura_server/shadow.py`: Shadow serving (design §28.3): a candidate model on the observations robots send the model they run, its actions compared with the running model's and never sent to a robot.
-- `neura_server/supervision.py`: How long the data plane's processes take to stop: one source for the timeouts each supervisor waits, so whoever stops a process waits longer than that process takes to stop its own.
+- `neura_server/supervision.py`: How the site's processes are supervised: one source for the timeouts each supervisor waits when it stops a process (so whoever stops a process waits longer than that process takes to stop its own), …
 - `neura_server/testing.py`: Helpers for tests of the gateway core: a core with one deployment, and a robot whose runtime and session client talk to it directly (no network).
 - `neura_server/worker.py`: The policy worker process: one model on one device, serving one batch group (design §9.1, §12).
 

@@ -123,23 +123,42 @@ def test_launch_commands(tmp_path: Path) -> None:
     assert config["credentials"]["cert_dir"] == str(tmp_path)
 
 
-def test_the_supervisor_restarts_and_stops_robots(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(robots, "RESTART_BACKOFF_S", (0.05,))
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_the_supervisor_restarts_and_stops_robots(tmp_path: Path) -> None:
     sim = robots.discover(simulated=1, robots_file=None, scan_serial=False)[0]
     sleeper = robots.Launch("a", sim, (sys.executable, "-c", "import time; time.sleep(30)"), {})
     crasher = robots.Launch("b", sim, (sys.executable, "-c", "raise SystemExit(3)"), {})
+    clock = Clock()
 
     async def run() -> None:
-        supervisor = robots.RobotSupervisor(tmp_path / "logs")
+        supervisor = robots.RobotSupervisor(tmp_path / "logs", clock=clock)
+
+        async def noticed_exit_at(now: float) -> None:
+            await asyncio.sleep(0.5)  # b exits at once
+            clock.now = now
+            await supervisor.tick()
+
         await supervisor.sync([sleeper, crasher])
-        await asyncio.sleep(0.5)
-        await supervisor.tick()  # b exited: counted and backed off
-        await asyncio.sleep(0.1)
-        await supervisor.tick()  # restarted
+        await noticed_exit_at(0.0)  # restarted in 1 s
+        clock.now = 1.0
+        await supervisor.tick()
+        await noticed_exit_at(1.0)  # in 2 s
+        clock.now = 3.0
+        await supervisor.tick()
+        # This run was healthy (97 s): the next wait is 1 s again, not the next in a crash loop.
+        await noticed_exit_at(100.0)
+        clock.now = 101.0
+        await supervisor.tick()
+        assert "b" in supervisor.running
         assert "a" in supervisor.running
-        assert supervisor.status()["b"]["restarts"] >= 1
+        assert supervisor.status()["b"]["restarts"] == 3
         await supervisor.sync([crasher])
         assert "a" not in supervisor.running
         await supervisor.stop()

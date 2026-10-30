@@ -33,12 +33,10 @@ from neura.v1 import worker_pb2, worker_pb2_grpc
 from neura_adapters import ModelInputs, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode, load_document
 from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, private_directory
-from neura_server.supervision import WORKER_STOP_TIMEOUT_S
+from neura_server.supervision import WORKER_STOP_TIMEOUT_S, RestartBackoff
 from neura_server.worker import MAX_MESSAGE_BYTES, encode_inputs, outputs_from
 
 log = logging.getLogger("neura.gateway.workers")
-HEALTHY_RUN_S = 30.0
-MAX_BACKOFF_S = 30.0
 UNIX_PATH_MAX = 107
 SOCKET = "sock"  # in its run's own directory: "<group>-<incarnation>/sock", as short as before
 
@@ -186,12 +184,12 @@ class WorkerBackend:
         return self._stopping
 
     async def _supervise(self) -> None:
-        backoff = 0.5
+        backoff = RestartBackoff(first_s=0.5, max_s=30.0)
         while not self._stop_requested():
             self.incarnation += 1
             directory = private_directory(self._run_dir(self.incarnation))
             self.state = "starting" if self.restarts == 0 else "restarting"
-            started = time.monotonic()
+            backoff.started()
             run = directory.name
             try:
                 process = self._process = await asyncio.create_subprocess_exec(
@@ -250,11 +248,9 @@ class WorkerBackend:
                 }
             if self.state != "failed":
                 self.state = "restarting"
-            if time.monotonic() - started > HEALTHY_RUN_S:
-                backoff = 0.5
-            log.warning("worker %s exited with %s; restarting in %.1fs", self.name, code, backoff)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, MAX_BACKOFF_S)
+            delay = backoff.exited()
+            log.warning("worker %s exited with %s; restarting in %.1fs", self.name, code, delay)
+            await asyncio.sleep(delay)
 
     async def _remove(self, run: str, directory: Path) -> None:
         try:

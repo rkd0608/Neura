@@ -18,7 +18,7 @@ import {
   Time,
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
-import { ROBOT_TONE, awaitingApproval, robotState, running } from "../lib/fleet";
+import { ROBOT_TONE, robotState, running } from "../lib/fleet";
 import { slug } from "../lib/format";
 
 type Site = Schemas["Site"];
@@ -28,14 +28,14 @@ export function Fleet() {
   const { orgId, projectId, base } = useScope();
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
-  const rollouts = useRollouts(projectId);
+  // The server filters: the banner sees every waiting rollout, however many came after it.
+  const waiting = useRollouts(projectId, { state: "awaiting_approval" });
   const can = usePermissions(orgId, projectId);
   const [adding, setAdding] = useState(false);
 
   if (sites.isPending || robots.isPending) return <Loading />;
   if (sites.isError) return <ErrorState error={sites.error} />;
   if (robots.isError) return <ErrorState error={robots.error} />;
-  const waiting = awaitingApproval(rollouts.data ?? []);
   const siteName = (id: string) => sites.data.find((s) => s.metadata.id === id)?.spec.name ?? id;
 
   return (
@@ -52,7 +52,7 @@ export function Fleet() {
           ) : null
         }
       />
-      {waiting.map((rollout) => (
+      {(waiting.data ?? []).map((rollout) => (
         <Callout key={rollout.metadata.id} tone="warn" title={`${rollout.status.name} is waiting`}>
           <p>
             A person at {siteName(rollout.status.site_id)} approves it: on the site&apos;s server,

@@ -383,16 +383,25 @@ export const usePolicyVersions = (projectId: string, policyId: string) =>
     { enabled: policyId !== "" },
   );
 
-/** Rollouts, newest first; live ones poll so their steps move on screen. */
-export const useRollouts = (projectId: string, query: { robot_id?: string } = {}) =>
+/** Every rollout, newest first, or only those in a state (the server filters); live ones poll so
+ *  their steps move on screen. */
+export const useRollouts = (
+  projectId: string,
+  query: { robot_id?: string; state?: S["RolloutStateFilter"] } = {},
+) =>
   useApiQuery(
     ["p", projectId, "rollouts", query],
-    async () =>
-      unwrap(
-        await api.GET("/v1/projects/{project_id}/rollouts", {
-          params: { path: { project_id: projectId }, query: { ...query, page_size: 50 } },
-        }),
-      ).items,
+    () =>
+      all(async (cursor) =>
+        unwrap(
+          await api.GET("/v1/projects/{project_id}/rollouts", {
+            params: {
+              path: { project_id: projectId },
+              query: { ...query, cursor, page_size: ALL },
+            },
+          }),
+        ),
+      ),
     { refetchInterval: 3000 },
   );
 

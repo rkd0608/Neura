@@ -317,7 +317,7 @@ Refill rule: the robot requests a new chunk when `queued_actions × control_peri
 
 Two RTT figures, both measured on the robot clock over a sliding time window (10 s by default) and sent with every heartbeat (§11):
 
-- **p99 RTT** for capacity planning (admission), so planning stays conservative while a recent spike is in the window.
+- **p99 RTT** for capacity planning (admission), so planning stays conservative while a recent spike is in the window. A session is admitted before its robot has measured anything, with the configured default (`default_rtt_ms`); each heartbeat then replaces its demand with the p99 it reports, so later admissions plan with the link it has. An admitted session is never evicted: on a link that turns out too slow, it keeps its place, and the robot's own freshness checks refuse what arrives too late. *Audit fix:* admission used the default for the session's life, and the reported p99 only reached the status page.
 - **Recent RTT** (median of the last five samples) for per-request bounds at the gateway, so serving recovers as soon as the link does. *Implementation finding (M2):* using a long-window p99 for per-request bounds made a robot unservable for about a minute after a single 0.7 s delay spike, because every request was judged too old on arrival. The robot's own acceptance check remains the authority on freshness.
 
 *Illustrative* simulation envelope to start with: 30 Hz and 50 Hz control; chunks of 50 (SmolVLA) and 100 (ACT); LAN RTT p99 of 2–10 ms; inference p50 of 10–150 ms depending on model and batch size. Real values come from profiling.
@@ -359,7 +359,7 @@ plus average utilization ≤ `1 − reserve` and memory headroom.
 
 *M6 update:* the scheduler's batching window (§9.2) serves robots that ask together in one batch, so synchronized arrivals cost one batch's latency rather than a queue of single batches. The CPU benchmark (§12.1) also found that robots desynchronize on their own when a pass is slower than a control period.
 
-*Implementation finding (M2), important for the GPU-sharing bet (§25):* with the example's illustrative 100 ms dispatch-freshness limit and 45 ms batches, condition 1 caps one worker at about one batch of sessions (8), well below its throughput limit. Starvation budgets were never the binding constraint. Synchronized requests are realistic: robots that start together stay in phase. Two levers can raise safe capacity, and both belong in the M6 benchmarks:
+*Implementation finding (M2), important for the GPU-sharing bet (§25):* with the example's illustrative 100 ms dispatch-freshness limit and 45 ms batches, condition 1 caps one worker at about one batch of sessions (8), well below its throughput limit. That is with the 20 ms default link allowance; planned with the links robots measure (§8), about 1 ms on a LAN, two batches (16) fit. Starvation budgets were never the binding constraint. Synchronized requests are realistic: robots that start together stay in phase. Two levers can raise safe capacity, and both belong in the M6 benchmarks:
 
 - **request phasing:** spreading sessions' refill times so bursts do not align;
 - **workload-specific freshness limits:** qualified per execution profile.

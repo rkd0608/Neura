@@ -264,6 +264,15 @@ class GatewayCore:
         self.leases.renew(request.session_id, request.lease_generation, now_us)
         session.rtt_p99_us = min(int(request.rtt_p99_us), MAX_REPORTED_RTT_US)
         session.rtt_recent_us = min(int(request.rtt_recent_us), MAX_REPORTED_RTT_US)
+        # The session was admitted with the default link allowance; from now on, the next
+        # admission plans with the link it measures (design §8).
+        session.group.admission.update(
+            SessionDemand.from_binding(
+                request.session_id,
+                session.deployment.binding,
+                rtt_p99_us=session.rtt_p99_us or self.default_rtt_us,
+            )
+        )
         session.robot_state = request.runtime_state[:32]
         session.fault_reason = request.fault_reason[:64]
         session.dispatched_actions = int(request.dispatched_actions)

@@ -84,6 +84,27 @@ def test_admission_rejects_and_releases_the_lease(make_binding: Any) -> None:
     assert len(core.leases.active()) == len(names) - len(rejected)
 
 
+def test_admission_plans_with_the_link_robots_measure(make_binding: Any) -> None:
+    # A session is admitted before its robot has measured anything, with the default link
+    # allowance (design §8); what its heartbeats then report is what later admissions plan with.
+    binding = make_binding()
+    core = make_core(binding, ["r1", "r2"])
+    accepted = Robot(binding, "r1").open(core, GW0).accepted
+    beat = dataplane_pb2.HeartbeatRequest(
+        session_id=accepted.session_id,
+        lease_generation=accepted.lease_generation,
+        rtt_p99_us=150 * MS,
+        rtt_recent_us=150 * MS,
+    )
+    assert core.heartbeat("r1", beat, GW0 + 1 * MS).WhichOneof("result") == "ack"
+    second = Robot(binding, "r2").open(core, GW0 + 2 * MS)
+    # The first robot's uplink alone exceeds the 100 ms dispatch-freshness limit.
+    assert second.rejected.code == ReasonCode.ADMISSION_CAPACITY_EXCEEDED.value
+    assert "observation age at dispatch" in second.rejected.message
+    group = next(iter(core.groups.values()))
+    assert accepted.session_id in group.admission.admitted  # an admitted session is never evicted
+
+
 def test_observation_rejections(make_binding: Any) -> None:
     binding = make_binding()
     core = make_core(binding, ["r1"], max_message_bytes=10_000_000)

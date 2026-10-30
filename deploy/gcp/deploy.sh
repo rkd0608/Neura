@@ -94,7 +94,6 @@ MACHINE_TYPE=${NEURA_MACHINE_TYPE:-e2-micro}
 SQL_TIER=${NEURA_SQL_TIER:-db-f1-micro}
 ORGANIZATION=${NEURA_ORGANIZATION:-NucleiLabs}
 CONTACT_URL=${NEURA_CONTACT_URL:-mailto:hello@nucleilabs.ai}
-DOCS_URL=/docs/  # the site serves the developer docs itself
 
 VM=neura
 SA_NAME=neura-host
@@ -287,12 +286,13 @@ build_images() {
     local tag=$1 domain=$2 target secret=()
     g auth configure-docker "$REGISTRY_HOST" >/dev/null 2>&1
     [[ -z ${NEURA_BUILD_CA_BUNDLE:-} ]] || secret=(--secret "id=ca_bundle,src=$NEURA_BUILD_CA_BUNDLE")
+    # The site serves the docs at /docs/; the console, on console.$domain, links there too.
     for target in neura-control neura-console neura-landing; do
         step "building $target:$tag"
         docker build --quiet --platform=linux/amd64 -f deploy/docker/Dockerfile --target "$target" \
             ${secret[@]+"${secret[@]}"} \
             --build-arg "VITE_CONSOLE_URL=https://console.$domain/sign-in" \
-            --build-arg "VITE_DOCS_URL=$DOCS_URL" \
+            --build-arg "VITE_DOCS_URL=https://$domain/docs/" \
             --build-arg "VITE_CONTACT_URL=$CONTACT_URL" \
             --build-arg "NEURA_SITE_URL=https://$domain" \
             --build-arg "NEURA_CONSOLE_URL=https://console.$domain/sign-in" \

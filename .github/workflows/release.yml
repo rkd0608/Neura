@@ -54,6 +54,10 @@ jobs:
           - neura-landing
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.target }}
+      # Where the web images link: Neura's own site and console (the NEURA_DOMAIN variable the
+      # Deploy workflow uses), never a development default (tests/tools/test_web_build_urls.py).
+      DOMAIN: ${{ vars.NEURA_DOMAIN || 'nucleilabs.ai' }}
+      CONTACT_URL: ${{ vars.NEURA_CONTACT_URL || 'mailto:hello@nucleilabs.ai' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Disk space for the CUDA images
@@ -82,6 +86,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
+          build-args: |
+            VITE_CONSOLE_URL=https://console.${{ env.DOMAIN }}/sign-in
+            VITE_DOCS_URL=https://${{ env.DOMAIN }}/docs/
+            VITE_CONTACT_URL=${{ env.CONTACT_URL }}
+            NEURA_SITE_URL=https://${{ env.DOMAIN }}
+            NEURA_CONSOLE_URL=https://console.${{ env.DOMAIN }}/sign-in
+            NEURA_CONTACT_URL=${{ env.CONTACT_URL }}
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign
         env:

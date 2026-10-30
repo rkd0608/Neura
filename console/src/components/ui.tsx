@@ -454,16 +454,6 @@ export function Segmented<T extends string>({
   );
 }
 
-/** A status dot with its label next to it (color is never the only signal). */
-export function Dot({ tone: t, label: text }: { tone: Tone; label?: string }) {
-  return (
-    <span className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-      <span className={`dot ${t}`} aria-hidden="true" />
-      {text ? <span>{text}</span> : null}
-    </span>
-  );
-}
-
 export function Meter({
   value,
   max,

@@ -52,6 +52,18 @@ COVERED_BY = {
     "catalog/": ["tests/tools", "packages/neura-contracts/tests"],
     "site/docs/": ["tests/tools/test_docs.py"],
     "tools/": ["tests/tools"],
+    # Where the web images link: what the apps read, and what their builds pass.
+    **{
+        path: ["tests/tools/test_web_build_urls.py"]
+        for path in (
+            "console/src/lib/config.ts",
+            "landing/src/config.ts",
+            "site/docusaurus.config.ts",
+            "deploy/docker/Dockerfile",
+            "deploy/gcp/deploy.sh",
+            ".github/workflows/release.yml",
+        )
+    },
 }
 # Changes no automatic check covers, and what does.
 BY_HAND = {

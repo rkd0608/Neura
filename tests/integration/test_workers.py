@@ -91,6 +91,12 @@ class Site:
                 assert robot.runtime.fault.reason.value == "STARVATION_GRACE_EXHAUSTED"
                 robot.runtime.reset(time.monotonic_ns() // 1000, revalidated=True)
 
+    def served_since(self, chunks: int) -> bool:
+        """Robots are served again. A robot still waiting when the worker came back can run out
+        of grace a moment later (design §7): its operator resets it whenever it stops."""
+        self.reset_faulted_robots()
+        return self.chunks() > chunks
+
 
 @contextlib.asynccontextmanager
 async def running(cfg: GatewayConfig) -> AsyncIterator[Site]:
@@ -142,9 +148,8 @@ async def test_a_crashed_worker_fails_its_batch_and_is_restarted(tmp_path: Path)
         fault.write_text("exit")
         await until("a restart", lambda: site.group()["worker"]["restarts"] == 1)
         await until("the worker again", lambda: site.group()["worker"]["state"] == "ready")
-        site.reset_faulted_robots()
         before = site.chunks()
-        await until("chunks after the restart", lambda: site.chunks() > before)
+        await until("chunks after the restart", lambda: site.served_since(before))
         status = site.group()["worker"]
     assert status["pid"] != first_pid
     # The batch in flight when the worker died never got a result from any worker.
@@ -162,9 +167,8 @@ async def test_a_hung_worker_is_killed_and_its_batch_fails(tmp_path: Path) -> No
         fault.write_text("")
         await until("a restart", lambda: site.group()["worker"]["restarts"] >= 1)
         await until("the worker again", lambda: site.group()["worker"]["state"] == "ready")
-        site.reset_faulted_robots()
         before = site.chunks()
-        await until("chunks after recovery", lambda: site.chunks() > before)
+        await until("chunks after recovery", lambda: site.served_since(before))
 
 
 async def test_a_policy_error_is_a_typed_rejection(tmp_path: Path) -> None:

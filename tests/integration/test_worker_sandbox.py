@@ -152,11 +152,17 @@ async def test_robots_are_served_by_a_locked_down_container_worker(tmp_path: Pat
         docker("kill", container)
         await until("a restart", lambda: group(server)["worker"]["restarts"] >= 1)
         await until("the worker again", lambda: group(server)["worker"]["state"] == "ready")
-        for robot in robots:
-            if robot.runtime.state is RuntimeState.FAULTED:
-                robot.runtime.reset(time.monotonic_ns() // 1000, revalidated=True)
         before = chunks(server)
-        await until("chunks after the restart", lambda: chunks(server) > before)
+
+        def served() -> bool:
+            # A robot that ran dry while its worker was down stops itself, possibly only after
+            # the worker is back (design §7); its operator resets it whenever it does.
+            for robot in robots:
+                if robot.runtime.state is RuntimeState.FAULTED:
+                    robot.runtime.reset(time.monotonic_ns() // 1000, revalidated=True)
+            return chunks(server) > before
+
+        await until("chunks after the restart", served)
         assert len(workers()) == 1
     assert workers() == []  # stopping the gateway removes its containers
 

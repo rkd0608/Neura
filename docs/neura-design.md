@@ -867,7 +867,7 @@ An activation for more robots than the server can serve at the revision's execut
 - With `NEURA_CONTROL_SEALED_WEIGHTS_DIR` set, the control plane keeps weights for customers who choose to:
   - `PUT /v1/projects/{project_id}/sealed-weights/{digest}` stores a sealed file (SDK: `upload_sealed_weights`);
   - list, get and delete endpoints manage them.
-- It accepts only a well-formed sealed file for the digest in the path: magic, header bounds, the header's plaintext digest, and the exact length the header implies. Uploads are staged and moved into place under the row lock, so a concurrent upload of the same digest never leaves the file and its record disagreeing. The control plane holds no key and cannot open what it stores.
+- It accepts only a well-formed sealed file for the digest in the path: magic, header bounds, the header's plaintext digest, and the exact length the header implies. Uploads are staged, and a file changes only after its record is committed: a second transaction moves an upload into place if the record is still that upload's, and removes a file whose record was deleted, under a lock per digest. A change that fails before its commit leaves the file as its record says, and a concurrent upload or delete of the same digest never leaves them disagreeing. Opening the registry clears staged uploads untouched for an hour (`test_sealed_weights.py`). The control plane holds no key and cannot open what it stores.
 - Agents list the source `neura` in `NEURA_AGENT_ARTIFACT_SOURCES`. They fetch with `SiteControl.FetchSealedWeights` over their authenticated channel (the short-lived token and, with TLS, the client certificate), scoped to their project. The agent refuses anything unsealed from the registry.
 
 **What leaves the site: the outbound schema and ledger**
@@ -1318,6 +1318,9 @@ Organizations, projects, sites, compute servers, enrollment tokens, robots, robo
 ### 20.6.1 Implementation notes (M3)
 
 - Event streams end after a configured lifetime (5 minutes by default) and send `retry:`; clients reconnect with `Last-Event-ID`. Each stream starts with an id-only message carrying its position (M5), so a reconnect never skips events. This bounds connection age behind load balancers. A cursor older than the retention window returns `410 API_CURSOR_EXPIRED`.
+- The log is read in commit order (`services/event_log.py`). A cursor is taken when an event is written, but the event is seen only when its transaction commits, and transactions commit in any order: reading "cursors after the last one seen" skipped an event whose transaction committed after a later cursor's. Each event records its transaction (`xid`), and the stream reads in transaction order, only up to the oldest transaction still running (`pg_snapshot_xmin`), so whatever becomes visible later sorts after everything already sent.
+- A stream's position moves past other projects' events too, and its keepalive carries it, so a quiet project's cursor stays recent. A trigger keeps the newest event ever deleted (`events_pruned`): a cursor has expired exactly when an event after it was deleted, which holds when every event of the project was pruned too. A cursor whose own event was pruned, with nothing after it, resumes. `test_events.py` proves the three cases.
+- The activity list (`/activity`) is a page, newest first, by cursor. Following it by polling is not a feed and can miss an event that commits late; follow the stream instead.
 - The rate limiter is per process. Running several control-plane replicas needs a shared limiter (for example Redis) before production scale.
 - Organization memberships for SSO users are managed with the `neura-control bootstrap` CLI until the user-management API lands with the console (M5).
 
@@ -2148,7 +2151,10 @@ chunk, it uses the slowest pass that would, so an estimate never refuses a polic
 decides. If the measured profile differs, the revision is prepared again.
 
 Rollouts on overlapping robots are refused. Robots are shared by deployment, with subset
-activation.
+activation. A site's rollouts are planned one at a time, under its row lock (`db/locks.py`): the
+overlap check and a new deployment's name are decided from rows a concurrent plan would change, so
+two deploys sent at once start one rollout and refuse the other, never two
+(`test_concurrent_deploys_start_one_rollout_per_robot`).
 
 ### 29.5 Robots a site finds
 

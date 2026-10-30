@@ -10,7 +10,7 @@ from pathlib import Path
 import grpc
 import pytest
 
-from neura_contracts import pki
+from neura_contracts import ReasonCode, pki
 from neura_runtime.grpc_client import RobotCredentials, fetch_assignment
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
@@ -173,13 +173,19 @@ async def test_revoking_a_robot_ends_its_session(site: Site) -> None:
     task = asyncio.create_task(robot.connection.run(stop))
     try:
         for _ in range(100):
-            if server.core.sessions:
+            if server.core.sessions and server.status()["streams"]:
                 break
             await asyncio.sleep(0.05)
         assert server.core.sessions
         closed = server.reload(config.model_copy(update={"devices": []}))
         assert closed
         assert not server.core.sessions
+        # The robot is told why: its credential was revoked.
+        for _ in range(100):
+            if robot.runtime.counters[ReasonCode.AUTH_DEVICE_REVOKED.value]:
+                break
+            await asyncio.sleep(0.05)
+        assert robot.runtime.counters[ReasonCode.AUTH_DEVICE_REVOKED.value]
         with pytest.raises(grpc.aio.AioRpcError):
             await fetch_assignment(target, credentials)
     finally:

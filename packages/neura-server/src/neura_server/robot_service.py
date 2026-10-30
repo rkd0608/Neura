@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 import grpc
 
 from neura.v1 import common_pb2, dataplane_pb2, dataplane_pb2_grpc
+from neura_contracts import ReasonCode
+from neura_runtime.runtime import SESSION_ENDING
 
 if TYPE_CHECKING:
     from neura_server.grpc_server import GatewayServer
@@ -26,11 +28,14 @@ def monotonic_us() -> int:
     return time.monotonic_ns() // 1000
 
 
-def closed_message(session_id: str) -> dataplane_pb2.GatewayMessage:
+def closed_message(session_id: str, reason: ReasonCode) -> dataplane_pb2.GatewayMessage:
+    """What the stream of a session the gateway closed receives: the real reason, one of those
+    that end a session (``neura_runtime.runtime.SESSION_ENDING``), so the robot stops using it."""
+    assert reason in SESSION_ENDING, reason
     return dataplane_pb2.GatewayMessage(
         rejected=dataplane_pb2.RequestRejected(
             envelope=common_pb2.Envelope(session_id=session_id),
-            reason=common_pb2.Reason(code="LEASE_EXPIRED", message="revision no longer active"),
+            reason=common_pb2.Reason(code=reason.value, message="the gateway closed the session"),
         )
     )
 

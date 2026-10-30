@@ -14,7 +14,13 @@ import numpy as np
 
 from neura.v1 import common_pb2, dataplane_pb2
 from neura_contracts import ReasonCode
-from neura_runtime.runtime import AnnounceEpoch, RobotRuntime, SendObservation
+from neura_runtime.runtime import (
+    SESSION_ENDING,
+    AnnounceEpoch,
+    RobotRuntime,
+    SendObservation,
+    reason_from,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +200,7 @@ class SessionClient:
             self.last_rejection_detail = ""
             self.runtime.attach_session(accepted.session_id, accepted.lease_generation)
         else:
-            self.last_rejection = _reason(response.rejected.code)
+            self.last_rejection = reason_from(response.rejected.code)
             self.last_rejection_detail = response.rejected.message
             self._next_open_at = now_us + self.config.reconnect_backoff_us
 
@@ -214,7 +220,8 @@ class SessionClient:
             self._lease_deadline = sent_at + ack.lease_remaining_us
             self._next_heartbeat_at = now_us + self._heartbeat_interval()
         else:
-            self._lose_session(_reason(response.rejected.code), now_us)
+            # A refused renewal ends the session whatever the reason: the lease was not renewed.
+            self._lose_session(reason_from(response.rejected.code), now_us)
 
     def _heartbeat_interval(self) -> int:
         return max(1, min(self._lease_ttl_us // 4, self.config.heartbeat_interval_us))
@@ -225,12 +232,8 @@ class SessionClient:
 
     def on_control_response(self, response: dataplane_pb2.ControlResponse, now_us: int) -> None:
         if response.WhichOneof("result") == "rejected":
-            reason = _reason(response.rejected.code)
-            if reason in (
-                ReasonCode.LEASE_GENERATION_STALE,
-                ReasonCode.LEASE_EXPIRED,
-                ReasonCode.SESSION_UNKNOWN,
-            ):
+            reason = reason_from(response.rejected.code)
+            if reason in SESSION_ENDING:
                 self._lose_session(reason, now_us)
 
     def on_gateway_message(self, message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
@@ -238,7 +241,7 @@ class SessionClient:
         if kind == "action_chunk":
             self.runtime.on_chunk(message.action_chunk, now_us)
         elif kind == "rejected":
-            self.runtime.on_rejected(message.rejected, now_us)
+            self.runtime.on_rejected(message.rejected, now_us)  # detaches if it ends the session
             if not self.connected:
                 self._next_open_at = now_us + self.config.reconnect_backoff_us
 
@@ -268,10 +271,3 @@ class SessionClient:
         )
         self.runtime.detach_session(ReasonCode.SESSION_UNKNOWN)
         return request
-
-
-def _reason(code: str) -> ReasonCode:
-    try:
-        return ReasonCode(code)
-    except ValueError:
-        return ReasonCode.PROTOCOL_MESSAGE_INVALID

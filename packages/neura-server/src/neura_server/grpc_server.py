@@ -337,16 +337,16 @@ class GatewayServer:
             if self._shadows.get(revision_id) is not runner and self._server is not None:
                 self._launch_shadow(runner)
         self._shadows = runners
-        closed += self.core.close_robots_without_credentials(self.devices.robots())
+        closed |= self.core.close_robots_without_credentials(self.devices.robots())
         for group in backends.values():
             self._groups[group.key] = group
             if self._server is not None:
                 self._launch(group)
-        for session_id in closed:
+        for session_id, reason in closed.items():
             queue = self._streams.pop(session_id, None)
             if queue is not None:
                 with contextlib.suppress(asyncio.QueueFull):
-                    queue.put_nowait(closed_message(session_id))
+                    queue.put_nowait(closed_message(session_id, reason))
         for key in self.core.unused_groups():
             self.core.remove_group(key)
             retired = self._groups.pop(key, None)
@@ -358,7 +358,7 @@ class GatewayServer:
             len(deployments),
             len(closed),
         )
-        return closed
+        return list(closed)
 
     def _launch(self, group: _Group) -> None:
         async def run() -> None:

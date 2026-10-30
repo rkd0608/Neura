@@ -124,20 +124,18 @@ class GatewayCore:
 
     def replace_deployments(
         self, deployments: list[Deployment], new_groups: dict[str, BatchGroup] | None = None
-    ) -> list[str]:
+    ) -> dict[str, ReasonCode]:
         """Apply a new set of deployments without a restart. Sessions whose robot is no longer
         allowed its revision are closed (their queued work cancelled, their lease released).
-        Returns the closed session ids."""
+        Returns the closed sessions and why they were closed."""
         for key, group in (new_groups or {}).items():
             self.groups.setdefault(key, group)
         index = self._index(deployments)
-        closed = []
+        closed = {}
         for session_id, session in list(self.sessions.items()):
             robot = session.lease.robot_id
             if session.deployment.revision_id not in index.get(robot, {}):
-                self._drop_session(session_id, ReasonCode.DEPLOYMENT_NOT_ACTIVE)
-                self.leases.release(session_id)
-                closed.append(session_id)
+                closed[session_id] = self._close(session_id, ReasonCode.DEPLOYMENT_NOT_ACTIVE)
             else:
                 session.deployment = index[robot][session.deployment.revision_id]
         self._deployments_by_robot = index
@@ -169,15 +167,18 @@ class GatewayCore:
     def _shadows_of(self, revision_id: str) -> list[ShadowTracker]:
         return [t for t in self.shadows.values() if t.shadow.of_revision_id == revision_id]
 
-    def close_robots_without_credentials(self, allowed: set[str]) -> list[str]:
+    def close_robots_without_credentials(self, allowed: set[str]) -> dict[str, ReasonCode]:
         """End the sessions of robots that no longer hold a valid credential (revoked)."""
-        closed = []
-        for session_id, session in list(self.sessions.items()):
-            if session.lease.robot_id not in allowed:
-                self._drop_session(session_id, ReasonCode.AUTH_DEVICE_REVOKED)
-                self.leases.release(session_id)
-                closed.append(session_id)
-        return closed
+        return {
+            session_id: self._close(session_id, ReasonCode.AUTH_DEVICE_REVOKED)
+            for session_id, session in list(self.sessions.items())
+            if session.lease.robot_id not in allowed
+        }
+
+    def _close(self, session_id: str, reason: ReasonCode) -> ReasonCode:
+        self._drop_session(session_id, reason)
+        self.leases.release(session_id)
+        return reason
 
     def unused_groups(self) -> list[str]:
         """Batch groups no deployment and no session uses any more."""

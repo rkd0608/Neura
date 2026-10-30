@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from neura.v1 import common_pb2, dataplane_pb2
 from neura_contracts import ReasonCode
 from neura_runtime.runtime import RobotRuntime, RuntimeState
@@ -103,6 +105,53 @@ def test_heartbeat_rejection_detaches(make_binding: Any) -> None:
         dataplane_pb2.HeartbeatResponse(rejected=common_pb2.Reason(code="SESSION_UNKNOWN")), T0 + 3
     )
     assert not client.connected
+
+
+def _rejected_on_the_stream(code: str, session_id: str = "ses_1") -> dataplane_pb2.GatewayMessage:
+    return dataplane_pb2.GatewayMessage(
+        rejected=dataplane_pb2.RequestRejected(
+            envelope=common_pb2.Envelope(session_id=session_id),
+            reason=common_pb2.Reason(code=code),
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "SESSION_UNKNOWN",  # the gateway restarted and no longer knows the session
+        "DEPLOYMENT_NOT_ACTIVE",  # the robot's revision is no longer served here
+        "AUTH_DEVICE_REVOKED",  # the robot's credential was revoked
+        "LEASE_EXPIRED",
+        "LEASE_GENERATION_STALE",
+    ],
+)
+def test_a_rejection_that_ends_the_session_detaches_at_once_on_any_channel(
+    make_binding: Any, code: str
+) -> None:
+    stream = _client(make_binding)
+    stream.tick(T0)
+    stream.on_open_response(_accept(), T0 + 1)
+    stream.on_gateway_message(_rejected_on_the_stream(code), T0 + 2)
+    assert not stream.connected
+    assert stream.runtime.last_reason is ReasonCode(code)
+
+    control = _client(make_binding)
+    control.tick(T0)
+    control.on_open_response(_accept(), T0 + 1)
+    control.on_control_response(
+        dataplane_pb2.ControlResponse(rejected=common_pb2.Reason(code=code)), T0 + 2
+    )
+    assert not control.connected
+
+
+def test_a_rejected_request_keeps_the_session(make_binding: Any) -> None:
+    client = _client(make_binding)
+    client.tick(T0)
+    client.on_open_response(_accept(), T0 + 1)
+    client.on_gateway_message(_rejected_on_the_stream("REQUEST_EXPIRED"), T0 + 2)
+    client.on_gateway_message(_rejected_on_the_stream("SESSION_UNKNOWN", "ses_old"), T0 + 3)
+    assert client.connected  # a request failed, or an answer to an earlier session arrived
 
 
 def test_arming_emits_epoch_announcement(make_binding: Any) -> None:

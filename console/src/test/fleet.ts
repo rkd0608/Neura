@@ -1,6 +1,6 @@
 // A project's fleet for the console's unit tests: a site, its robots and rollouts, answered by
 // the fake API the way the server answers (newest first, filtered by state, paged).
-import { fakeGet, paged, type Query } from "./render";
+import { fakeGet, fakePost, paged, type Query } from "./render";
 
 export const SITE = {
   metadata: { id: "site_1", version: "1", created_at: "2026-10-01T00:00:00Z" },
@@ -37,12 +37,33 @@ export function fakeFleet(
 ) {
   return fakeGet({
     "/v1/projects/{project_id}/sites": ({ query }) => paged([SITE], query),
+    "/v1/sites/{site_id}": () => SITE,
+    "/v1/sites/{site_id}/servers": ({ query }) => paged([], query),
     "/v1/projects/{project_id}/robots": ({ query }) => paged([], query),
     "/v1/projects/{project_id}/rollouts": ({ query }: { query: Query }) =>
       paged(
         all.filter((r) => !query.state || r.status.state === query.state),
         query,
       ),
+    ...extra,
+  });
+}
+
+/** Enrollment tokens: each one new (nen_1, nen_2, ...), as the server issues single-use tokens. */
+export function fakeEnrollment(extra: Parameters<typeof fakePost>[0] = {}) {
+  let issued = 0;
+  return fakePost({
+    "/v1/sites/{site_id}/enrollment-tokens": () => {
+      issued += 1;
+      const flags = `--control-plane 127.0.0.1:8081 --token nen_${issued}`;
+      return {
+        id: `enr_${issued}`,
+        site_id: SITE.metadata.id,
+        expires_at: "2026-10-30T12:00:00Z",
+        join_command: `neura site join ${SITE.spec.name} ${flags}`,
+        install_command: `neura-agent enroll ${flags}`,
+      };
+    },
     ...extra,
   });
 }

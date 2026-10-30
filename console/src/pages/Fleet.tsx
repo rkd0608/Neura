@@ -286,6 +286,21 @@ function ConnectServer({
   open: boolean;
   onClose: () => void;
 }) {
+  return (
+    <Dialog
+      open={open}
+      title={`Add a server to ${site.spec.name}`}
+      description="Each command works once, for this site only, and expires in an hour."
+      onClose={onClose}
+    >
+      <Commands site={site} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+/** The dialog's body, mounted only while it is open: its commands are single-use, so closing it
+ *  forgets them and opening it again starts from Generate. */
+function Commands({ site, onClose }: { site: Site; onClose: () => void }) {
   const issue = useApiMutation(async () =>
     unwrap(
       await api.POST("/v1/sites/{site_id}/enrollment-tokens", {
@@ -296,44 +311,37 @@ function ConnectServer({
   );
   const token = issue.data;
   return (
-    <Dialog
-      open={open}
-      title={`Add a server to ${site.spec.name}`}
-      description="Each command works once, for this site only, and expires in an hour."
-      onClose={onClose}
-    >
-      <div className="stack">
-        {token ? (
-          <>
-            {token.join_command ? (
-              <CopyField value={token.join_command} label="A workstation or bench" />
-            ) : null}
-            <CopyField value={token.install_command} label="A production server" />
-            <p className="muted small">
-              Expires <Time iso={token.expires_at} />. It is shown only now.
-            </p>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="button primary"
-            disabled={issue.isPending}
-            onClick={() => issue.mutate(undefined)}
-          >
-            {issue.isPending ? "Generating…" : "Generate the commands"}
-          </button>
-        )}
-        {issue.isError ? <ErrorState error={issue.error} /> : null}
-        <p className="muted small">
-          The agent dials out to Neura: no inbound ports. Its key is made on the server and never
-          leaves it.
-        </p>
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button type="button" className="button" onClick={onClose}>
-            Done
-          </button>
-        </div>
+    <div className="stack">
+      {token ? (
+        <>
+          {token.join_command ? (
+            <CopyField value={token.join_command} label="A workstation or bench" />
+          ) : null}
+          <CopyField value={token.install_command} label="A production server" />
+          <p className="muted small">
+            Expires <Time iso={token.expires_at} />. It is shown only now.
+          </p>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="button primary"
+          disabled={issue.isPending}
+          onClick={() => issue.mutate(undefined)}
+        >
+          {issue.isPending ? "Generating…" : "Generate the commands"}
+        </button>
+      )}
+      {issue.isError ? <ErrorState error={issue.error} /> : null}
+      <p className="muted small">
+        The agent dials out to Neura: no inbound ports. Its key is made on the server and never
+        leaves it.
+      </p>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="button" onClick={onClose}>
+          Done
+        </button>
       </div>
-    </Dialog>
+    </div>
   );
 }

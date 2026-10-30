@@ -18,7 +18,7 @@ import random
 import shutil
 import tempfile
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -160,6 +160,9 @@ class GatewayServer:
         self._groups = backends
         self._streams: dict[str, asyncio.Queue[dataplane_pb2.GatewayMessage]] = {}
         self._tasks: list[asyncio.Task[None]] = []
+        # Groups and shadows being retired. stop() waits for them, as a cancelled one would leave
+        # its worker running; each leaves the set when done.
+        self._retiring: set[asyncio.Task[None]] = set()
         self._server: grpc.aio.Server | None = None
         self._status_server: uvicorn.Server | None = None
         self._status_task: asyncio.Task[None] | None = None
@@ -333,7 +336,7 @@ class GatewayServer:
         self.core.replace_shadows(shadows)
         for revision_id, runner in self._shadows.items():
             if runners.get(revision_id) is not runner:
-                self._tasks.append(asyncio.create_task(self._retire_shadow(runner)))
+                self._retire_later(self._retire_shadow(runner))
         for revision_id, runner in runners.items():
             if self._shadows.get(revision_id) is not runner and self._server is not None:
                 self._launch_shadow(runner)
@@ -352,7 +355,7 @@ class GatewayServer:
             self.core.remove_group(key)
             retired = self._groups.pop(key, None)
             if retired is not None:
-                self._tasks.append(asyncio.create_task(self._retire(retired)))
+                self._retire_later(self._retire(retired))
         self.config = config
         log.info(
             "configuration reloaded: %d deployments, %d sessions closed",
@@ -360,6 +363,11 @@ class GatewayServer:
             len(closed),
         )
         return list(closed)
+
+    def _retire_later(self, retirement: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(retirement)
+        self._retiring.add(task)
+        task.add_done_callback(self._retiring.discard)
 
     def _launch(self, group: _Group) -> None:
         async def run() -> None:
@@ -471,6 +479,7 @@ class GatewayServer:
         await asyncio.gather(
             *(g.backend.stop() for g in self._groups.values()),
             *(s.backend.stop() for s in self._shadows.values()),
+            *self._retiring,
         )
         if self._owned_worker_dir is not None:
             shutil.rmtree(self._owned_worker_dir, ignore_errors=True)

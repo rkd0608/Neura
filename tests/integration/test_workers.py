@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from neura_runtime.runtime import RuntimeState
-from neura_server import worker
+from neura_server import grpc_server, worker
 from neura_server.backends import WorkerBackend, WorkerSpec
 from neura_server.config import (
     DeploymentConfig,
@@ -28,7 +28,7 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
-from neura_server.sandbox import Invocation, ProcessLauncher
+from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, launcher_for
 from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
@@ -200,6 +200,50 @@ async def test_reloading_without_the_deployment_stops_its_worker() -> None:
         site.server.reload(cfg.model_copy(update={"deployments": []}))
         await until("the group to go", lambda: not site.server.status()["groups"])
         await until("the process to exit", lambda: not _alive(pid))
+
+
+class SlowToRemove:
+    """The real worker, and a container runtime slow to remove what the worker ran in."""
+
+    def __init__(self, launcher: Launcher) -> None:
+        self.launcher = launcher
+        self.removed: list[str] = []
+
+    def command(self, name: str, invocation: Invocation) -> list[str]:
+        return self.launcher.command(name, invocation)
+
+    async def remove(self, name: str) -> None:
+        await asyncio.sleep(1.0)
+        self.removed.append(name)
+
+
+async def test_a_gateway_stopped_while_it_retires_a_group_finishes_retiring_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launchers: list[SlowToRemove] = []
+
+    def slow(*args: Any) -> SlowToRemove:
+        launchers.append(SlowToRemove(launcher_for(*args)))
+        return launchers[-1]
+
+    monkeypatch.setattr(grpc_server, "launcher_for", slow)
+    cfg = config(["robot-0"])
+    server = GatewayServer(cfg)
+    await server.start()
+    try:
+        await until(
+            "the worker",
+            lambda: next(iter(server.status()["groups"].values()))["worker"]["state"] == "ready",
+        )
+        pid = next(iter(server.status()["groups"].values()))["worker"]["pid"]
+        server.reload(cfg.model_copy(update={"deployments": []}))  # its group is retired
+        await asyncio.sleep(0.2)
+    finally:
+        await server.stop()
+    # Cancelled, the retirement left its worker's container to nobody.
+    (launcher,) = launchers
+    assert launcher.removed == ["g1-1"]
+    assert not _alive(pid)
 
 
 class Impostor:

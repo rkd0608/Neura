@@ -3,7 +3,7 @@
 # network. Sized for an e2-micro VM.
 services:
   db:
-    image: mirror.gcr.io/library/postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    image: mirror.gcr.io/library/postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50"]
     environment:
       POSTGRES_USER: neura

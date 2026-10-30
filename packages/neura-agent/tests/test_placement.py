@@ -13,7 +13,7 @@ import pytest
 from neura_agent import placement
 from neura_agent.artifacts import ArtifactError
 from neura_contracts import ReasonCode
-from neura_server.sandbox import Invocation, ProcessLauncher
+from neura_server.sandbox import Invocation, ProcessLauncher, exit_status
 
 MEASURED = {
     "points": [{"batch_size": 1, "p50_us": 1000, "p99_us": 2000, "memory_mib": 10}],
@@ -87,4 +87,4 @@ async def test_a_profiler_that_dies_says_how_and_keeps_its_output_at_the_site(
     assert "secret line" not in str(raised.value)
     assert "profiler: secret line" in caplog.text
     assert not out.exists()
-    assert placement.exit_status(3) == "exited with status 3"
+    assert exit_status(3) == "exited with status 3"

@@ -13,6 +13,7 @@ import pytest
 from test_core import Site
 
 from neura_agent import jobs
+from neura_contracts import ReasonCode
 from neura_server.config import SandboxConfig
 from neura_server.sandbox import ContainerLauncher, Invocation, Launcher, launcher_for
 
@@ -85,3 +86,34 @@ async def test_a_job_may_write_only_its_own_output(
     ]
     assert stat.S_IMODE((work / "out").stat().st_mode) == 0o700
     assert json.loads((work / "out" / "result" / "report.json").read_text()) == result
+
+
+# A job that fails, saying why in its own words: the customer's code and data can be in them.
+FAILS_SAYING_WHY = """
+import json, sys
+print(json.dumps({"event": "failed", "error": "ValueError: row 7 of customer-data-4471"}))
+print("Traceback: customer_model.py, line 3: secret-weights-path", file=sys.stderr)
+sys.exit(1)
+"""
+
+
+async def test_a_failed_job_says_how_it_ended_and_keeps_what_it_said_at_the_site(
+    tmp_path: Path, make_binding: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    s = site(tmp_path, FAILS_SAYING_WHY)
+
+    async def work() -> None:
+        await run(s, make_binding(), [])
+
+    s.core.jobs._start("cmd_1", "opr_1", work)
+    await s.core.jobs._tasks["opr_1"]
+    sent = s.drain()
+    (failed,) = [m.operation for m in sent if m.operation.state == "Failed"]
+    assert failed.reason.code == ReasonCode.AGENT_JOB_FAILED.value
+    assert (
+        failed.message
+        == "the evaluate job exited with status 1 (its output is in the site agent's log)"
+    )
+    for marker in (b"customer-data-4471", b"secret-weights-path"):
+        assert not any(marker in m.SerializeToString() for m in sent)
+        assert marker.decode() in caplog.text

@@ -160,7 +160,10 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-server/src/neura_server/capture/` (at the site), `packages/neura-learn/src/neura_learn/`,
   `packages/neura-server/src/neura_server/shadow.py`, `packages/neura-agent/src/neura_agent/jobs.py`
 - Tests: `tests/integration/test_capture.py`, `packages/neura-learn/tests/test_learn.py`,
-  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`
+  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`,
+  `packages/neura-agent/tests/test_jobs.py` (a job writes only its own output, and what it prints
+  stays at the site), `packages/neura-learn/tests/test_site_jobs.py` (evaluation and fine-tuning at
+  the site, end to end; needs the models group)
 - Docs: `site/docs/improvement-loop.md`; the console: `console/src/pages/Improve.tsx`
 
 ## Benchmarks: sharing a GPU (§9.5, §10)

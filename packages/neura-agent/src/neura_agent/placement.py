@@ -16,7 +16,6 @@ import hashlib
 import json
 import logging
 import secrets
-import signal
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +26,7 @@ from neura_agent.identity import atomic_write
 from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_server.config import profile_batch_sizes
-from neura_server.sandbox import Invocation, Launcher
+from neura_server.sandbox import Invocation, Launcher, failed_run
 
 log = logging.getLogger("neura.agent")
 
@@ -155,21 +154,8 @@ async def measure(
             except ValueError:
                 code = ReasonCode.WORKER_LOAD_FAILED
             raise ArtifactError(code, str(error.get("message", "")))
-    # The worker died without saying why. Its output stays in the site's log: it can quote the
-    # customer's code, which does not leave the site.
-    for line in stderr.decode(errors="replace").splitlines()[-40:]:
-        log.warning("profiler: %s", line)
+    # The worker died without saying why.
+    output = stderr.decode(errors="replace").splitlines()[-40:]
     raise ArtifactError(
-        ReasonCode.WORKER_LOAD_FAILED,
-        f"the profiler {exit_status(process.returncode)} (its output is in the site agent's log)",
+        ReasonCode.WORKER_LOAD_FAILED, failed_run("the profiler", process.returncode, output, log)
     )
-
-
-def exit_status(code: int | None) -> str:
-    """How a process ended, as people say it: "exited with status 1", "was killed by SIGABRT"."""
-    if code is not None and code < 0:
-        try:
-            return f"was killed by {signal.Signals(-code).name}"
-        except ValueError:
-            return f"was killed by signal {-code}"
-    return f"exited with status {code}"

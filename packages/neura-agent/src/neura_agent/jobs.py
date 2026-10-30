@@ -41,7 +41,7 @@ from neura_agent.identity import atomic_write
 from neura_contracts import ModelArtifact, ReasonCode, parse_document, signing
 from neura_runtime.binding import ExecutionBinding
 from neura_server.capture.store import EpisodeFilter, StoreError
-from neura_server.sandbox import Invocation, launcher_for, private_directory
+from neura_server.sandbox import Invocation, failed_run, launcher_for, private_directory
 from neura_server.shadow import ShadowSuite, comparable, shadow_verdict
 
 if TYPE_CHECKING:
@@ -624,9 +624,11 @@ class SiteJobs:
             await launcher.remove(f"job-{work.name}")
             with contextlib.suppress(asyncio.CancelledError):
                 await reader
-        if code != 0:
-            detail = failure or "\n".join(stderr_tail[-5:]) or f"exit status {code}"
-            raise JobError(ReasonCode.AGENT_JOB_FAILED, f"{subcommand} failed: {detail}"[:2000])
+        if code != 0:  # its own account of why, and its stderr, stay at the site
+            output = [*([f"failed: {failure}"] if failure else []), *stderr_tail]
+            raise JobError(
+                ReasonCode.AGENT_JOB_FAILED, failed_run(f"the {subcommand} job", code, output, log)
+            )
         report = out / OUTPUT / "report.json"
         result: dict[str, Any] = json.loads(report.read_text(encoding="utf-8"))
         return result

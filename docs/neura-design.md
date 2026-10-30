@@ -1091,6 +1091,7 @@ An external penetration test is scheduled before the first customer pilot. This 
 ### 18.2 Technical controls
 
 - **Telemetry schema allowlist.** The agent only sends fields defined in a published, versioned schema. No payload fields, no file contents; in minimal mode no free text either. A local **outbound ledger** shows exactly what was sent, so customers can verify instead of trusting.
+- **What sandboxed code prints stays at the site.** A profiler or a job runs the customer's code, and what it prints can quote that code or the customer's data. Of a run that failed, the agent reports a reason code and how it ended ("the train job exited with status 1"); its stderr and its own account of the failure go to the site agent's log (`neura_server.sandbox.failed_run`). *Audit fix:* a failed job used to send its stderr's last lines, or its own error text, as the operation's message.
 - **Customer-routed telemetry.** Metrics and traces can go only to the customer's own systems, with Neura receiving nothing beyond health and version status.
 - **Customer-managed keys.** If weights are stored with Neura, they are encrypted with the customer's KMS key and decrypted only on the site agent. Neura staff cannot read them. Revoking the key revokes access.
 - **mTLS everywhere**; encrypted local storage recommended and checked in preflight.

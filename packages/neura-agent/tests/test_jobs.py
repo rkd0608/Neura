@@ -16,11 +16,13 @@ from neura_agent import jobs
 from neura_server.config import SandboxConfig
 from neura_server.sandbox import ContainerLauncher, Invocation, Launcher, launcher_for
 
-# A job that writes its report where it was told to, saying how its output directory looked.
+# A job that makes its output and writes its report there, as neura-learn does, saying how the
+# directory around it looked.
 WRITES_ITS_REPORT = """
 import json, os, stat, sys
 out = sys.argv[sys.argv.index("--out") + 1]
-mode = stat.S_IMODE(os.stat(out).st_mode)
+os.mkdir(out)
+mode = stat.S_IMODE(os.stat(os.path.dirname(out)).st_mode)
 with open(os.path.join(out, "report.json"), "w") as report:
     json.dump({"out_mode": mode}, report)
 """
@@ -73,7 +75,7 @@ async def test_a_job_may_write_only_its_own_output(
     ((invocation,),) = [r.invocations for r in recorded]
     work = s.core.jobs.directory / "job-1"
     assert invocation.output_dir == work / "out"
-    assert invocation.outputs == [("--out", "")]
+    assert invocation.outputs == [("--out", "result")]
     assert [flag for flag, _ in invocation.inputs] == ["--spec", "--episodes"]
     # In the container, that directory is the only one it may write.
     command = ContainerLauncher(SandboxConfig(kind="container"), "image").command("j", invocation)
@@ -82,4 +84,4 @@ async def test_a_job_may_write_only_its_own_output(
         f"{(work / 'out').resolve()}:/neura/out:rw"
     ]
     assert stat.S_IMODE((work / "out").stat().st_mode) == 0o700
-    assert json.loads((work / "out" / "report.json").read_text()) == result
+    assert json.loads((work / "out" / "result" / "report.json").read_text()) == result

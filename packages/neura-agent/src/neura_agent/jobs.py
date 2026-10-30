@@ -49,6 +49,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("neura.agent.jobs")
 PROGRESS_INTERVAL_S = 2.0
+# What a job writes: its --out, which it creates (LeRobot refuses one that exists), inside the
+# directory made for its run, the only one it may write.
+OUTPUT = "result"
 TRAINING_KEY = "training-key.pem"
 
 
@@ -297,7 +300,7 @@ class SiteJobs:
         artifact, signature = await asyncio.to_thread(
             self._register,
             base,
-            work / "out" / "checkpoint",
+            work / "out" / OUTPUT / "checkpoint",
             name=message.artifact_name or base.binding.artifact.metadata.name,
             version=message.artifact_version or f"{base.binding.artifact.metadata.version}-ft",
             dataset=dataset,
@@ -554,7 +557,7 @@ class SiteJobs:
             device=spec["device"],
             inputs=[("--spec", spec_path), *inputs],
             output_dir=out,
-            outputs=[("--out", "")],
+            outputs=[("--out", OUTPUT)],
         )
         from neura_agent.gateway import sandbox_config
 
@@ -624,7 +627,8 @@ class SiteJobs:
         if code != 0:
             detail = failure or "\n".join(stderr_tail[-5:]) or f"exit status {code}"
             raise JobError(ReasonCode.AGENT_JOB_FAILED, f"{subcommand} failed: {detail}"[:2000])
-        result: dict[str, Any] = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        report = out / OUTPUT / "report.json"
+        result: dict[str, Any] = json.loads(report.read_text(encoding="utf-8"))
         return result
 
     def training_key(self) -> Ed25519PrivateKey:

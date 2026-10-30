@@ -57,7 +57,7 @@ export function Activate() {
       <PageHeader
         title="Sign in the command line"
         icon={<TerminalIcon />}
-        description="Approve only a code you see in your own terminal, from a `neura login` you just ran."
+        description="Approve only a code you see in your own terminal, from the neura login you just ran."
       />
       {me.data.kind !== "user" ? (
         <Callout tone="warn" title="Only a person can approve a sign-in">

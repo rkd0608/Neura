@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +15,10 @@ import pytest
 
 from neura_robots.qualify.cli import promotion_problems
 from neura_robots.qualify.episodes import newcombe_lower, schedule, wilson
-from neura_robots.qualify.harness import SCENARIOS
+from neura_robots.qualify.harness import Qualification, QualifyConfig, ScenarioResult
+from neura_robots.so101 import So101Config
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_wilson_and_newcombe_match_the_published_example() -> None:
@@ -40,16 +45,31 @@ def test_episodes_alternate_in_balanced_blocks() -> None:
         assert a != b
 
 
+def _on_hardware(**config: Any) -> dict[str, Any]:
+    """The report of a run on a real arm (no emulator) in which every scenario the harness
+    chose passed, as are parity and the global checks: what a passing hardware run writes."""
+    contracts = ROOT / "examples" / "contracts"
+    run = Qualification(
+        QualifyConfig(
+            arm=So101Config(port="/dev/ttyACM0", calibration_id="arm-1"),
+            artifact=contracts / "act-so101.artifact.yaml",
+            robot_profile=contracts / "so101.robot.yaml",
+            execution_profile=contracts / "act-so101-30hz.profile.yaml",
+            checkpoint=Path("checkpoint"),
+            **{"manual": True, **config},
+        )
+    )
+    for name, _ in run.applicable():
+        result = ScenarioResult(name)
+        result.check("passed", True)
+        run.results.append(result)
+    run.parity = {"measured": True, "passed": True, "max_abs_error": 0.0}
+    started = datetime(2026, 10, 15, 10, tzinfo=UTC).timestamp()
+    return run.report(started, started + 600)
+
+
 def _report(**overrides: Any) -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "kind": "neura-hardware-qualification",
-        "emulated": False,
-        "passed": True,
-        "complete": True,
-        "started_at": "2026-10-15T10:00:00Z",
-        "scenarios": [{"name": n, "skipped": None, "passed": True} for n in SCENARIOS],
-        "contracts": {"artifact": "sha256:a"},
-    }
+    report = _on_hardware()
     report.update(overrides)
     return report
 
@@ -58,25 +78,31 @@ def _episodes(**overrides: Any) -> dict[str, Any]:
     episodes: dict[str, Any] = {
         "kind": "neura-closed-loop-episodes",
         "emulated": False,
-        "contracts": {"artifact": "sha256:a"},
+        "contracts": {"artifact": _report()["contracts"]["artifact"]},
         "verdict": {"non_inferior": True},
     }
     episodes.update(overrides)
     return episodes
 
 
+def test_a_complete_run_on_hardware_is_promoted() -> None:
+    """A servo overload is induced only on the emulator: a hardware run that passed every
+    other scenario is complete, and promoted."""
+    report = _report()
+    skipped = {s["name"]: s["skipped"] for s in report["scenarios"] if s["skipped"]}
+    assert list(skipped) == ["torque_loss"]
+    assert report["complete"]
+    assert promotion_problems(report, _episodes()) == []
+
+
 def test_only_a_complete_hardware_pass_is_promoted() -> None:
-    assert promotion_problems(_report(), _episodes()) == []
     assert "emulated" in " ".join(promotion_problems(_report(emulated=True), _episodes()))
     assert promotion_problems(_report(passed=False), _episodes())
     partial = _report(scenarios=[{"name": "nominal", "skipped": None}])
     assert "did not run" in " ".join(promotion_problems(partial, _episodes()))
-    skipped = _report(
-        scenarios=[
-            {"name": n, "skipped": "manual" if n == "bus_unplugged" else None} for n in SCENARIOS
-        ]
-    )
-    assert "bus_unplugged" in " ".join(promotion_problems(skipped, _episodes()))
+    without_manual = _on_hardware(manual=False)
+    assert not without_manual["complete"]
+    assert "bus_unplugged" in " ".join(promotion_problems(without_manual, _episodes()))
     assert promotion_problems(_report(), _episodes(verdict={"non_inferior": False}))
     assert promotion_problems(_report(), _episodes(contracts={"artifact": "sha256:b"}))
     assert promotion_problems(_report(), _episodes(emulated=True))
@@ -87,7 +113,7 @@ def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:
 
     report = _report(
         contracts={
-            "artifact": "sha256:a",
+            **_report()["contracts"],
             "model": "act-so101",
             "robot": "so101-follower",
             "execution_profile_name": "act-so101-30hz",
@@ -123,6 +149,33 @@ def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:
             "evidence": "https://example.org/qualification/2",
         }
     ]
+
+
+def test_a_site_that_cannot_start_leaves_nothing_running(tmp_path: Path) -> None:
+    from neura_robots.qualify.site import LocalSite
+
+    contracts = ROOT / "examples" / "contracts"
+    site = LocalSite(
+        contracts / "act-so101.artifact.yaml",
+        contracts / "so101.robot.yaml",
+        contracts / "act-so101-30hz.profile.yaml",
+        None,
+        "cpu",
+        tmp_path / "site",
+    )
+
+    async def start() -> None:
+        with socket.socket() as taken:  # another program has the proxy's port
+            taken.bind(("127.0.0.1", site.proxy.listen_port))
+            taken.listen()
+            with pytest.raises(OSError, match="address already in use"):
+                async with site:
+                    pass
+        supervisor = site.gateway._task
+        assert supervisor is None or supervisor.done(), "a gateway would start after the error"
+        assert site.gateway.pid is None
+
+    asyncio.run(start())
 
 
 # --- on the emulated arm (needs LeRobot) ----------------------------------------------------------

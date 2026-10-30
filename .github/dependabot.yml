@@ -11,6 +11,11 @@ updates:
     groups:
       python-minor:
         update-types: [minor, patch]
+    ignore:
+      # Pinned to the MuJoCo gym-aloha's dm_control uses (neura-robots' sim extra): the ALOHA
+      # port must match gym-aloha step for step, and another MuJoCo already differs by 1e-11
+      # (packages/neura-robots/tests/test_aloha.py fails on it).
+      - dependency-name: mujoco
   - package-ecosystem: npm
     directory: /console
     target-branch: main

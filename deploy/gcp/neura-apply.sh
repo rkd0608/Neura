@@ -17,8 +17,6 @@ DATA=$ROOT/data
 SECRETS=/run/neura
 SELF=/usr/local/sbin/neura-apply
 DISK=/dev/disk/by-id/google-neura-data
-CERTBOT=mirror.gcr.io/certbot/certbot:v3.0.1@sha256:4d8875e85a2af373262914e15c0a149e1985c5bbd05ac433fe4763f465020fcf
-CLOUDSQL_PROXY=gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
 CONTROL_UID=10001 # the neura user in the images (deploy/docker/Dockerfile)
 POSTGRES_UID=70   # the postgres user in the Alpine Postgres image
 
@@ -33,6 +31,9 @@ compose() {
     docker compose --project-name neura --project-directory "$ROOT" \
         -f "$ROOT/compose.yaml" -f "$ROOT/compose.db.yaml" --env-file "$ROOT/release.env" "$@"
 }
+# One of compose.yaml's tools (certbot, import-proxy): options for `docker compose run`, the
+# tool, then its own arguments.
+tool() { compose run --rm --no-TTY "$@"; }
 # Progress for deploy.sh, as guest attributes (neura/attempt, neura/state, neura/release).
 report() {
     curl -fsS -X PUT --data "$2" -H Metadata-Flavor:Google \
@@ -197,7 +198,7 @@ import_database() {
     fi
     log "importing the database from Cloud SQL $IMPORT_SQL_INSTANCE"
     docker rm -f neura-import-proxy >/dev/null 2>&1 || true
-    docker run -d --rm --name neura-import-proxy --network neura_default "$CLOUDSQL_PROXY" \
+    tool --detach --name neura-import-proxy import-proxy \
         --address=0.0.0.0 --port=5432 "$IMPORT_SQL_INSTANCE" >/dev/null
     local status=0
     # shellcheck disable=SC2016 # expanded in the container
@@ -221,10 +222,6 @@ install_certificate() {
         "$DATA/letsencrypt/live/neura/privkey.pem" "$DATA/tls/privkey.pem"
 }
 
-certbot() {
-    docker run --rm -v "$DATA/letsencrypt:/etc/letsencrypt" -v "$DATA/acme:/var/www/acme" "$@"
-}
-
 ensure_certificate() {
     local names="$DOMAIN console.$DOMAIN agents.$DOMAIN enroll.$DOMAIN"
     if [[ -s $DATA/tls/fullchain.pem && "$(cat "$DATA/tls/names" 2>/dev/null)" == "$names" ]]; then
@@ -241,9 +238,9 @@ ensure_certificate() {
     # The first certificate comes before the edge can serve challenges: certbot answers on :80.
     compose stop edge >/dev/null 2>&1 || true
     if [[ -d $DATA/letsencrypt/live/neura ]]; then
-        certbot "$CERTBOT" delete --cert-name neura --non-interactive
+        tool certbot delete --cert-name neura --non-interactive
     fi
-    certbot -p 80:80 "$CERTBOT" certonly --standalone --non-interactive --agree-tos \
+    tool --publish 80:80 certbot certonly --standalone --non-interactive --agree-tos \
         --cert-name neura "${args[@]}"
     install_certificate
     echo "$names" >"$DATA/tls/names"
@@ -292,7 +289,7 @@ renew() {
     set +a
     local before after
     before=$(sha256sum "$DATA/letsencrypt/live/neura/cert.pem")
-    certbot "$CERTBOT" renew --non-interactive --webroot -w /var/www/acme
+    tool certbot renew --non-interactive --webroot -w /var/www/acme
     after=$(sha256sum "$DATA/letsencrypt/live/neura/cert.pem")
     if [[ $before != "$after" ]]; then
         log "certificate renewed"

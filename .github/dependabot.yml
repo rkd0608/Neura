@@ -36,6 +36,18 @@ updates:
     directory: /deploy/docker
     target-branch: main
     schedule: {interval: weekly}
+  # The images production runs beside Neura's own (the edge, the database, certbot, the Cloud SQL
+  # proxy: deploy/gcp/compose*.yaml) and the dev stack's (deploy/compose).
+  - package-ecosystem: docker-compose
+    directory: /deploy/gcp
+    target-branch: main
+    schedule: {interval: weekly}
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    target-branch: main
+    schedule: {interval: weekly}
+    ignore:
+      - dependency-name: "neura-*" # built from this repository (deploy/docker), not pulled
   - package-ecosystem: github-actions
     directory: /
     target-branch: main

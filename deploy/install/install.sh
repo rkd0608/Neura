@@ -44,7 +44,8 @@ if [ "$enroll" = 1 ]; then
   [ -n "$control_plane" ] && [ -n "$token" ] || fail "--control-plane and --token are required"
 fi
 command -v openssl >/dev/null || fail "openssl is required"
-"$python" -c 'import sys; sys.exit(sys.version_info < (3, 13))' \
+# Every Python here runs isolated (-I): never with modules from the directory it is run in.
+"$python" -I -c 'import sys; sys.exit(sys.version_info < (3, 13))' \
   || fail "Python 3.13 or newer is required ($python)"
 
 install_dir="$prefix/opt/neura/agent"
@@ -69,7 +70,7 @@ for key in "$work"/key*.pem; do
   fi
 done
 [ "$verified" = 1 ] || fail "the bundle is not signed by a release key in $keys"
-version="$("$python" - "$release_dir" <<'PY'
+version="$("$python" -I - "$release_dir" <<'PY'
 import hashlib, json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 manifest = json.loads((root / "release.json").read_bytes())
@@ -90,26 +91,37 @@ PY
 echo "verified neura-agent $version"
 
 # --- the service user and directories ---------------------------------------------------------
+# Run as root, the install and state directories belong to the agent's own user, which stages its
+# upgrades there (design §17.3). Everything inside them is therefore done as that user: root never
+# runs code from them or writes through them, so a compromised agent cannot become root by changing
+# them before the next install.
 owner=""
 if [ -z "$prefix" ] && [ "$(id -u)" = 0 ]; then
   id neura >/dev/null 2>&1 || useradd --system --home-dir "$state_dir" --shell /usr/sbin/nologin neura
   owner="neura:neura"
 fi
-mkdir -p "$install_dir/releases" "$install_dir/bin" "$config_dir" "$unit_dir" "$state_dir"
+as_owner() { if [ -n "$owner" ]; then runuser -u neura -- "$@"; else "$@"; fi; }
+mkdir -p "$install_dir" "$config_dir" "$unit_dir" "$state_dir"
 chmod 0700 "$state_dir"
+if [ -n "$owner" ]; then
+  chown -h "$owner" "$install_dir" "$state_dir"
+  # The agent's user installs the verified release: it may read it, not change it.
+  chgrp -R neura "$work" && chmod -R g+rX "$work"
+fi
+as_owner mkdir -p "$install_dir/releases" "$install_dir/bin"
 
 # --- the release ----------------------------------------------------------------------------
 target="$install_dir/releases/$version"
 if [ ! -f "$target/.complete" ]; then
-  rm -rf "$target"
-  "$python" -m venv "$target/venv"
-  "$target/venv/bin/python" -m pip install --quiet --no-index --no-cache-dir \
+  as_owner rm -rf "$target"
+  as_owner "$python" -I -m venv "$target/venv"
+  as_owner "$target/venv/bin/python" -I -m pip install --quiet --no-index --no-cache-dir \
     --disable-pip-version-check --find-links "$release_dir/wheels" "neura-agent==$version"
-  echo "$version" > "$target/.complete"
+  echo "$version" | as_owner tee "$target/.complete" >/dev/null
 fi
-ln -sfn "releases/$version" "$install_dir/.current-new"
-mv -T "$install_dir/.current-new" "$install_dir/current"
-install -m 0755 "$release_dir/bin/neura-agent-launch" "$install_dir/bin/neura-agent-launch"
+as_owner ln -sfn "releases/$version" "$install_dir/.current-new"
+as_owner mv -T "$install_dir/.current-new" "$install_dir/current"
+as_owner install -m 0755 "$release_dir/bin/neura-agent-launch" "$install_dir/bin/neura-agent-launch"
 install -m 0644 "$keys" "$config_dir/release-keys.pem"
 
 # --- configuration and the unit ---------------------------------------------------------------
@@ -150,18 +162,12 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 UNIT
-if [ -n "$owner" ]; then
-  chown -R "$owner" "$install_dir" "$state_dir"
-  chown "root:neura" "$config_dir/agent.env"
-fi
+[ -z "$owner" ] || chown "root:neura" "$config_dir/agent.env"
 
 # --- enroll and start -------------------------------------------------------------------------
 if [ "$enroll" = 1 ]; then
-  run_as=""
-  [ -n "$owner" ] && run_as="runuser -u neura --"
-  # shellcheck disable=SC2086
-  env NEURA_AGENT_STATE_DIR="$state_dir" NEURA_AGENT_INSTALL_DIR="$install_dir" \
-    $run_as "$install_dir/current/venv/bin/neura-agent" enroll \
+  as_owner env NEURA_AGENT_STATE_DIR="$state_dir" NEURA_AGENT_INSTALL_DIR="$install_dir" \
+    "$install_dir/current/venv/bin/neura-agent" enroll \
     --control-plane "$control_plane" --token "$token"
 fi
 if [ "$systemd" = 1 ] && [ -z "$prefix" ]; then

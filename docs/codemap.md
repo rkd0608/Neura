@@ -414,6 +414,7 @@ Under `console/`:
 - `src/components/Toasts.tsx`: Brief confirmations and failures, announced to assistive technology.
 - `src/components/nav.ts`: The console's navigation: one place for the sidebar, the command palette and the top bar.
 - `src/components/ui.tsx`: Small, accessible building blocks shared by every page.
+- `src/lib/config.ts`: Where the console's links outside itself go, set at build time (VITE_* environment variables, the names the NucleiLabs site uses for the same addresses).
 - `src/lib/context.ts`: Where the console is (the organization and project in the URL) and what the signed-in principal may do there.
 - `src/lib/fleet.ts`: The fleet's vocabulary, shared by the console's pages and the `neura` command (design §29): what a robot's state is called, what a rollout's steps and states are called, and their tones.
 - `src/lib/format.ts`: Formatting helpers.
@@ -526,4 +527,4 @@ Under `tools/`:
 
 Tests that span packages: the API spec, integration and the tools.
 
-Tests, under `tests/`: `api/test_openapi.py`, `integration/conftest.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_console_proxy.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_shutdown.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`, `tools/test_supply_chain.py`
+Tests, under `tests/`: `api/test_openapi.py`, `integration/conftest.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_console_proxy.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_shutdown.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`, `tools/test_supply_chain.py`, `tools/test_web_build_urls.py`

@@ -200,7 +200,9 @@ Fleet, Policies, Rollouts and Settings, on the public API only.
 
 - Code: `landing/src/`, `site/docs/`, `site/src/`, `site/docusaurus.config.ts`;
   served together by `deploy/landing/default.conf` (the docs at /docs/)
-- Tests: `tools/check_docs.py` (labels, wording; `make docs-check`), `tests/tools/test_docs.py`
+- Tests: `tools/check_docs.py` (labels, wording; `make docs-check`), `tests/tools/test_docs.py`;
+  `tests/tools/test_web_build_urls.py` (the addresses the site, the docs and the console read at
+  build time are declared in their Dockerfile stages and passed by every build for deployment)
 - See it: `make shots` opens every page in Chromium with production's headers and fails on any
   error; screenshots in `.verify/shots`
 

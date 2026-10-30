@@ -6,6 +6,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "reac
 import { useProjectEvents, type LiveState } from "../api/events";
 import { useFaults, useMe, useProjects } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
+import { DOCS_URL } from "../lib/config";
 import { usePermissions, useScope } from "../lib/context";
 import { setTheme, useTheme, type Theme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
@@ -25,9 +26,6 @@ import {
 } from "./Icons";
 import { MORE, NAV, sectionOf } from "./nav";
 import { MenuButton } from "./ui";
-
-export const DOCS_URL: string =
-  (import.meta.env.VITE_NEURA_DOCS_URL as string | undefined) ?? "https://rkd0608.github.io/neura/";
 
 function initials(text: string): string {
   const words = text.trim().split(/\s+/).filter(Boolean);

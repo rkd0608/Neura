@@ -128,7 +128,7 @@ export function RolloutPage() {
   const robots = useRobots(projectId);
   const sites = useSites(projectId);
   const activity = useFleetActivity(projectId, { rollout_id: rolloutId });
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const cancel = useApiMutation(
     async () =>
       unwrap(

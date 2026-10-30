@@ -6,7 +6,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "reac
 import { useProjectEvents, type LiveState } from "../api/events";
 import { useFaults, useMe, useProjects } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
-import { useScope } from "../lib/context";
+import { usePermissions, useScope } from "../lib/context";
 import { setTheme, useTheme, type Theme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import {
@@ -163,6 +163,7 @@ function OrgSwitcher({ orgId }: { orgId: string }) {
 
 function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: string }) {
   const projects = useProjects(orgId);
+  const can = usePermissions(orgId);
   const navigate = useNavigate();
   const project = projects.data?.find((p) => p.metadata.id === projectId);
   const name = project?.spec.display_name ?? (projectId ? "Project" : "Choose a project");
@@ -203,7 +204,15 @@ function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: strin
           ))}
           <div className="menu-sep" />
           <Link className="menu-item" to={`/o/${orgId}/projects`} onClick={close}>
-            <PlusIcon /> New project
+            {can.admin ? (
+              <>
+                <PlusIcon /> New project
+              </>
+            ) : (
+              <>
+                <FolderIcon /> All projects
+              </>
+            )}
           </Link>
         </>
       )}

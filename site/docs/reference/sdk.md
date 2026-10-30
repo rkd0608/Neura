@@ -68,6 +68,7 @@ with Client("https://neura.example", token="...") as neura:
 | `get_evaluation` | `(evaluation_id: str) -&gt; Evaluation` | Get an evaluation. (``GET /v1/evaluations/{evaluation_id}``) |
 | `get_execution_profile` | `(execution_profile_id: str) -&gt; ExecutionProfile` | Get a registered execution profile. (``GET /v1/execution- profiles/{execution_profile_id}``) |
 | `get_fault` | `(fault_id: str) -&gt; Fault` | Get a fault. (``GET /v1/faults/{fault_id}``) |
+| `get_login_code` | `(user_code: str) -&gt; LoginCode` | The sign-in waiting for a code, shown before a person approves it. (``GET /v1/login- codes/{user_code}``) |
 | `get_meta` | `() -&gt; ServiceMeta` | Service and API version information. (``GET /v1/meta``) |
 | `get_model_artifact` | `(model_artifact_id: str) -&gt; ModelArtifact` | Get a registered model artifact. (``GET /v1/model-artifacts/{model_artifact_id}``) |
 | `get_operation` | `(operation_id: str) -&gt; Operation` | Get an operation. (``GET /v1/operations/{operation_id}``) |

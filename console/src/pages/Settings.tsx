@@ -18,6 +18,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { Dialog } from "../components/Dialog";
 import { GearIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
+import { Field } from "../components/Field";
 import {
   Badge,
   Callout,
@@ -25,7 +26,6 @@ import {
   CopyField,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -340,13 +340,7 @@ function InviteMember({
       >
         <div className="dialog-body">
           <Field id="invite-email" label="Email">
-            <input
-              id="invite-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <fieldset className="field">
             <legend>Role</legend>
@@ -535,7 +529,6 @@ function ApiTokens({ orgId }: { orgId: string }) {
             <div className="dialog-body">
               <Field id="token-name" label="Name" hint="What uses it, for example ci-releases.">
                 <input
-                  id="token-name"
                   type="text"
                   required
                   maxLength={200}
@@ -544,22 +537,14 @@ function ApiTokens({ orgId }: { orgId: string }) {
                 />
               </Field>
               <Field id="token-scope" label="Access">
-                <select
-                  id="token-scope"
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value as typeof scope)}
-                >
+                <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
                   <option value="read">Read</option>
                   <option value="deploy">Read and deploy</option>
                   <option value="admin">Admin</option>
                 </select>
               </Field>
               <Field id="token-project" label="Project">
-                <select
-                  id="token-project"
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                >
+                <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
                   <option value="">All projects</option>
                   {(projects.data ?? []).map((p) => (
                     <option key={p.metadata.id} value={p.metadata.id}>
@@ -570,7 +555,6 @@ function ApiTokens({ orgId }: { orgId: string }) {
               </Field>
               <Field id="token-days" label="Expires after (days)">
                 <input
-                  id="token-days"
                   type="number"
                   min={1}
                   max={365}
@@ -728,7 +712,7 @@ function SupportAccess({ orgId }: { orgId: string }) {
         >
           <div className="dialog-body">
             <Field id="grant-site" label="Site">
-              <select id="grant-site" value={site} onChange={(e) => setSiteId(e.target.value)}>
+              <select value={site} onChange={(e) => setSiteId(e.target.value)}>
                 {sites.data.map((s) => (
                   <option key={s.metadata.id} value={s.metadata.id}>
                     {s.spec.display_name}
@@ -759,7 +743,6 @@ function SupportAccess({ orgId }: { orgId: string }) {
             </fieldset>
             <Field id="grant-minutes" label="Duration (minutes)">
               <input
-                id="grant-minutes"
                 type="number"
                 min={15}
                 max={1440}
@@ -773,7 +756,6 @@ function SupportAccess({ orgId }: { orgId: string }) {
               hint="At least 10 characters; recorded in the audit log."
             >
               <input
-                id="grant-why"
                 type="text"
                 required
                 minLength={10}

@@ -26,6 +26,7 @@ import { AuditTable, FaultTable, SessionTable } from "../components/Tables";
 
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
+import { Field } from "../components/Field";
 import {
   Badge,
   Callout,
@@ -33,7 +34,6 @@ import {
   DataAge,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   LineChart,
   Loading,
@@ -67,7 +67,7 @@ export function ReleasePage() {
   const artifacts = useArtifacts(projectId);
   const robotProfiles = useRobotProfiles(projectId);
   const executionProfiles = useExecutionProfiles(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [dialog, setDialog] = useState<"revision" | "activate" | "rollback" | null>(null);
   const [tracking, setTracking] = useState<string | null>(null);
   const robotIds = deployment.data?.spec.robot_ids ?? [];
@@ -841,7 +841,6 @@ function NewRevision({
         <div className="dialog-body">
           <Field id="rev-profile" label="Execution profile">
             <select
-              id="rev-profile"
               value={executionProfileId}
               onChange={(e) => setExecutionProfileId(e.target.value)}
             >
@@ -876,7 +875,6 @@ function NewRevision({
             hint="What changed, for the people reviewing the release."
           >
             <textarea
-              id="rev-notes"
               value={notes}
               maxLength={4000}
               style={{ minHeight: 80, fontFamily: "inherit" }}
@@ -992,11 +990,7 @@ function RequestActivation({
       >
         <div className="dialog-body">
           <Field id="act-revision" label="Prepared revision">
-            <select
-              id="act-revision"
-              value={revisionId}
-              onChange={(e) => setRevisionId(e.target.value)}
-            >
+            <select value={revisionId} onChange={(e) => setRevisionId(e.target.value)}>
               {prepared.map((r) => (
                 <option key={r.metadata.id} value={r.metadata.id}>
                   {r.metadata.id}
@@ -1012,7 +1006,6 @@ function RequestActivation({
           />
           <Field id="act-note" label="Note for the site operator">
             <input
-              id="act-note"
               type="text"
               maxLength={2000}
               value={note}
@@ -1092,7 +1085,7 @@ function Rollback({
             <Callout tone="info">No earlier prepared revision to roll back to.</Callout>
           ) : (
             <Field id="rb-target" label="Roll back to">
-              <select id="rb-target" value={target} onChange={(e) => setTarget(e.target.value)}>
+              <select value={target} onChange={(e) => setTarget(e.target.value)}>
                 {candidates.map((r) => (
                   <option key={r.metadata.id} value={r.metadata.id}>
                     {r.metadata.id}
@@ -1103,7 +1096,6 @@ function Rollback({
           )}
           <Field id="rb-note" label="Reason">
             <input
-              id="rb-note"
               type="text"
               maxLength={2000}
               value={note}

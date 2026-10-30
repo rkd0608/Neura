@@ -278,37 +278,6 @@ export function CopyField({ value, label: text }: { value: string; label: string
   );
 }
 
-export function Field({
-  label: text,
-  hint,
-  error,
-  children,
-  id,
-}: {
-  label: string;
-  hint?: ReactNode;
-  error?: string | null;
-  id: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label htmlFor={id}>{text}</label>
-      {children}
-      {hint ? (
-        <span className="hint" id={`${id}-hint`}>
-          {hint}
-        </span>
-      ) : null}
-      {error ? (
-        <span className="error" id={`${id}-error`} role="alert">
-          {error}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 export function Stat({
   label: text,
   value,

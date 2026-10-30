@@ -52,7 +52,7 @@ interface Step {
 
 export function Home() {
   const { orgId, projectId, base } = useScope();
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const project = useProject(projectId);
   const sites = useSites(projectId);
   const robots = useRobots(projectId);

@@ -1408,3 +1408,12 @@ class LoginApproval(TypedDict):
     client_name: str
     organization_id: OrganizationId
     scopes: list[ApiTokenScope]
+
+
+class LoginCode(TypedDict):
+    """A CLI's sign-in waiting for a person to approve its code (design §29.2)."""
+
+    user_code: str
+    client_name: str
+    created_at: Timestamp
+    expires_at: Timestamp

@@ -38,10 +38,9 @@ touches end to end (code, tests, docs, how to prove it works) is in
 Over the 800-line budget (tools/check_sizes.py). Search them and read the part you
 need; when you change one, move code out of it rather than adding to it.
 
-- `console/src/components/ui.tsx` (831 lines)
-- `console/src/pages/Improve.tsx` (838 lines)
-- `console/src/pages/Release.tsx` (1128 lines)
-- `console/src/pages/Settings.tsx` (827 lines)
+- `console/src/pages/Improve.tsx` (823 lines)
+- `console/src/pages/Release.tsx` (1120 lines)
+- `console/src/pages/Settings.tsx` (809 lines)
 - `console/src/styles/app.css` (1628 lines)
 - `landing/src/landing.css` (865 lines)
 - `packages/neura-agent/src/neura_agent/core.py` (1221 lines)
@@ -239,7 +238,7 @@ Under `packages/neura-control/src/`:
 - `neura_control/settings.py`: Control-plane configuration, read from ``NEURA_CONTROL_*`` environment variables.
 - `neura_control/db/migrations/versions/`: the database migrations
 
-Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
+Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_fleet.py`, `test_fleet.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
 
 ## packages/neura-learn
 
@@ -325,7 +324,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
 
-Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_runtime.py`, `test_session.py`
+Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
 
 ## packages/neura-sdk
 
@@ -407,6 +406,7 @@ Under `console/`:
 - `src/components/CommandPalette.tsx`: The command palette (⌘K / Ctrl+K): jump to any page or resource of the project, or run a console action.
 - `src/components/Contracts.tsx`: Registering and showing contract documents (design §4): model artifacts, robot profiles and execution profiles.
 - `src/components/Dialog.tsx`: A modal built on the native <dialog>: focus is trapped and Escape closes it; focus returns to whatever opened it.
+- `src/components/Field.tsx`: A form field: a label, its one control, a hint and an error, wired to each other in one place, so a control is always named by its label and described by its hint and error.
 - `src/components/Icons.tsx`: Inline stroke icons (24x24 grid, 1.75 stroke): no icon font or external request, so the console's content security policy stays default-src 'self'.
 - `src/components/Layout.tsx`: The console's frame: the sidebar (organization and project switchers, navigation, docs, theme, account), the top bar (where you are, the live connection, search) and the page.
 - `src/components/Tables.tsx`: Tables shown on several pages: sessions, faults and audit records.
@@ -420,7 +420,7 @@ Under `console/`:
 - `src/lib/theme.ts`: Theme: dark (the default), light, or the operating system's.
 - `src/lib/useNow.ts`: A clock for ages and countdowns.
 - `src/main.tsx`: The console's entry point: applies the remembered theme and mounts the app.
-- `src/pages/Activate.tsx`: Sign a CLI in (design §29.2): `neura login` shows a code and opens this page; a signed-in person checks the code and approves it for one of their workspaces.
+- `src/pages/Activate.tsx`: Sign a CLI in (design §29.2): `neura login` shows a code and opens this page; a signed-in person types the code their terminal shows, sees what is waiting for it, and approves it for one of their …
 - `src/pages/Fleet.tsx`: Fleet: where the robots are and what each one runs (design §29).
 - `src/pages/Home.tsx`: Overview: the project at a glance (design §19.3).
 - `src/pages/Improve.tsx`: A deployment's improvement loop (design §28): the episodes its robots recorded (counts only; episodes stay at the site), fine-tuning on them at the site, evaluations of a candidate against what the …
@@ -438,12 +438,13 @@ Under `console/`:
 - `src/pages/Start.tsx`: The entry point: choose an organization and project, or create the first project.
 - `src/styles/app.css`: The console's stylesheet.
 - `src/styles/tokens.css`: Design tokens (NucleiLabs design system, shared with the landing page).
-- `src/test/setup.ts`: Unit-test setup: unmount what each test rendered.
+- `src/test/render.tsx`: Unit tests render a screen as the console does, against a fake of the API.
+- `src/test/setup.ts`: Unit-test setup: unmount what each test rendered and undo its fakes of the API.
 - `vite.config.ts`: The console's build, dev server and unit tests (Vite and Vitest).
 - `src/api/schema.d.ts`: generated by openapi-typescript (pnpm run gen), from api/openapi.yaml
 - `src/generated/`: generated by tools/gen_reason_codes.py, from catalog/reason_codes.yaml
 
-Tests, under `console/`: `e2e/episodes.spec.ts`, `e2e/journey.spec.ts`, `src/api/client.test.ts`, `src/api/events.test.ts`, `src/components/Contracts.test.ts`, `src/components/ui.test.tsx`, `src/lib/fleet.test.ts`, `src/lib/format.test.ts`, `src/pages/Improve.test.tsx`
+Tests, under `console/`: `e2e/episodes.spec.ts`, `e2e/journey.spec.ts`, `src/api/client.test.ts`, `src/api/events.test.ts`, `src/components/Contracts.test.ts`, `src/components/Field.test.tsx`, `src/components/ui.test.tsx`, `src/lib/context.test.tsx`, `src/lib/fleet.test.ts`, `src/lib/format.test.ts`, `src/pages/Activate.test.tsx`, `src/pages/Improve.test.tsx`, `src/pages/Start.test.tsx`
 
 ## landing
 

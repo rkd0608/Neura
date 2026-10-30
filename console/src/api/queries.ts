@@ -53,6 +53,19 @@ function useApiQuery<T>(
 
 export const useMe = () => useApiQuery(["me"], async () => unwrap(await api.GET("/v1/me")));
 
+/** The CLI sign-in waiting for a code (design §29.2), looked up before a person approves it. */
+export const useLoginCode = (userCode: string | null) =>
+  useApiQuery(
+    ["login-code", userCode],
+    async () =>
+      unwrap(
+        await api.GET("/v1/login-codes/{user_code}", {
+          params: { path: { user_code: userCode ?? "" } },
+        }),
+      ),
+    { enabled: userCode !== null },
+  );
+
 export const useOrganization = (orgId: string) =>
   useApiQuery(["org", orgId], async () =>
     unwrap(

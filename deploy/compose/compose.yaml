@@ -141,7 +141,7 @@ services:
   # and Grafana with Neura's dashboards (http://127.0.0.1:3001, admin/admin on first sign-in).
   prometheus:
     profiles: [observability]
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.15.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d

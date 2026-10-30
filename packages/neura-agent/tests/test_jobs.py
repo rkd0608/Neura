@@ -3,6 +3,8 @@ the worker sandbox, so it may write only its own output."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import stat
 import sys
@@ -13,6 +15,7 @@ import pytest
 from test_core import Site
 
 from neura_agent import jobs
+from neura_agent.runner import AgentRuntime
 from neura_contracts import ReasonCode
 from neura_server.config import SandboxConfig
 from neura_server.sandbox import ContainerLauncher, Invocation, Launcher, launcher_for
@@ -117,3 +120,53 @@ async def test_a_failed_job_says_how_it_ended_and_keeps_what_it_said_at_the_site
     for marker in (b"customer-data-4471", b"secret-weights-path"):
         assert not any(marker in m.SerializeToString() for m in sent)
         assert marker.decode() in caplog.text
+
+
+async def started(s: Site, binding: Any) -> asyncio.subprocess.Process:
+    """A job that works for a long time, running; its process."""
+
+    async def work() -> None:
+        await run(s, binding, [])
+
+    s.core.jobs._start("cmd_1", "opr_1", work)
+    for _ in range(500):
+        if "opr_1" in s.core.jobs._processes:
+            return s.core.jobs._processes["opr_1"]
+        await asyncio.sleep(0.01)
+    raise AssertionError("the job did not start")
+
+
+async def test_a_job_does_not_outlive_the_agent(tmp_path: Path, make_binding: Any) -> None:
+    s = site(tmp_path, "import time; time.sleep(600)")
+    process = await started(s, make_binding())
+    runtime = AgentRuntime(s.settings, gateway=s.gateway)
+    runtime.core = s.core
+    try:
+        await runtime.stop()
+        assert process.returncode is not None  # stopped with the agent, and reaped
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+            await s.core.jobs.stop()
+    (cancelled,) = [r for r in s.reports() if r.state == "Cancelled"]
+    assert cancelled.message == "the agent stopped"  # not "cancelled from the control plane"
+
+
+async def test_a_job_cancelled_any_way_takes_its_process_with_it(
+    tmp_path: Path, make_binding: Any
+) -> None:
+    s = site(tmp_path, "import time; time.sleep(600)")
+    process = await started(s, make_binding())
+    task = s.core.jobs._tasks["opr_1"]
+    task.cancel()  # not through SiteJobs.cancel: the event loop shutting down, say
+    done, _ = await asyncio.wait({task}, timeout=10)
+    try:
+        assert done, "the cancelled job still waits for its process"
+        assert process.returncode is not None
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task

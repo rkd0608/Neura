@@ -29,8 +29,9 @@ bug harder to find.
 
 ## 2. Reproduce it with a failing test
 
-Write the smallest test that fails the way the bug does, in the test file of the module at fault
-(`docs/features.md` names it), and watch it fail. If it cannot be reproduced, the cause is not
+Write the smallest test that fails the way the bug does — one, in the test file that already covers
+the module at fault (`docs/features.md` names it), extending a test there if one fits — and watch
+it fail. If it cannot be reproduced, the cause is not
 known yet: keep collecting evidence. A flaky failure is a bug with a cause (timing, ordering,
 shared state); find it rather than retrying.
 
@@ -46,8 +47,8 @@ state, an untested path. That answer is what the fix must change.
 
 - Fix it where the mistake is made, not where it is noticed.
 - Close the class: validate at the boundary every caller crosses, make the bad state
-  unrepresentable in the type, replace the duplicated rule with the one that already exists, or
-  add the property test that would have caught every instance. Search for the same mistake
+  unrepresentable in the type, or replace the duplicated rule with the one that already exists. A
+  structural fix like these needs no extra test of its own: the one failing test covers it. Search for the same mistake
   elsewhere (`docs/codemap.md`, then grep) and fix those too, or say where they are.
 - Never: retry or sleep until it passes, catch and ignore the exception, special-case the input
   that failed, loosen or delete the assertion, skip the test. Each hides the cause and leaves it
@@ -55,7 +56,7 @@ state, an untested path. That answer is what the fix must change.
 
 ## 5. Prove it
 
-The failing test passes; the test for the class passes; `make verify` is green (the verify
+The failing test passes; `make verify` is green (the verify
 skill). For anything a person sees, look at it.
 
 ## 6. Say what it was

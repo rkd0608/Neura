@@ -88,9 +88,17 @@ export function Activate() {
               id={codeId}
               label="Code"
               hint={
-                linked
-                  ? `Type the code your terminal shows. The link you opened is for ${linked}: they must be the same.`
-                  : "As your terminal shows it, like BCDF-2345."
+                linked ? (
+                  <>
+                    Type the code your terminal shows. The link you opened is for{" "}
+                    <span className="mono" style={{ whiteSpace: "nowrap" }}>
+                      {linked}
+                    </span>
+                    : they must be the same.
+                  </>
+                ) : (
+                  "As your terminal shows it, like BCDF-2345."
+                )
               }
             >
               <input

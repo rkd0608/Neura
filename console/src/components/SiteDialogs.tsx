@@ -209,9 +209,9 @@ function Commands({
         {token ? (
           <>
             {token.join_command ? (
-              <CopyField value={token.join_command} label="A workstation or bench" />
+              <Command label="A workstation or bench" value={token.join_command} />
             ) : null}
-            <CopyField value={token.install_command} label="A production server" />
+            <Command label="A production server" value={token.install_command} />
             <p className="muted small">
               Expires <Time iso={token.expires_at} />. It is shown only now.
             </p>
@@ -256,6 +256,16 @@ function Commands({
         </button>
       </div>
     </>
+  );
+}
+
+/** A command, with where it is run shown above it in the words its copy button says. */
+function Command({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <span className="small secondary">{label}</span>
+      <CopyField value={value} label={label} />
+    </div>
   );
 }
 

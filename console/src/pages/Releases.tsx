@@ -7,11 +7,11 @@ import { api, unwrap, idempotent } from "../api/client";
 import { useApiMutation, useDeployments, useRobots, useSites } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { PlusIcon, RocketIcon } from "../components/Icons";
+import { Field } from "../components/Field";
 import {
   Card,
   Empty,
   ErrorState,
-  Field,
   Loading,
   Meter,
   PageHeader,
@@ -27,7 +27,7 @@ export function Releases() {
   const { orgId, projectId, base } = useScope();
   const deployments = useDeployments(projectId);
   const sites = useSites(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const [query, setQuery] = useState("");
@@ -281,7 +281,6 @@ function NewRelease({
         <div className="dialog-body">
           <Field id="release-name" label="Name">
             <input
-              id="release-name"
               type="text"
               required
               maxLength={200}
@@ -291,7 +290,6 @@ function NewRelease({
           </Field>
           <Field id="release-site" label="Site">
             <select
-              id="release-site"
               value={site}
               onChange={(e) => {
                 setSiteId(e.target.value);
@@ -355,11 +353,7 @@ function NewRelease({
           </fieldset>
           {strategy === "single_robot_canary" ? (
             <Field id="release-canary" label="Canary robot">
-              <select
-                id="release-canary"
-                value={canaryId}
-                onChange={(e) => setCanary(e.target.value)}
-              >
+              <select value={canaryId} onChange={(e) => setCanary(e.target.value)}>
                 {chosen.map((id) => (
                   <option key={id} value={id}>
                     {atSite.find((r) => r.metadata.id === id)?.spec.display_name ?? id}

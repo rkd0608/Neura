@@ -12,9 +12,12 @@ import base64
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +187,93 @@ def test_the_installer_refuses_bundles_not_signed_by_the_release_keys(
     assert done.returncode != 0
     assert "do not match" in done.stderr
     assert not (tmp_path / "root" / "opt" / "neura" / "agent" / "current").exists()
+
+
+def test_the_installer_runs_no_python_from_the_directory_it_is_run_in(
+    tmp_path: Path, keys: tuple[Path, Path]
+) -> None:
+    # `cd /tmp && curl ... | sudo sh`: another local user may have left modules there.
+    private, public = keys
+    bundle, _ = release(tmp_path, "9.9.1", private)
+    planted = tmp_path / "planted"
+    planted.mkdir()
+    for module in ("json", "hashlib", "pathlib", "venv", "pip"):
+        (planted / f"{module}.py").write_text(
+            f"open({str(planted / 'imported')!r}, 'a').write('{module}\\n')\n"
+        )
+    options = ["--no-systemd", "--no-enroll", "--python", PYTHON, "--release-keys", str(public)]
+    done = subprocess.run(
+        ["sh", str(INSTALL), "--prefix", str(tmp_path / "root"), "--bundle", str(bundle), *options],
+        cwd=planted,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert not (planted / "imported").exists(), (planted / "imported").read_text()
+    assert done.returncode == 0, done.stderr
+
+
+# Run as root in a container: every Python process records who ran it and what, the agent's
+# user changes its directories between installs, and root installs again, then a newer release.
+AS_ROOT = r"""
+set -eu
+stdlib=$(python3 -I -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')
+cat > "$stdlib/sitecustomize.py" <<'PY'
+import json, os, sys
+with open("/python.log", "a") as log:
+    log.write(json.dumps({"uid": os.getuid(), "prefix": sys.prefix, "argv": sys.orig_argv}) + "\n")
+PY
+touch /python.log && chmod 0666 /python.log
+install() {
+  sh /in/install.sh --no-systemd --no-enroll --python /usr/local/bin/python3 \
+    --bundle "/in/$1" --release-keys /in/release.pub >&2
+}
+install neura-agent-9.9.1.tar
+runuser -u neura -- rm /opt/neura/agent/releases/9.9.1/.complete
+install neura-agent-9.9.1.tar
+install neura-agent-9.9.2.tar
+echo "--- owners"
+find /opt/neura/agent /var/lib/neura-agent -printf '%u %p\n'
+echo "--- launch"
+runuser -u neura -- env NEURA_AGENT_INSTALL_DIR=/opt/neura/agent \
+  NEURA_AGENT_STATE_DIR=/var/lib/neura-agent python3 /opt/neura/agent/bin/neura-agent-launch status
+echo "--- python"
+cat /python.log
+"""
+
+
+def test_installing_as_root_runs_nothing_as_root_from_the_agents_own_directories(
+    tmp_path: Path, keys: tuple[Path, Path], base_image: Callable[[str], str]
+) -> None:
+    """The agent's user owns /opt/neura/agent (it stages its upgrades there), so whatever root
+    runs or writes there, a compromised agent could replace first: root must do neither."""
+    image = base_image("runtime-base")  # the Python the agent's images run
+    private, public = keys
+    inputs = tmp_path / "in"
+    inputs.mkdir()
+    for version in ("9.9.1", "9.9.2"):
+        bundle, _ = release(tmp_path, version, private)
+        shutil.copy(bundle, inputs / bundle.name)
+    shutil.copy(public, inputs / "release.pub")
+    shutil.copy(INSTALL, inputs / "install.sh")
+    container = ["docker", "run", "--rm", "--network", "none", "-v", f"{inputs}:/in:ro", image]
+    done = subprocess.run(
+        [*container, "sh", "-c", AS_ROOT],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=600,
+    )
+    assert done.returncode == 0, done.stderr
+    _, owners, launched, python = re.split(r"^--- \w+$", done.stdout, flags=re.M)
+    assert {line.split()[0] for line in owners.strip().splitlines()} == {"neura"}
+    assert json.loads(launched) == {"version": "9.9.2", "argv": ["status"]}
+    runs = [json.loads(line) for line in python.strip().splitlines()]
+    tree = "/opt/neura/agent"
+    in_tree = [r for r in runs if r["prefix"].startswith(tree) or any(tree in a for a in r["argv"])]
+    assert [r for r in in_tree if r["uid"] == 0] == []
+    # Not vacuous: the releases were built, by pip running from them, as the agent's user.
+    assert any(r["prefix"].startswith(f"{tree}/releases/9.9.2") for r in in_tree)
 
 
 def one_line_installer(bundle: Path, digest: str, public: Path, tmp_path: Path) -> Path:

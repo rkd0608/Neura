@@ -33,26 +33,19 @@ from neura_control.api.schemas import (
     CompatibilityCheckRequest,
     ContractCreate,
 )
-from neura_control.api.scope import Ctx, touch
-from neura_control.db.models import ContractDocument, Project
-from neura_control.ids import Kind, new_id
+from neura_control.api.scope import Ctx
+from neura_control.db.models import ContractDocument
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
+from neura_control.services import contracts
 from neura_control.services.revisions import report_json
 
 router = APIRouter()
 
-# Audit actions are snake_case, like every other action (`deployment.update`, ...).
-_ACTION_NAMES = {
-    "ModelArtifact": "model_artifact",
-    "RobotProfile": "robot_profile",
-    "ExecutionProfile": "execution_profile",
-}
-
-COLLECTIONS: dict[str, tuple[str, Kind]] = {
-    "robot-profiles": ("RobotProfile", Kind.ROBOT_PROFILE),
-    "model-artifacts": ("ModelArtifact", Kind.MODEL_ARTIFACT),
-    "execution-profiles": ("ExecutionProfile", Kind.EXECUTION_PROFILE),
+COLLECTIONS = {
+    "robot-profiles": "RobotProfile",
+    "model-artifacts": "ModelArtifact",
+    "execution-profiles": "ExecutionProfile",
 }
 
 
@@ -67,7 +60,7 @@ async def load_contract(session: AsyncSession, project_id: str, identifier: str,
 
 
 def _register(collection: str) -> None:
-    kind, id_kind = COLLECTIONS[collection]
+    kind = COLLECTIONS[collection]
 
     async def list_documents(
         project_id: str, request: Request, principal: Principal = Depends(authenticate)
@@ -97,55 +90,27 @@ def _register(collection: str) -> None:
             raise ProblemError(
                 ReasonCode.API_VALIDATION_FAILED, f"expected a {kind} document, got {document.kind}"
             )
-        digest = document.digest()
         if body.signatures is not None and kind != "ModelArtifact":
             raise ProblemError(
                 ReasonCode.API_VALIDATION_FAILED, "only model artifacts carry signatures"
             )
-        signatures = _valid_signatures(digest, body.signatures or [])
+        signatures = _valid_signatures(document.digest(), body.signatures or [])
         ctx = Ctx(request, principal)
 
         async def work(session: AsyncSession) -> ApiResult:
             project = await ctx.project(session, project_id, Permission.DEPLOY)
-            existing = (
-                await session.scalars(
-                    select(ContractDocument).where(
-                        ContractDocument.project_id == project.id,
-                        ContractDocument.kind == kind,
-                        ContractDocument.digest == digest,
-                    )
-                )
-            ).first()
-            if existing is not None:
-                added = signatures and await _add_signatures(
-                    session, ctx, project, existing, signatures
-                )
-                if added:
-                    await session.flush()
-                    await session.refresh(existing)
-                return resource_result(200, serializers.contract(existing), existing.version)
             if isinstance(document, ExecutionProfile):
                 await _check_binding_targets(session, project.id, document)
-            row = ContractDocument(
-                id=new_id(id_kind),
-                project_id=project.id,
-                kind=kind,
-                digest=digest,
-                document=document.canonical_data(),
-                signatures=signatures,
-                created_by=principal.subject,
-            )
-            session.add(row)
-            await session.flush()
-            await ctx.record(
+            row, new = await contracts.record(
                 session,
                 project,
-                f"{_ACTION_NAMES[kind]}.register",
-                row.id,
-                version=1,
-                event_type="resource.created",
+                document,
+                principal=principal,
+                request_id=ctx.request_id,
+                signatures=signatures,
             )
-            await session.refresh(row)
+            if not new:
+                return resource_result(200, serializers.contract(row), row.version)
             return resource_result(201, serializers.contract(row), 1, f"/v1/{collection}/{row.id}")
 
         return await idempotent(request, principal, work)
@@ -185,30 +150,6 @@ def _valid_signatures(digest: str, signatures: list[dict[str, Any]]) -> list[dic
         raise ProblemError(ReasonCode.API_VALIDATION_FAILED, str(exc)) from exc
 
 
-async def _add_signatures(
-    session: AsyncSession,
-    ctx: Ctx,
-    project: Project,
-    row: ContractDocument,
-    signatures: list[dict[str, str]],
-) -> bool:
-    """Merge signatures into a registered artifact (one per key). Returns whether it changed."""
-    merged = signing.validate(row.digest, [*row.signatures, *signatures])
-    if merged == row.signatures:
-        return False
-    row.signatures = merged
-    touch(row)
-    await ctx.record(
-        session,
-        project,
-        "model_artifact.sign",
-        row.id,
-        version=row.version,
-        event_type="resource.updated",
-    )
-    return True
-
-
 @router.post("/v1/model-artifacts/{model_artifact_id}/signatures")
 async def add_model_artifact_signature(
     model_artifact_id: str, request: Request, principal: Principal = Depends(authenticate)
@@ -225,7 +166,9 @@ async def add_model_artifact_signature(
         if row.kind != "ModelArtifact":
             raise ProblemError(ReasonCode.API_NOT_FOUND)
         signature = _valid_signatures(row.digest, [body.model_dump()])
-        if await _add_signatures(session, ctx, project, row, signature):
+        if await contracts.sign(
+            session, project, row, signature, principal=principal, request_id=ctx.request_id
+        ):
             await session.flush()
             await session.refresh(row)
         return resource_result(200, serializers.contract(row), row.version)

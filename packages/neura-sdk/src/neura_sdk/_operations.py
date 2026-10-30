@@ -36,6 +36,7 @@ from neura_sdk.models import (
     FaultPage,
     LoginApproval,
     LoginApprovalCreate,
+    LoginCode,
     LoginSession,
     LoginSessionCreate,
     LoginToken,
@@ -1525,4 +1526,17 @@ class Operations:
             body=body,
             content_type="application/json",
             idempotency_key=idempotency_key,
+        )
+
+    def get_login_code(
+        self,
+        user_code: str,
+    ) -> LoginCode:
+        """
+        The sign-in waiting for a code, shown before a person approves it. (``GET /v1/login-
+        codes/{user_code}``)
+        """
+        return self._call(  # type: ignore[no-any-return]
+            "GET",
+            f"/v1/login-codes/{_segment(user_code)}",
         )

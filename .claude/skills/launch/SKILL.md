@@ -65,7 +65,7 @@ backend: `make verify VERIFY=--e2e`.
 
 ```bash
 make landing-dev     # the site: http://127.0.0.1:5174
-make docs            # the docs: http://127.0.0.1:3000/docs/
+make docs            # the docs: http://127.0.0.1:5175/docs/
 make shots           # both, built and served like production, every page checked in Chromium
 ```
 

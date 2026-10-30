@@ -8,6 +8,7 @@ import { useApiMutation, useRobots, useServers, useSite } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { BotIcon, BuildingIcon, ServerIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
+import { Field } from "../components/Field";
 import {
   Badge,
   Callout,
@@ -16,7 +17,6 @@ import {
   DataAge,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -44,7 +44,7 @@ export function SitePage() {
   const [connecting, setConnecting] = useState(search.has("connect"));
   const servers = useServers(projectId, siteId, connecting);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [editing, setEditing] = useState(false);
   const tabs: TabSpec[] = [
     { id: "overview", label: "Overview" },
@@ -551,7 +551,6 @@ function EditSite({
         <div className="dialog-body">
           <Field id="edit-site-name" label="Site name">
             <input
-              id="edit-site-name"
               type="text"
               required
               maxLength={200}
@@ -561,7 +560,6 @@ function EditSite({
           </Field>
           <Field id="edit-site-hours" label="Offline allowance (hours)">
             <input
-              id="edit-site-hours"
               type="number"
               min={1}
               max={8760}

@@ -36,7 +36,8 @@ import numpy as np
 
 from neura_contracts import FaultResponse
 from neura_robots.process import ArmProcess
-from neura_robots.qualify.harness import REVISION, ROBOT_ID, TOKEN, LocalSite, write_report
+from neura_robots.qualify.harness import write_report
+from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.so101 import So101Arm, So101Config
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.grpc_client import monotonic_us

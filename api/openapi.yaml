@@ -3573,6 +3573,36 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/login-codes/{user_code}:
+    get:
+      operationId: getLoginCode
+      tags:
+      - Access
+      summary: The sign-in waiting for a code, shown before a person approves it.
+      description: What started it, by the name it gave itself, and when (design §29.2). Only a signed-in
+        person can look a code up, as only a person can approve one. 404 when no sign-in waits for the
+        code.
+      parameters:
+      - $ref: '#/components/parameters/UserCode'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginCode'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     oidc:
@@ -3793,6 +3823,14 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/LoginSessionId'
+    UserCode:
+      name: user_code
+      in: path
+      required: true
+      description: The code `neura login` shows, with or without its dash, in any case.
+      schema:
+        type: string
+        pattern: ^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$
   headers:
     ETag:
       description: Resource version for optimistic concurrency.
@@ -7107,4 +7145,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ApiTokenScope'
+      additionalProperties: false
+    LoginCode:
+      type: object
+      description: A CLI's sign-in waiting for a person to approve its code (design §29.2).
+      required:
+      - user_code
+      - client_name
+      - created_at
+      - expires_at
+      properties:
+        user_code:
+          type: string
+          pattern: ^[A-Z0-9]{4}-[A-Z0-9]{4}$
+        client_name:
+          type: string
+          description: What the CLI calls itself, e.g. `neura CLI on ada@ada-laptop`. Whoever starts a
+            sign-in chooses it.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
       additionalProperties: false

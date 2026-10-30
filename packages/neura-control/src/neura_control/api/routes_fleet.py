@@ -38,7 +38,7 @@ from neura_control.api.schemas import (
     PublisherKeyCreate,
     RolloutCreate,
 )
-from neura_control.api.scope import Ctx, touch
+from neura_control.api.scope import Ctx
 from neura_control.db.models import (
     ContractDocument,
     Event,
@@ -54,6 +54,7 @@ from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
 from neura_control.services import contracts, records, rollouts, workspace
+from neura_control.services.records import touch
 
 router = APIRouter()
 
@@ -274,32 +275,22 @@ async def create_policy_version(
             ReasonCode.API_VALIDATION_FAILED,
             f"a {body.spec.source.kind} version cannot use the {adapter} adapter",
         )
-    digest = document.digest()
     try:
-        signatures = signing.validate(digest, body.spec.model_artifact.signatures or [])
+        signatures = signing.validate(document.digest(), body.spec.model_artifact.signatures or [])
     except signing.SignatureError as exc:
         raise ProblemError(ReasonCode.API_VALIDATION_FAILED, str(exc)) from exc
     ctx = Ctx(request, principal)
 
     async def work(session: AsyncSession) -> ApiResult:
         policy, project = await ctx.owned(session, Policy, policy_id, Permission.DEPLOY, lock=True)
-        artifact, new = await contracts.register(
-            session, project.id, document, created_by=principal.subject, signatures=signatures
+        artifact, _ = await contracts.record(
+            session,
+            project,
+            document,
+            principal=principal,
+            request_id=ctx.request_id,
+            signatures=signatures,
         )
-        if not new and signatures:
-            merged = signing.validate(digest, [*artifact.signatures, *signatures])
-            if merged != artifact.signatures:
-                artifact.signatures = merged
-                artifact.version += 1
-        if new:
-            await ctx.record(
-                session,
-                project,
-                "model_artifact.register",
-                artifact.id,
-                version=1,
-                event_type="resource.created",
-            )
         existing = (
             await session.scalars(
                 select(PolicyVersion).where(

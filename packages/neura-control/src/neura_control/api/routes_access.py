@@ -24,7 +24,7 @@ from neura_control.api.common import (
     transaction,
 )
 from neura_control.api.schemas import ApiTokenCreate, MemberCreate, MemberUpdate, SupportGrantCreate
-from neura_control.api.scope import Ctx, touch
+from neura_control.api.scope import Ctx
 from neura_control.clock import utcnow
 from neura_control.db.models import (
     ApiToken,
@@ -39,6 +39,7 @@ from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
 from neura_control.security.tokens import API_TOKEN_PREFIX, format_token, hash_secret, new_secret
 from neura_control.services import records
+from neura_control.services.records import touch
 
 router = APIRouter()
 

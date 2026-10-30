@@ -37,7 +37,7 @@ from neura_control.api.schemas import (
     RevisionCreate,
     RollbackCreate,
 )
-from neura_control.api.scope import Ctx, touch
+from neura_control.api.scope import Ctx
 from neura_control.db.models import (
     ActivationRequest,
     Deployment,
@@ -53,6 +53,7 @@ from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
 from neura_control.services import operations, release_gates
+from neura_control.services.records import touch
 from neura_control.services.revisions import report_json, revision_digest
 from neura_control.services.site_reports import update_operation
 

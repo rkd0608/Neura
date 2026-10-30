@@ -5,7 +5,8 @@ import { Navigate, useNavigate } from "react-router";
 
 import { useAuth } from "../auth/AuthProvider";
 import { Mark } from "../components/Icons";
-import { Callout, ErrorState, Field, Loading } from "../components/ui";
+import { Field } from "../components/Field";
+import { Callout, ErrorState, Loading } from "../components/ui";
 
 export function SignIn() {
   const auth = useAuth();
@@ -62,12 +63,9 @@ export function SignIn() {
               error={error}
             >
               <input
-                id="api-token"
                 type="password"
                 autoComplete="off"
                 value={token}
-                aria-invalid={error ? true : undefined}
-                aria-describedby={`api-token-hint${error ? " api-token-error" : ""}`}
                 onChange={(event) => {
                   setToken(event.target.value);
                   setError(null);

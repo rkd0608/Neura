@@ -146,6 +146,39 @@ def test_a_retried_post_keeps_its_idempotency_key() -> None:
     assert json.loads(seen[0].content) == {"spec": {}}
 
 
+def test_a_problem_marked_retryable_is_retried_after_the_delay_it_asks_for() -> None:
+    seen: list[httpx.Request] = []
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if len(seen) == 1:
+            problem = {"reason": "API_INTERNAL_ERROR", "status": 500, "retryable": True}
+            return httpx.Response(500, json=problem, headers={"Retry-After": "2"})
+        return httpx.Response(201, json={"metadata": {"id": "prj_1"}})
+
+    client = mock_client(handler)
+    client._sleep = slept.append
+    created = client.create_project("org_1", body={"spec": {}})  # type: ignore[typeddict-item]
+    assert created["metadata"]["id"] == "prj_1"
+    assert len(seen) == 2
+    assert len({r.headers["Idempotency-Key"] for r in seen}) == 1
+    assert slept == [2.0]
+
+
+def test_a_problem_not_marked_retryable_is_raised_at_once() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(503, json={"reason": "API_UNAVAILABLE", "retryable": False})
+
+    with pytest.raises(NeuraApiError) as raised:
+        mock_client(handler).get_site("site_1")
+    assert raised.value.reason == "API_UNAVAILABLE"
+    assert len(seen) == 1  # the problem says repeating it will not help, whatever its status
+
+
 def test_problems_raise_with_their_reason_code_and_retries_end() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

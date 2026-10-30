@@ -12,6 +12,8 @@ export interface StackState {
   api_url: string;
   agent_endpoint: string;
   token: string;
+  /** A person's access token from the stack's test SSO issuer: only people approve sign-ins. */
+  person_token: string;
   database: string;
 }
 
@@ -40,6 +42,6 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   return async () => {
     stack.kill("SIGTERM");
     await new Promise((resolve) => stack.on("exit", resolve));
-    rmSync(STATE_FILE, { force: true }); // it holds the run's admin token
+    rmSync(STATE_FILE, { force: true }); // it holds the run's tokens
   };
 }

@@ -30,9 +30,10 @@ so101 = [
 ]
 # The ALOHA tasks in physics simulation (neura_robots.aloha). Pinned to the MuJoCo that
 # gym-aloha's dm_control uses, so the simulation is step-for-step identical to the one LeRobot
-# evaluates its published ALOHA policies on (neura_robots.aloha.fidelity).
+# evaluates its published ALOHA policies on (neura_robots.aloha.fidelity). Dependabot leaves it
+# alone (.github/dependabot.yml); tests/test_aloha.py fails on any other MuJoCo.
 sim = [
-    "mujoco==3.16.0",
+    "mujoco==3.8.1",
     # The robot cell's page (aloha.cell) sends its cameras as JPEG.
     "pillow>=11",
 ]

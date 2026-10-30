@@ -8,7 +8,8 @@ import { useApiMutation } from "../api/queries";
 import { shortDigest } from "../lib/format";
 import { Dialog } from "./Dialog";
 import { useToasts } from "./Toasts";
-import { ErrorState, Field } from "./ui";
+import { Field } from "./Field";
+import { ErrorState } from "./ui";
 
 export type Kind = "ModelArtifact" | "RobotProfile" | "ExecutionProfile";
 export type Registered =
@@ -186,7 +187,6 @@ export function RegisterContract({
         <div className="dialog-body">
           <Field id={`${kind}-file`} label="File">
             <input
-              id={`${kind}-file`}
               type="file"
               accept=".yaml,.yml,.json,application/json,application/yaml"
               onChange={(event) => {
@@ -201,10 +201,8 @@ export function RegisterContract({
           </Field>
           <Field id={`${kind}-text`} label="Document" error={parseError}>
             <textarea
-              id={`${kind}-text`}
               value={text}
               spellCheck={false}
-              aria-invalid={parseError ? true : undefined}
               onChange={(event) => {
                 setText(event.target.value);
                 setParseError(null);
@@ -219,11 +217,9 @@ export function RegisterContract({
               error={signatureError}
             >
               <textarea
-                id="ModelArtifact-signatures"
                 value={signatureText}
                 spellCheck={false}
                 rows={4}
-                aria-invalid={signatureError ? true : undefined}
                 onChange={(event) => {
                   setSignatureText(event.target.value);
                   setSignatureError(null);

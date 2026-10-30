@@ -405,9 +405,9 @@ def sdk() -> str:
         "`neura-sdk` is generated from the [management API](./api.md) specification: one method "
         "per operation, returning the API's JSON objects as typed dictionaries. It sends an "
         "`Idempotency-Key` with every POST and keeps it across retries, so a retried POST is "
-        "applied at most once. It retries rate-limited and unavailable responses, honoring "
-        "`Retry-After`, and raises `NeuraApiError` with the problem details and their stable "
-        "reason code.\n\n"
+        "applied at most once. It retries a request whose problem is marked `retryable` (rate "
+        "limited, unavailable, an internal error), honoring `Retry-After`, and raises "
+        "`NeuraApiError` with the problem details and their stable reason code.\n\n"
         "```python\n"
         "from neura_sdk import Client\n\n"
         'with Client("https://neura.example", token="...") as neura:\n'

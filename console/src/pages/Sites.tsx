@@ -7,7 +7,8 @@ import { api, unwrap, idempotent } from "../api/client";
 import { useApiMutation, useRobots, useSites } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { BuildingIcon, PlusIcon } from "../components/Icons";
-import { DataAge, Empty, ErrorState, Field, Loading, PageHeader, Status } from "../components/ui";
+import { Field } from "../components/Field";
+import { DataAge, Empty, ErrorState, Loading, PageHeader, Status } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { slug } from "../lib/format";
 
@@ -15,7 +16,7 @@ export function Sites() {
   const { orgId, projectId, base } = useScope();
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -167,7 +168,6 @@ function NewSiteDialog({
         <div className="dialog-body">
           <Field id="site-name" label="Site name" hint="For example, the warehouse or cell name.">
             <input
-              id="site-name"
               type="text"
               required
               maxLength={200}
@@ -181,7 +181,6 @@ function NewSiteDialog({
             hint="How long the site keeps operating on its committed configuration without reaching Neura. After that it stops serving until it reconnects."
           >
             <input
-              id="site-hours"
               type="number"
               min={1}
               max={8760}

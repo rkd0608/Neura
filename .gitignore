@@ -20,3 +20,6 @@ site/.docusaurus/
 # LeRobot's async inference writes its logs to ./logs (neura-evidence runs it)
 logs/
 .verify/
+
+# Git worktrees of agents working in parallel (Claude Code)
+.claude/worktrees/

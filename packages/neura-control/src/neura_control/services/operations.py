@@ -65,3 +65,13 @@ async def start(
     )
     await session.refresh(operation)
     return operation
+
+
+def cancel_command(operation: Operation) -> SiteCommand:
+    """The command that withdraws ``operation`` at its site."""
+    return SiteCommand(
+        site_id=operation.site_id,
+        command_id=new_id(Kind.OPERATION).replace("op_", "cmd_", 1),
+        operation_id=operation.id,
+        command={"kind": "cancel", "operation_id": operation.id},
+    )

@@ -41,7 +41,7 @@ from neura_control.api.schemas import (
     SiteSpec,
     SpecPatch,
 )
-from neura_control.api.scope import Ctx, touch
+from neura_control.api.scope import Ctx
 from neura_control.clock import iso, utcnow
 from neura_control.db.models import (
     ContractDocument,
@@ -62,6 +62,7 @@ from neura_control.security.tokens import (
     hash_secret,
     new_secret,
 )
+from neura_control.services.records import touch
 from neura_control.settings import ControlPlaneSettings
 
 router = APIRouter()

@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import os
+from importlib import metadata
 
 import numpy as np
 import pytest
+from packaging.requirements import Requirement
 
 os.environ.setdefault("MUJOCO_GL", "egl")  # before MuJoCo is imported: headless rendering
 mujoco = pytest.importorskip("mujoco")
@@ -40,9 +42,26 @@ REFERENCE_399 = {
 }  # fmt: skip
 
 
-@pytest.mark.skipif(mujoco.__version__ != "3.8.1", reason="the reference was recorded on 3.8.1")
+def _pinned_mujoco() -> str:
+    """The MuJoCo neura-robots pins for the simulation (its ``sim`` extra), from the package's
+    own metadata."""
+    for line in metadata.requires("neura-robots") or []:
+        requirement = Requirement(line)
+        if requirement.name == "mujoco":
+            (pin,) = requirement.specifier
+            assert pin.operator == "==", f"mujoco is not pinned: {requirement}"
+            return pin.version
+    raise AssertionError("neura-robots does not require mujoco")
+
+
 @pytest.mark.parametrize("task", ["transfer_cube", "insertion"])
 def test_matches_gym_aloha(task: str) -> None:
+    # Another MuJoCo is another simulation: the comparison would not hold, and must not be
+    # skipped quietly either.
+    assert mujoco.__version__ == _pinned_mujoco(), (
+        f"MuJoCo {mujoco.__version__} is installed, neura-robots pins {_pinned_mujoco()}: "
+        "uv sync --frozen --group models"
+    )
     sim = AlohaSim(task)  # type: ignore[arg-type]
     sim.reset(1000)
     for action in scripted_actions(400, 1000):

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
+from neura_control.clock import utcnow
 from neura_control.db.models import AuditRecord, Event
 from neura_control.ids import Kind, new_id
 from neura_control.security.principal import Principal
+
+
+def touch(row: Any) -> None:
+    """Bump the optimistic-concurrency version after a change."""
+    row.version += 1
+    row.updated_at = utcnow()
 
 
 async def audit(

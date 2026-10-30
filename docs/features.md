@@ -61,7 +61,8 @@ One change to what robots run, and every step it goes through; rollbacks.
   `packages/neura-control/src/neura_control/api/routes_fleet.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_deploy_on_a_bench_from_check_to_live`,
   `packages/neura-control/tests/test_fleet.py::test_a_second_version_is_shadowed_then_rolled_back`,
-  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`
+  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`,
+  `packages/neura-control/tests/test_fleet.py::test_concurrent_deploys_start_one_rollout_per_robot`
 - Docs: `site/docs/deploy-a-policy.md`; the console's Rollouts page (`console/src/pages/Rollouts.tsx`)
 
 ### The control plane and its API (§13, §20)
@@ -72,7 +73,9 @@ The public management API (spec first), auth, audit, change events, and the site
   reference docs), `packages/neura-control/src/neura_control/api/`,
   `packages/neura-control/src/neura_control/grpc_site.py` (the site side; large)
 - Tests: `tests/api/test_openapi.py`, `packages/neura-control/tests/test_api_conventions.py`,
-  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`
+  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`,
+  `packages/neura-control/tests/test_site_servers.py` (sites with several servers),
+  `packages/neura-control/tests/test_events.py` (the change-event stream)
 - Docs: `site/docs/reference/api.md` (generated), `site/docs/architecture.md`
 - Needs Postgres: `NEURA_TEST_DATABASE_URL` (`make verify` sets it when Postgres answers)
 
@@ -92,7 +95,10 @@ signed upgrades, and the local site API.
 - Code: `packages/neura-control/src/neura_control/installer.py`, `deploy/install/install.sh`,
   `tools/build_agent_release.py`, `packages/neura-agent/src/neura_agent/releases.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_production_servers_install_with_one_line`,
-  `tests/integration/test_install_upgrade.py`
+  `tests/integration/test_install_upgrade.py`; installing as root, in a container (needs Docker):
+  `tests/integration/test_install_upgrade.py::test_installing_as_root_runs_nothing_as_root_from_the_agents_own_directories`;
+  `/install.sh` (and every other route the API serves) through the console's nginx:
+  `tests/integration/test_console_proxy.py` (needs Docker)
 - Docs: `site/docs/deploy-a-policy.md` ("A production server")
 
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
@@ -171,7 +177,8 @@ ledger and its allowlist.
   `packages/neura-contracts/src/neura_contracts/sealing.py`, `catalog/outbound.yaml` (the
   allowlist; `make gen`), `packages/neura-agent/src/neura_agent/ledger.py`
 - Tests: `packages/neura-contracts/tests/test_signing.py`, `packages/neura-contracts/tests/test_sealing.py`,
-  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`
+  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`,
+  `packages/neura-control/tests/test_sealed_weights.py` (Neura's registry of sealed weights)
 - Docs: `site/docs/privacy-and-access.md`, `SECURITY.md`
 
 ## Interfaces people use

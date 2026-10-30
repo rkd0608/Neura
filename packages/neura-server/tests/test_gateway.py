@@ -206,6 +206,23 @@ def test_decode_observation_checks_everything(make_binding: Any) -> None:
     invalid(lambda o: o.frozen_prefix.shape.append(1))
 
 
+def test_a_tensor_numpy_cannot_build_is_rejected_not_raised(make_binding: Any) -> None:
+    # A robot's frozen prefix is decoded without an expected shape; 70 dimensions is more than
+    # numpy builds, and the gateway must answer with a typed rejection.
+    binding = make_binding("smolvla")
+    core = make_core(binding, ["r1"])
+    robot = Robot(binding, "r1")
+    robot.open(core, GW0)
+    robot.runtime.set_instruction("pick")
+    robot.runtime.arm(robot.now)
+    message = robot.observation()
+    message.observation.frozen_prefix.CopyFrom(
+        common_pb2.Tensor(dtype=common_pb2.DTYPE_FLOAT32, shape=[1] * 70, data=b"\0" * 4)
+    )
+    (delivery,) = core.receive("r1", message, message.ByteSize(), GW0)
+    assert delivery.message.rejected.reason.code == ReasonCode.PROTOCOL_MESSAGE_INVALID.value
+
+
 @pytest.mark.parametrize("model", ["act", "smolvla"])
 def test_mock_policy_outputs_are_in_range(make_binding: Any, model: str) -> None:
     binding = make_binding(model)

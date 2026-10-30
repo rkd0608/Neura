@@ -24,6 +24,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -538,8 +539,16 @@ class AuditRecord(Base):
 
 class Event(Base):
     __tablename__ = "events"
-    __table_args__ = (Index("ix_events_project_cursor", "project_id", "cursor"),)
+    __table_args__ = (
+        Index("ix_events_project_cursor", "project_id", "cursor"),
+        Index("ix_events_project_xid_cursor", "project_id", "xid", "cursor"),
+        Index("ix_events_xid_cursor", "xid", "cursor"),
+    )
     cursor: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # The transaction that wrote it: the log is read in this order (services.event_log).
+    xid: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("(pg_current_xact_id())::text::bigint")
+    )
     project_id: Mapped[str] = mapped_column(String(40), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     resource: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -551,6 +560,16 @@ class Event(Base):
     robot_id: Mapped[str | None] = mapped_column(String(40))
     rollout_id: Mapped[str | None] = mapped_column(String(40))
     occurred_at: Mapped[datetime] = _now()
+
+
+class EventsPruned(Base):
+    """The newest event deleted from the log (one row, kept by a trigger on every delete): a
+    cursor before it has expired (services.event_log)."""
+
+    __tablename__ = "events_pruned"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    xid: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class MetricPoint(Base):

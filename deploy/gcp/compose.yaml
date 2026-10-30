@@ -8,8 +8,11 @@
 # - db:              Postgres, from compose.postgres.yaml (a container whose data is on the data disk)
 #                    or compose.cloudsql.yaml (the Cloud SQL proxy); deploy.sh publishes one of them
 # - control-plane:   management API and the site-agent listeners
-# - console:         the web console, which also proxies the API under /v1
+# - console:         the web console, which also proxies the API (/v1 and /install.sh)
 # - landing:         the NucleiLabs site
+# - certbot, import-proxy: tools neura-apply runs when it needs them (`docker compose run`), never
+#                    started with the rest (the tools profile); declared here, like every image the
+#                    VM runs, so Dependabot proposes their new pins (.github/dependabot.yml)
 #
 # Values come from release.env (images pinned by digest, domain, database) and the secrets
 # neura-apply reads from Secret Manager into /run/neura (tmpfs).
@@ -73,7 +76,7 @@ services:
     restart: unless-stopped
 
   edge:
-    image: mirror.gcr.io/library/nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    image: mirror.gcr.io/library/nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
     ports:
       - "80:80"
       - "443:443"
@@ -87,6 +90,20 @@ services:
       landing:
         condition: service_healthy
     restart: unless-stopped
+
+  # Requests and renews the TLS certificate; the first one on :80, before the edge can serve.
+  certbot:
+    image: mirror.gcr.io/certbot/certbot:v3.0.1@sha256:4d8875e85a2af373262914e15c0a149e1985c5bbd05ac433fe4763f465020fcf
+    profiles: [tools]
+    volumes:
+      - /srv/neura/data/letsencrypt:/etc/letsencrypt
+      - /srv/neura/data/acme:/var/www/acme
+
+  # Moving from Cloud SQL to the Postgres container: the old database, for the one import. The
+  # same proxy as compose.cloudsql.yaml's (Dependabot updates both).
+  import-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
+    profiles: [tools]
 
 networks:
   default:

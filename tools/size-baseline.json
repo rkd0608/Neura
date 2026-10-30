@@ -13,6 +13,6 @@
     "packages/neura-control/src/neura_control/grpc_site.py": 923,
     "packages/neura-control/src/neura_control/services/rollouts.py": 1090,
     "packages/neura-control/tests/test_site_control.py": 856,
-    "packages/neura-robots/src/neura_robots/qualify/harness.py": 1107
+    "packages/neura-robots/src/neura_robots/qualify/harness.py": 1016
   }
 }

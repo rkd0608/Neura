@@ -16,6 +16,8 @@
   --sidebar: 244px;
   --topbar: 52px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* The deep end of the brand's iris gradients (the mark, meters, avatars), in both themes. */
+  --accent-deep: #6a52e8;
 }
 
 /* Dark: the default, and what "system" resolves to on a dark OS. */

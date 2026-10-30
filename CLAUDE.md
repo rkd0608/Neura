@@ -28,7 +28,7 @@ package per component in `packages/`), React and TypeScript (`console/`, `landin
 3. **Build** in the smallest coherent steps, matching the code around it.
 4. **Prove it** (the verify skill): `make verify` runs the checks the diff can break and says
    what it did not verify. Anything a person sees gets looked at: `make shots` for the site and
-   docs, `make verify VERIFY=--e2e` for the console. A bug gets a failing test first.
+   docs, `make verify VERIFY=--e2e` for the console. A bug gets a failing test first: one.
 5. **Report** what the evidence shows: what passed, what failed, how many tests skipped, what was
    not verified and why. Never say it works because it was written.
 
@@ -63,6 +63,12 @@ edit hook says when a file you wrote is a source of generated files.
 code out of them. A new module starts with a docstring (Python) or a comment (TypeScript, CSS,
 shell) whose first sentence says what it is for; `docs/codemap.md` is built from those
 (`make gen`). When a feature moves or lands, update its row in `docs/features.md`.
+
+**Few tests, each one earning its place.** One test per bug, the smallest that fails without the
+fix, added to the test file that already covers that code (`docs/features.md` names it). Prefer
+extending an existing test to writing a new one. No tests for docs, configuration, renames,
+removed dead code or one-line plumbing, and no matrices of cases where one case proves the point.
+A test that would only restate the code is not worth keeping.
 
 **Match the code around you:** its naming, comment density and idiom. Python: ruff (100
 columns), mypy strict, tests with warnings as errors. TypeScript: strict, prettier, eslint with

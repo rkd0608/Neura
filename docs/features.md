@@ -127,6 +127,8 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-runtime/src/neura_runtime/action_queue.py`,
   `packages/neura-runtime/src/neura_runtime/session.py`
 - Tests: `packages/neura-runtime/tests/test_runtime.py`, `packages/neura-runtime/tests/test_action_queue.py`,
+  `packages/neura-runtime/tests/test_session.py` (which rejections end a session),
+  `packages/neura-runtime/tests/test_tensors.py`,
   `packages/neura-sim/tests/test_fault_suite.py` (every fault in §7, with an independent
   invariant monitor: `packages/neura-sim/src/neura_sim/invariants.py`)
 - Docs: `site/docs/fault-suite.md`, `site/docs/architecture.md`
@@ -164,8 +166,9 @@ Action queue and chunk merging, fencing, the state machine, sessions.
 - Tests: `tests/integration/test_capture.py`, `packages/neura-learn/tests/test_learn.py`,
   `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`,
   `packages/neura-agent/tests/test_jobs.py` (a job writes only its own output, what it prints
-  stays at the site, and it never outlives the agent), `packages/neura-learn/tests/test_site_jobs.py` (evaluation and fine-tuning at
-  the site, end to end; needs the models group)
+  stays at the site, and it never outlives the agent),
+  `packages/neura-learn/tests/test_site_jobs.py` (evaluation and fine-tuning at the site, end to
+  end; needs the models group)
 - Docs: `site/docs/improvement-loop.md`; the console: `console/src/pages/Improve.tsx`
 
 ## Benchmarks: sharing a GPU (§9.5, §10)

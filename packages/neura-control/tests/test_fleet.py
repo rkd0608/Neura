@@ -7,6 +7,8 @@ api/openapi.yaml by the conformance client.
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -407,6 +409,42 @@ def test_one_rollout_at_a_time_and_cancel(bench: Fleet) -> None:
     assert cancelled.json()["status"]["state"] == "cancelled"
     again = bench.c.post(f"/v1/rollouts/{rid}/cancel", {})
     assert again.status_code == 409
+
+
+def test_concurrent_deploys_start_one_rollout_per_robot(bench: Fleet) -> None:
+    version = bench.push("v1", "a")["metadata"]["id"]
+
+    def at_once(robot_sets: list[list[str]]) -> list[Any]:
+        barrier = threading.Barrier(len(robot_sets))
+
+        def deploy(robots: list[str]) -> Any:
+            barrier.wait()
+            return bench.c.post(
+                f"/v1/projects/{bench.project}/rollouts",
+                {"spec": {"robot_ids": robots, "policy_version_id": version}},
+            )
+
+        with ThreadPoolExecutor(len(robot_sets)) as pool:
+            return list(pool.map(deploy, robot_sets))
+
+    # The site's first deploys, at the same moment, to different robots: each gets a deployment.
+    first = at_once([[bench.robots[0]], [bench.robots[1]]])
+    assert [r.status_code for r in first] == [201, 201], [r.text for r in first]
+    deployments = {r.json()["status"]["deployment_id"] for r in first}
+    assert len(deployments) == 2
+    # Deploys to the same robot of a deployment, at the same moment: one starts, the others are
+    # told why not.
+    earlier = bench.deploy(version, bench.robots[2:])["metadata"]["id"]
+    assert bench.c.post(f"/v1/rollouts/{earlier}/cancel", {}).status_code == 200
+    clashing = at_once([[bench.robots[2]]] * 4)
+    assert sorted(r.status_code for r in clashing) == [201, 409, 409, 409], [
+        r.text for r in clashing
+    ]
+    active = bench.c.get(
+        f"/v1/projects/{bench.project}/rollouts",
+        params={"robot_id": bench.robots[2], "state": "active"},
+    ).json()["items"]
+    assert len(active) == 1
 
 
 def test_try_is_for_bench_sites_only(production: Fleet) -> None:

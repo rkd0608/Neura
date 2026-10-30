@@ -50,7 +50,8 @@ One change to what robots run, and every step it goes through; rollbacks.
   `packages/neura-control/src/neura_control/api/routes_fleet.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_deploy_on_a_bench_from_check_to_live`,
   `packages/neura-control/tests/test_fleet.py::test_a_second_version_is_shadowed_then_rolled_back`,
-  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`
+  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`,
+  `packages/neura-control/tests/test_fleet.py::test_concurrent_deploys_start_one_rollout_per_robot`
 - Docs: `site/docs/deploy-a-policy.md`; the console's Rollouts page (`console/src/pages/Rollouts.tsx`)
 
 ### The control plane and its API (§13, §20)

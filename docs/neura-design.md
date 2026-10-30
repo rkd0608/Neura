@@ -2144,7 +2144,10 @@ chunk, it uses the slowest pass that would, so an estimate never refuses a polic
 decides. If the measured profile differs, the revision is prepared again.
 
 Rollouts on overlapping robots are refused. Robots are shared by deployment, with subset
-activation.
+activation. A site's rollouts are planned one at a time, under its row lock (`db/locks.py`): the
+overlap check and a new deployment's name are decided from rows a concurrent plan would change, so
+two deploys sent at once start one rollout and refuse the other, never two
+(`test_concurrent_deploys_start_one_rollout_per_robot`).
 
 ### 29.5 Robots a site finds
 

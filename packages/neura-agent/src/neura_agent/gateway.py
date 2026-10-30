@@ -21,6 +21,7 @@ from neura_agent.site_pki import GatewayTls, unexpired
 from neura_agent.state import AgentState
 from neura_server.config import GatewayConfig, SandboxConfig
 from neura_server.grpc_server import GatewayServer
+from neura_server.supervision import GATEWAY_STOP_TIMEOUT_S
 
 log = logging.getLogger("neura.agent.gateway")
 HEALTHY_RUN_S = 30.0
@@ -217,10 +218,18 @@ class GatewayRunner(Protocol):
 
 
 class SubprocessGateway:
-    """Runs ``neura-gateway`` as a supervised child process; restarts it if it exits."""
+    """Runs ``neura-gateway`` as a supervised child process; restarts it if it exits. Stopping
+    waits as long as a gateway may take to stop its workers before it is killed."""
 
-    def __init__(self, command: list[str], status_listen: str) -> None:
+    def __init__(
+        self,
+        command: list[str],
+        status_listen: str,
+        *,
+        stop_timeout_s: float = GATEWAY_STOP_TIMEOUT_S,
+    ) -> None:
         self._command = command
+        self._stop_timeout_s = stop_timeout_s
         host, _, port = status_listen.rpartition(":")
         host = "127.0.0.1" if host in ("0.0.0.0", "") else host  # noqa: S104 - client side
         self._status_url = f"http://{host}:{port}/v1/local/dataplane"
@@ -274,9 +283,11 @@ class SubprocessGateway:
             assert self._process is not None
             self._process.terminate()
             try:
-                await asyncio.wait_for(self._process.wait(), timeout=5)
+                await asyncio.wait_for(self._process.wait(), timeout=self._stop_timeout_s)
             except TimeoutError:
+                log.error("gateway did not stop in %.0f s; killing it", self._stop_timeout_s)
                 self._process.kill()
+                await self._process.wait()
         if self._supervisor is not None:
             self._supervisor.cancel()
             with contextlib.suppress(asyncio.CancelledError):

@@ -60,6 +60,7 @@ from neura_server.robot_service import RobotService, closed_message, monotonic_u
 from neura_server.sandbox import launcher_for, remove_stale
 from neura_server.scheduler import Batch, Scheduler
 from neura_server.shadow import ShadowDeployment
+from neura_server.supervision import STATUS_STOP_TIMEOUT_S
 
 log = logging.getLogger("neura.gateway")
 # A shadow's candidate has no deadline (no robot waits for it), but a hung worker is restarted.
@@ -453,7 +454,7 @@ class GatewayServer:
         if self._status_server is not None and self._status_task is not None:
             # Asked to exit, it finishes its requests and its lifespan; cancelled, it cannot.
             self._status_server.should_exit = True
-            await asyncio.wait({self._status_task}, timeout=5)
+            await asyncio.wait({self._status_task}, timeout=STATUS_STOP_TIMEOUT_S)
             self._status_task.cancel()
         tasks = [
             *self._tasks,

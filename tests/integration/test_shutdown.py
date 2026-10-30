@@ -8,6 +8,7 @@ raises the signal again, which kills the process before any cleanup around the s
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import signal
@@ -21,6 +22,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+
+from neura_agent.gateway import SubprocessGateway
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / "examples" / "contracts"
@@ -101,6 +104,103 @@ def test_a_stopped_gateway_stops_its_workers_and_removes_their_directory(tmp_pat
         code = stop(gateway)
     assert code == 0  # stopped, not killed
     assert list(temp.iterdir()) == []
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_a_worker_still_loading_exits_as_soon_as_its_gateway_goes(tmp_path: Path) -> None:
+    # A worker reads its stdin only once it serves, and loading a model can take minutes: a
+    # gateway that went away meanwhile left it running.
+    fault = tmp_path / "fault"
+    fault.write_text("slow-load")
+    worker = subprocess.Popen(
+        [
+            sys.executable,
+            str(Path(__file__).with_name("faulty_worker.py")),
+            "serve",
+            "--socket",
+            str(tmp_path / "sock"),
+            "--artifact",
+            str(CONTRACTS / "act-so101.artifact.yaml"),
+            "--robot-profile",
+            str(CONTRACTS / "so101.robot.yaml"),
+            "--execution-profile",
+            str(CONTRACTS / "act-so101-30hz.profile.yaml"),
+            "--adapter",
+            "faulty",
+            "--device",
+            "cpu",
+        ],
+        stdin=subprocess.PIPE,
+        env={**os.environ, "NEURA_TEST_WORKER_FAULT": str(fault)},
+    )
+    try:
+        wait_for(lambda: fault.with_suffix(".loading").exists())
+        assert worker.stdin is not None
+        worker.stdin.close()  # its gateway went away
+        assert worker.wait(timeout=10) == 0
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait()
+
+
+async def test_the_agent_stops_a_gateway_whose_worker_is_still_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A worker that never announces and never reads its stdin: a model stuck loading. The agent
+    # stopped its gateway (SIGTERM, then SIGKILL after 5 s) while the gateway still waited 5 s
+    # for the worker, so the gateway died with its worker and its worker directory left behind.
+    started = tmp_path / "worker.pid"
+    stuck = f"import os, time; open({str(started)!r}, 'w').write(str(os.getpid())); time.sleep(600)"
+    config = gateway_config()
+    config["serving"] = {"backend": "workers", "worker_command": [sys.executable, "-c", stuck]}
+    (tmp_path / "gateway.yaml").write_text(json.dumps(config), encoding="utf-8")
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    monkeypatch.setenv("TMPDIR", str(temp))
+    gateway = SubprocessGateway([sys.executable, "-m", "neura_server"], "127.0.0.1:1")
+    await gateway.start(tmp_path / "gateway.yaml")
+    pid = None
+    try:
+        for _ in range(600):
+            if started.exists() and started.read_text():
+                break
+            await asyncio.sleep(0.1)
+        pid = int(started.read_text())
+        process = gateway._process
+        assert process is not None
+        await gateway.stop()
+    finally:
+        if pid is not None and alive(pid):
+            os.kill(pid, signal.SIGKILL)
+    assert process.returncode == 0  # it stopped, it was not killed
+    assert not alive(pid)
+    assert list(temp.iterdir()) == []
+
+
+async def test_a_gateway_that_will_not_stop_is_killed_and_reaped(tmp_path: Path) -> None:
+    ignoring = tmp_path / "ignoring"
+    script = (
+        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"open({str(ignoring)!r}, 'w').close(); time.sleep(600)"
+    )
+    gateway = SubprocessGateway([sys.executable, "-c", script], "127.0.0.1:1", stop_timeout_s=0.5)
+    await gateway.start(tmp_path / "unused.yaml")
+    for _ in range(600):
+        if ignoring.exists():
+            break
+        await asyncio.sleep(0.1)
+    process = gateway._process
+    assert process is not None
+    await gateway.stop()
+    assert process.returncode == -signal.SIGKILL  # killed, and waited for
 
 
 def test_a_gateway_that_cannot_start_leaves_no_directory(

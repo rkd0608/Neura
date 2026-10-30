@@ -38,6 +38,7 @@ from pathlib import Path, PurePath
 from typing import Protocol
 
 from neura_server.config import SandboxConfig
+from neura_server.supervision import CONTAINER_REMOVE_TIMEOUT_S
 
 log = logging.getLogger("neura.gateway.sandbox")
 
@@ -173,7 +174,8 @@ class ContainerLauncher:
     async def remove(self, name: str) -> None:
         """Remove the worker's container if it is still there (its supervisor was killed, or
         the worker hung)."""
-        await _run([*self.config.runtime, "rm", "--force", self.container_name(name)], 30)
+        command = [*self.config.runtime, "rm", "--force", self.container_name(name)]
+        await _run(command, CONTAINER_REMOVE_TIMEOUT_S)
 
 
 async def _run(command: list[str], timeout_s: float) -> tuple[int, str]:

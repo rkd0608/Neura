@@ -33,6 +33,7 @@ from neura.v1 import worker_pb2, worker_pb2_grpc
 from neura_adapters import ModelInputs, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode, load_document
 from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, private_directory
+from neura_server.supervision import WORKER_STOP_TIMEOUT_S
 from neura_server.worker import MAX_MESSAGE_BYTES, encode_inputs, outputs_from
 
 log = logging.getLogger("neura.gateway.workers")
@@ -164,8 +165,10 @@ class WorkerBackend:
         if process is not None and process.returncode is None:
             if process.stdin is not None:
                 process.stdin.close()  # the worker exits when its stdin closes
+            if self.state != "ready":
+                process.kill()  # loading, or failed to: nothing of its to finish
             try:
-                await asyncio.wait_for(process.wait(), timeout=5)
+                await asyncio.wait_for(process.wait(), timeout=WORKER_STOP_TIMEOUT_S)
             except TimeoutError:
                 process.kill()
                 await process.wait()

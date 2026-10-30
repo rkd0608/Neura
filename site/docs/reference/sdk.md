@@ -10,7 +10,7 @@ generated: true
 
 # Python SDK
 
-`neura-sdk` is generated from the [management API](./api.md) specification: one method per operation, returning the API's JSON objects as typed dictionaries. It sends an `Idempotency-Key` with every POST and keeps it across retries, so a retried POST is applied at most once. It retries rate-limited and unavailable responses, honoring `Retry-After`, and raises `NeuraApiError` with the problem details and their stable reason code.
+`neura-sdk` is generated from the [management API](./api.md) specification: one method per operation, returning the API's JSON objects as typed dictionaries. It sends an `Idempotency-Key` with every POST and keeps it across retries, so a retried POST is applied at most once. It retries a request whose problem is marked `retryable` (rate limited, unavailable, an internal error), honoring `Retry-After`, and raises `NeuraApiError` with the problem details and their stable reason code.
 
 ```python
 from neura_sdk import Client

@@ -93,7 +93,7 @@ services:
 
   # Requests and renews the TLS certificate; the first one on :80, before the edge can serve.
   certbot:
-    image: mirror.gcr.io/certbot/certbot:v3.0.1@sha256:4d8875e85a2af373262914e15c0a149e1985c5bbd05ac433fe4763f465020fcf
+    image: mirror.gcr.io/certbot/certbot:v5.9.0@sha256:bc93cb710b413e6b456d622f9b0133b3e109c0a78c2ed9976af43d209b0a1805
     profiles: [tools]
     volumes:
       - /srv/neura/data/letsencrypt:/etc/letsencrypt

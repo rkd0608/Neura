@@ -147,8 +147,10 @@ neura-qualify promote --report qualify.json --episodes episodes.json \
   --evidence https://<where the reports are published> --gpu "<GPU model>"
 ```
 
-It refuses an emulated report, a report with any scenario missing or failed, parity not measured
-or not passed, episodes without non-inferiority, and episodes of a different artifact.
+It refuses an emulated report, a report with a failed scenario or without one that hardware can
+run (every scenario but `torque_loss`, which only the emulated arm can induce; `bus_unplugged`
+needs `--manual`), parity not measured or not passed, episodes without non-inferiority, and
+episodes of a different artifact.
 
 ## Known limitations
 

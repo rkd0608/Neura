@@ -224,7 +224,7 @@ pre {
   letter-spacing: -0.045em;
 }
 .gradient {
-  background: linear-gradient(92deg, #ffffff 0%, #d5cdff 35%, #a595ff 70%, #7fb2ff 100%);
+  background: linear-gradient(92deg, #ffffff 0%, #d5cdff 35%, var(--accent) 70%, var(--info) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -362,7 +362,7 @@ pre {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, #6a52e8, var(--accent));
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent));
   transition: width 0.6s var(--ease);
 }
 .demo-meter.wide {

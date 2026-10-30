@@ -41,6 +41,17 @@ Sign in, sites, robots, policies, deploy, try, rollback, status, logs, approve, 
   `packages/neura/tests/test_cli_offline.py`
 - Docs: `site/docs/deploy-a-policy.md`, `site/docs/troubleshooting.md`
 
+### Signing the CLI in through the browser (§29.2)
+
+`neura login` shows a code; a person types it in the console, sees what waits for it, approves.
+
+- Code: `packages/neura-control/src/neura_control/api/routes_login.py`,
+  `packages/neura/src/neura_cli/commands/account.py`, `console/src/pages/Activate.tsx`
+- Tests: `packages/neura-control/tests/test_fleet.py::test_the_cli_signs_in_through_the_browser`,
+  `packages/neura-control/tests/test_fleet.py::test_a_person_sees_what_a_code_signs_in_before_approving_it`,
+  `console/src/pages/Activate.test.tsx`, and the journey's sign-in test (`console/e2e/journey.spec.ts`:
+  a person signed in with the e2e stack's test SSO issuer approves, the CLI gets its token)
+
 ### Rollouts: fits, at the site, shadow, approval, switch (§29.4, §28.3)
 
 One change to what robots run, and every step it goes through; rollbacks.
@@ -83,7 +94,10 @@ signed upgrades, and the local site API.
 - Code: `packages/neura-control/src/neura_control/installer.py`, `deploy/install/install.sh`,
   `tools/build_agent_release.py`, `packages/neura-agent/src/neura_agent/releases.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_production_servers_install_with_one_line`,
-  `tests/integration/test_install_upgrade.py`
+  `tests/integration/test_install_upgrade.py`; installing as root, in a container (needs Docker):
+  `tests/integration/test_install_upgrade.py::test_installing_as_root_runs_nothing_as_root_from_the_agents_own_directories`;
+  `/install.sh` (and every other route the API serves) through the console's nginx:
+  `tests/integration/test_console_proxy.py` (needs Docker)
 - Docs: `site/docs/deploy-a-policy.md` ("A production server")
 
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
@@ -171,7 +185,8 @@ ledger and its allowlist.
 
 Fleet, Policies, Rollouts and Settings, on the public API only.
 
-- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts; large),
+- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts),
+  `console/src/components/Field.tsx` (a form field wired to its label, hint and error),
   `console/src/styles/app.css` (large), `console/src/styles/tokens.css` (shared with the site
   and docs)
 - Tests: `console/src/lib/fleet.test.ts` and the other unit tests (`make console-check`);

@@ -46,7 +46,7 @@ from neura_control.db.models import (
 )
 from neura_control.ids import Kind, new_id
 from neura_control.security.principal import Principal, PrincipalKind
-from neura_control.services import records
+from neura_control.services import contracts, records
 from neura_control.services.revisions import report_json, revision_digest
 
 log = logging.getLogger("neura.control")
@@ -366,46 +366,22 @@ async def _register_trained_model(
             request_id=operation.id,
         )
 
-    async def register(
-        document: Any, kind: str, id_kind: Kind, action: str, signed: list[dict[str, str]]
-    ) -> ContractDocument:
-        existing = (
-            await session.scalars(
-                select(ContractDocument).where(
-                    ContractDocument.project_id == job.project_id,
-                    ContractDocument.kind == kind,
-                    ContractDocument.digest == document.digest(),
-                )
-            )
-        ).first()
-        if existing is not None:
-            merged = signing.validate(existing.digest, [*existing.signatures, *signed])
-            if merged != existing.signatures:
-                existing.signatures = merged
-                _touch(existing)
-                await audit(f"{action}.sign", existing.id)
-                await _emit(session, job.project_id, existing)
-            return existing
-        row = ContractDocument(
-            id=new_id(id_kind),
-            project_id=job.project_id,
-            kind=kind,
-            digest=document.digest(),
-            document=document.canonical_data(),
-            signatures=signed,
-            created_by=job.created_by,
-        )
-        session.add(row)
-        await session.flush()
-        await audit(f"{action}.register", row.id)
-        await _emit(session, job.project_id, row, "resource.created")
-        return row
-
-    artifact_row = await register(
-        artifact, "ModelArtifact", Kind.MODEL_ARTIFACT, "model_artifact", signatures
+    artifact_row, _ = await contracts.record(
+        session,
+        project,
+        artifact,
+        principal=site,
+        request_id=operation.id,
+        signatures=signatures,
+        created_by=job.created_by,
     )
-    profile_row = await register(
-        profile, "ExecutionProfile", Kind.EXECUTION_PROFILE, "execution_profile", []
+    profile_row, _ = await contracts.record(
+        session,
+        project,
+        profile,
+        principal=site,
+        request_id=operation.id,
+        created_by=job.created_by,
     )
     episodes = result.get("dataset_episodes")
     revision = Revision(

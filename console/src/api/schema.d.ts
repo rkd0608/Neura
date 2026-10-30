@@ -1175,6 +1175,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/login-codes/{user_code}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The sign-in waiting for a code, shown before a person approves it.
+     * @description What started it, by the name it gave itself, and when (design §29.2). Only a signed-in person can look a code up, as only a person can approve one. 404 when no sign-in waits for the code.
+     */
+    get: operations["getLoginCode"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2485,6 +2505,14 @@ export interface components {
       organization_id: components["schemas"]["OrganizationId"];
       scopes: components["schemas"]["ApiTokenScope"][];
     };
+    /** @description A CLI's sign-in waiting for a person to approve its code (design §29.2). */
+    LoginCode: {
+      user_code: string;
+      /** @description What the CLI calls itself, e.g. `neura CLI on ada@ada-laptop`. Whoever starts a sign-in chooses it. */
+      client_name: string;
+      created_at: components["schemas"]["Timestamp"];
+      expires_at: components["schemas"]["Timestamp"];
+    };
   };
   responses: {
     /** @description API_CONFLICT */
@@ -2635,6 +2663,8 @@ export interface components {
     RolloutId: components["schemas"]["RolloutId"];
     PublisherKeyId: components["schemas"]["PublisherKeyId"];
     LoginSessionId: components["schemas"]["LoginSessionId"];
+    /** @description The code `neura login` shows, with or without its dash, in any case. */
+    UserCode: string;
   };
   requestBodies: never;
   headers: {
@@ -5990,6 +6020,35 @@ export interface operations {
       413: components["responses"]["PayloadTooLarge"];
       422: components["responses"]["ValidationFailed"];
       428: components["responses"]["PreconditionRequired"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["Unavailable"];
+    };
+  };
+  getLoginCode: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The code `neura login` shows, with or without its dash, in any case. */
+        user_code: components["parameters"]["UserCode"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LoginCode"];
+        };
+      };
+      401: components["responses"]["Unauthenticated"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["NotFound"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
       503: components["responses"]["Unavailable"];

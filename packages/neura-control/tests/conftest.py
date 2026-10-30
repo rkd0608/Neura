@@ -25,6 +25,7 @@ import psycopg
 import pytest
 import yaml
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from neura_control.app import create_app
@@ -174,6 +175,13 @@ class ConformanceClient:
     def as_token(self, token: str | None) -> ConformanceClient:
         return ConformanceClient(self.client, token)
 
+    @property
+    def app(self) -> FastAPI:
+        """The application under test, for what it holds in ``app.state``."""
+        app = self.client.app
+        assert isinstance(app, FastAPI)
+        return app
+
 
 async def _bootstrap(url: str, role_subjects: dict[str, Role]) -> tuple[str, str]:
     engine = create_engine(url, pool_size=1)
@@ -257,6 +265,16 @@ def make_api(settings: ControlPlaneSettings) -> Iterator[AppFactory]:
 @pytest.fixture
 def api(make_api: AppFactory) -> tuple[ConformanceClient, str]:
     return make_api()
+
+
+async def until(condition: Callable[[], Any], what: str, timeout: float = 10) -> Any:
+    """Poll ``condition`` without blocking the event loop until it is true, and return it: a
+    test waits for the state it needs, never for a fixed time."""
+    deadline = time.monotonic() + timeout
+    while not (value := condition()):
+        assert time.monotonic() < deadline, f"timed out waiting for {what}"
+        await asyncio.sleep(0.02)
+    return value
 
 
 def contract(name: str) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 """The gateway process: gRPC adapter, batch dispatchers, lease sweeper and local status API.
 
-All ``GatewayCore`` calls run on the asyncio event-loop thread, so the core needs no locks. Model
+Robots' calls arrive through `neura_server.robot_service`. All ``GatewayCore`` calls run on the
+asyncio event-loop thread, so the core needs no locks. Model
 inference runs in policy worker processes, one per batch group (`neura_server.backends`), or with
 the simulated backend in a thread; results are applied back on the loop.
 """
@@ -17,7 +18,7 @@ import random
 import shutil
 import tempfile
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -55,18 +56,14 @@ from neura_server.leases import (
 )
 from neura_server.metrics import GatewayMetrics
 from neura_server.profiles import LatencyProfile
+from neura_server.robot_service import RobotService, closed_message, monotonic_us
 from neura_server.sandbox import launcher_for, remove_stale
 from neura_server.scheduler import Batch, Scheduler
 from neura_server.shadow import ShadowDeployment
 
 log = logging.getLogger("neura.gateway")
-STREAM_QUEUE = 256
 # A shadow's candidate has no deadline (no robot waits for it), but a hung worker is restarted.
 SHADOW_TIMEOUT_S = 60.0
-
-
-def monotonic_us() -> int:
-    return time.monotonic_ns() // 1000
 
 
 class SimulatedLatency:
@@ -349,7 +346,7 @@ class GatewayServer:
             queue = self._streams.pop(session_id, None)
             if queue is not None:
                 with contextlib.suppress(asyncio.QueueFull):
-                    queue.put_nowait(_closed_message(session_id))
+                    queue.put_nowait(closed_message(session_id))
         for key in self.core.unused_groups():
             self.core.remove_group(key)
             retired = self._groups.pop(key, None)
@@ -429,7 +426,7 @@ class GatewayServer:
         self._server = grpc.aio.server(
             options=options, maximum_concurrent_rpcs=self.config.max_concurrent_rpcs
         )
-        dataplane_pb2_grpc.add_RobotGatewayServicer_to_server(_Servicer(self), self._server)
+        dataplane_pb2_grpc.add_RobotGatewayServicer_to_server(RobotService(self), self._server)
         if self.config.tls is not None:
             self._tls = _RotatingTls(self.config.tls)
             self.bound_port = self._server.add_secure_port(
@@ -693,105 +690,3 @@ class _RotatingTls:
         return grpc.dynamic_ssl_server_credentials(
             self._configuration(), fetch, require_client_authentication=True
         )
-
-
-def _closed_message(session_id: str) -> dataplane_pb2.GatewayMessage:
-    from neura.v1 import common_pb2
-
-    return dataplane_pb2.GatewayMessage(
-        rejected=dataplane_pb2.RequestRejected(
-            envelope=common_pb2.Envelope(session_id=session_id),
-            reason=common_pb2.Reason(code="LEASE_EXPIRED", message="revision no longer active"),
-        )
-    )
-
-
-class _Servicer(dataplane_pb2_grpc.RobotGatewayServicer):  # type: ignore[misc]
-    def __init__(self, server: GatewayServer) -> None:
-        self._server = server
-
-    async def _robot(self, context: grpc.aio.ServicerContext[Any, Any]) -> str:
-        robot_id: str | None
-        if self._server.config.tls is not None:
-            # TLS verified the chain to the site CA and the validity period; the registry checks
-            # the certificate is still allowed and names this robot.
-            certificates = (context.auth_context() or {}).get("x509_pem_cert") or ()
-            peer = next(iter(certificates), b"")
-            robot_id = self._server.devices.authenticate_certificate(peer)
-        else:
-            metadata = dict(context.invocation_metadata() or ())
-            header = str(metadata.get("authorization", ""))
-            token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
-            robot_id = self._server.devices.authenticate(token) if token else None
-        if robot_id is None:
-            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "AUTH_DEVICE_UNKNOWN")
-            raise AssertionError("unreachable")
-        return robot_id
-
-    async def OpenSession(  # noqa: N802 - gRPC method name
-        self, request: dataplane_pb2.OpenSessionRequest, context: grpc.aio.ServicerContext[Any, Any]
-    ) -> dataplane_pb2.OpenSessionResponse:
-        robot_id = await self._robot(context)
-        return self._server.core.open_session(robot_id, request, monotonic_us())
-
-    async def GetAssignment(  # noqa: N802
-        self,
-        request: dataplane_pb2.GetAssignmentRequest,
-        context: grpc.aio.ServicerContext[Any, Any],
-    ) -> dataplane_pb2.Assignment:
-        robot_id = await self._robot(context)
-        return self._server.assignment(robot_id)
-
-    async def Heartbeat(  # noqa: N802
-        self, request: dataplane_pb2.HeartbeatRequest, context: grpc.aio.ServicerContext[Any, Any]
-    ) -> dataplane_pb2.HeartbeatResponse:
-        robot_id = await self._robot(context)
-        return self._server.core.heartbeat(robot_id, request, monotonic_us())
-
-    async def Control(  # noqa: N802
-        self, request: dataplane_pb2.ControlRequest, context: grpc.aio.ServicerContext[Any, Any]
-    ) -> dataplane_pb2.ControlResponse:
-        robot_id = await self._robot(context)
-        return self._server.core.control(robot_id, request, monotonic_us())
-
-    async def Stream(  # noqa: N802
-        self,
-        request_iterator: AsyncIterator[dataplane_pb2.RobotMessage],
-        context: grpc.aio.ServicerContext[Any, Any],
-    ) -> AsyncIterator[dataplane_pb2.GatewayMessage]:
-        robot_id = await self._robot(context)
-        server = self._server
-        outbox: asyncio.Queue[dataplane_pb2.GatewayMessage] = asyncio.Queue(maxsize=STREAM_QUEUE)
-
-        async def read() -> None:
-            async for message in request_iterator:
-                env = message.observation.envelope
-                session = server.core.sessions.get(env.session_id)
-                if session is not None and session.lease.robot_id == robot_id:
-                    server.bind_stream(env.session_id, outbox)
-                deliveries = server.core.receive(
-                    robot_id, message, message.ByteSize(), monotonic_us()
-                )
-                server.route(deliveries)
-                # Rejections for unknown sessions still reach this stream.
-                for delivery in deliveries:
-                    if not server.has_stream(delivery.session_id):
-                        with contextlib.suppress(asyncio.QueueFull):
-                            outbox.put_nowait(delivery.message)
-                server.wake(env.session_id)
-
-        reader = asyncio.create_task(read())
-        getter: asyncio.Task[dataplane_pb2.GatewayMessage] | None = None
-        try:
-            while True:
-                getter = asyncio.create_task(outbox.get())
-                done, _ = await asyncio.wait({getter, reader}, return_when=asyncio.FIRST_COMPLETED)
-                if getter in done:
-                    yield getter.result()
-                    continue
-                break
-        finally:
-            for task in (getter, reader):
-                if task is not None and not task.done():
-                    task.cancel()
-            server.unbind_stream(outbox)

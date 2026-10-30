@@ -18,12 +18,12 @@ import { Dialog } from "../components/Dialog";
 import { BotIcon, PlusIcon } from "../components/Icons";
 import { FaultTable } from "../components/Tables";
 import { useToasts } from "../components/Toasts";
+import { Field } from "../components/Field";
 import {
   Card,
   DataAge,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -51,7 +51,7 @@ export function Robots() {
   const sites = useSites(projectId);
   const profiles = useRobotProfiles(projectId);
   const sessions = useSessions(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -308,7 +308,6 @@ function AddRobots({
             hint="Robots at a site authenticate to the gateway with this name."
           >
             <input
-              id="robot-name"
               type="text"
               required
               maxLength={190}
@@ -322,7 +321,6 @@ function AddRobots({
             hint={count > 1 ? `Named ${slug(name) || "robot"}-0 … -${count - 1}` : undefined}
           >
             <input
-              id="robot-count"
               type="number"
               min={1}
               max={64}
@@ -331,11 +329,7 @@ function AddRobots({
             />
           </Field>
           <Field id="robot-site" label="Site">
-            <select
-              id="robot-site"
-              value={site}
-              onChange={(event) => setSiteId(event.target.value)}
-            >
+            <select value={site} onChange={(event) => setSiteId(event.target.value)}>
               {sites.map((s) => (
                 <option key={s.metadata.id} value={s.metadata.id}>
                   {s.spec.display_name}
@@ -344,11 +338,7 @@ function AddRobots({
             </select>
           </Field>
           <Field id="robot-profile" label="Robot profile">
-            <select
-              id="robot-profile"
-              value={profile}
-              onChange={(event) => setProfileId(event.target.value)}
-            >
+            <select value={profile} onChange={(event) => setProfileId(event.target.value)}>
               {profiles.map((p) => (
                 <option key={p.metadata.id} value={p.metadata.id}>
                   {profileName(p)}
@@ -388,7 +378,7 @@ export function RobotPage() {
   const sessions = useSessions(projectId);
   const faults = useFaults(projectId);
   const deployments = useDeployments(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [confirming, setConfirming] = useState(false);
   const mineCount = (sessions.data ?? []).filter((x) => x.robot_id === robotId).length;
   const faultCount = (faults.data ?? []).filter(

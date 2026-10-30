@@ -11,6 +11,11 @@ updates:
     groups:
       python-minor:
         update-types: [minor, patch]
+    ignore:
+      # Pinned to the MuJoCo gym-aloha's dm_control uses (neura-robots' sim extra): the ALOHA
+      # port must match gym-aloha step for step, and another MuJoCo already differs by 1e-11
+      # (packages/neura-robots/tests/test_aloha.py fails on it).
+      - dependency-name: mujoco
   - package-ecosystem: npm
     directory: /console
     target-branch: main
@@ -36,6 +41,18 @@ updates:
     directory: /deploy/docker
     target-branch: main
     schedule: {interval: weekly}
+  # The images production runs beside Neura's own (the edge, the database, certbot, the Cloud SQL
+  # proxy: deploy/gcp/compose*.yaml) and the dev stack's (deploy/compose).
+  - package-ecosystem: docker-compose
+    directory: /deploy/gcp
+    target-branch: main
+    schedule: {interval: weekly}
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    target-branch: main
+    schedule: {interval: weekly}
+    ignore:
+      - dependency-name: "neura-*" # built from this repository (deploy/docker), not pulled
   - package-ecosystem: github-actions
     directory: /
     target-branch: main

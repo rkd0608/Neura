@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import os
+from datetime import timedelta
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
+from sqlalchemy import select
 
 from neura_control import ControlPlaneSettings, create_app
+from neura_control import app as app_module
 from neura_control.app import iter_routes
+from neura_control.clock import utcnow
 from neura_control.database import database_reachable
+from neura_control.db.engine import create_engine, session_factory
+from neura_control.db.models import LoginSession
 from neura_control.problems import PROBLEM_MEDIA_TYPE
 
 
@@ -78,6 +87,92 @@ def test_unexpected_errors_do_not_leak_details() -> None:
     assert response.status_code == 500
     assert "secret" not in response.text
     assert response.json()["reason"] == "API_INTERNAL_ERROR"
+
+
+def test_unexpected_errors_carry_a_request_id_and_are_counted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def probe(url: PostgresDsn, timeout_s: float) -> bool:
+        raise RuntimeError("probe failed")
+
+    app = create_app(ControlPlaneSettings(environment="test"), database_probe=probe)
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/readyz", headers={"X-Request-Id": "req-boom"}
+    )
+    assert response.status_code == 500
+    assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert response.json()["reason"] == "API_INTERNAL_ERROR"
+    assert response.headers["X-Request-Id"] == "req-boom"
+    counted = [
+        (s.labels["route"], s.labels["status"], s.value)
+        for family in app.state.metrics.registry.collect()
+        for s in family.samples
+        if s.name == "neura_http_requests_total"
+    ]
+    assert counted == [("/readyz", "500", 1.0)]
+    logged = [r for r in caplog.records if r.exc_info and "req-boom" in r.getMessage()]
+    assert len(logged) == 1  # logged once, with the request id that ties it to the response
+
+
+class FailingSessions:
+    """A session factory whose database is gone: every use raises. Stops the loop after two."""
+
+    def __init__(self, stop: asyncio.Event) -> None:
+        self.stop = stop
+        self.uses = 0
+
+    def __call__(self) -> Any:
+        self.uses += 1
+        if self.uses == 2:
+            self.stop.set()
+        raise OSError("connection refused")
+
+    begin = __call__
+
+
+@pytest.mark.parametrize("loop", ["_prune", "_sweep_rollouts"])
+async def test_background_loops_log_a_failed_pass_and_run_the_next(
+    loop: str, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(app_module, "PRUNE_INTERVAL_S", 0.01)
+    settings = ControlPlaneSettings(environment="test", rollout_sweep_interval_s=0.01)
+    stop = asyncio.Event()
+    sessions = FailingSessions(stop)
+    app = SimpleNamespace(state=SimpleNamespace(sessions=sessions))
+    await asyncio.wait_for(getattr(app_module, loop)(app, settings, stop), timeout=10)
+    assert sessions.uses == 2  # the first failure did not end the loop
+    failures = [r for r in caplog.records if r.exc_info and r.exc_info[0] is OSError]
+    assert len(failures) == 2
+
+
+async def test_pruning_drops_login_sessions_a_day_past_expiry(
+    settings: ControlPlaneSettings,
+) -> None:
+    engine = create_engine(str(settings.database_url), pool_size=1)
+    sessions = session_factory(engine)
+    now = utcnow()
+    try:
+        async with sessions.begin() as session:
+            for name, expires_at in (
+                ("old", now - timedelta(days=2)),
+                ("recent", now - timedelta(hours=1)),
+                ("open", now + timedelta(minutes=5)),
+            ):
+                session.add(
+                    LoginSession(
+                        id=f"lgn_{name}",
+                        user_code=name,
+                        secret_hash="0" * 64,
+                        client_name="neura CLI",
+                        expires_at=expires_at,
+                    )
+                )
+        await app_module._prune_once(sessions, settings)
+        async with sessions() as session:
+            left = set((await session.scalars(select(LoginSession.id))).all())
+        assert left == {"lgn_recent", "lgn_open"}
+    finally:
+        await engine.dispose()
 
 
 def test_implemented_routes_are_in_the_published_spec() -> None:

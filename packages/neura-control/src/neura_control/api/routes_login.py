@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
 from neura_control.api.auth import authenticate
-from neura_control.api.common import ApiResult, idempotent, parse_body
+from neura_control.api.common import ApiResult, idempotent, parse_body, transaction
 from neura_control.api.schemas import LoginApprovalCreate, LoginSessionCreate, LoginTokenRequest
 from neura_control.api.scope import Ctx
 from neura_control.clock import iso, utcnow
@@ -134,6 +134,38 @@ async def exchange_login_session(login_session_id: str, request: Request) -> Res
         )
 
     return await idempotent(request, ANONYMOUS, work)
+
+
+@router.get("/v1/login-codes/{user_code}")
+async def get_login_code(
+    user_code: str, request: Request, principal: Principal = Depends(authenticate)
+) -> Response:
+    """What waits for a code, shown before anyone approves it: anyone can start a sign-in and
+    send its link, so the person sees what started it and when. As only people approve codes,
+    only people look them up."""
+    if principal.kind is not PrincipalKind.USER:
+        raise ProblemError(
+            ReasonCode.API_FORBIDDEN, "only a signed-in person can approve a sign-in"
+        )
+    async with transaction(request) as session:
+        row = (
+            await session.scalars(
+                select(LoginSession).where(LoginSession.user_code == _normalized(user_code))
+            )
+        ).first()
+        if row is None or row.state != "pending" or row.expires_at < utcnow():
+            raise ProblemError(
+                ReasonCode.API_NOT_FOUND, "no sign-in is waiting for this code; it may have expired"
+            )
+        return ApiResult(
+            200,
+            {
+                "user_code": row.user_code,
+                "client_name": row.client_name,
+                "created_at": iso(row.created_at),
+                "expires_at": iso(row.expires_at),
+            },
+        ).response()
 
 
 @router.post("/v1/login-approvals")

@@ -238,6 +238,30 @@ def test_lerobots_async_inference_serves_an_episode(synthetic: Path, tmp_path: P
     assert log.count("Running inference for observation") > result.counters["chunks_received"]
 
 
+def test_lerobots_async_inference_stops_what_it_started_when_it_cannot_start(
+    synthetic: Path, tmp_path: Path
+) -> None:
+    import socket
+
+    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.evidence.lerobot_async import AsyncRun
+
+    world = RealTimeWorld(AlohaSim()).start()
+    try:
+        run = AsyncRun(synthetic, world, workdir=tmp_path)
+        with socket.socket() as taken:  # another program has the proxy's port
+            taken.bind(("127.0.0.1", run.proxy.port))
+            taken.listen()
+            with pytest.raises(OSError, match="address already in use"), run:
+                pass
+    finally:
+        world.close()
+    server = run.server.process
+    assert server is not None
+    assert server.poll() is not None, "the policy server outlived the error"
+    assert not run.proxy.thread.is_alive()
+
+
 def test_the_site_is_given_absolute_paths(
     synthetic: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -247,7 +271,7 @@ def test_the_site_is_given_absolute_paths(
 
     import yaml
 
-    from neura_robots.qualify.harness import LocalSite
+    from neura_robots.qualify.site import LocalSite
 
     shutil.copytree(synthetic, tmp_path / "checkpoint")
     deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")

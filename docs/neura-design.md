@@ -272,7 +272,7 @@ Stale reply, duplicate reply, reordered replies, reply for old epoch, reply for 
    - **Verdict.** The lower bound of the one-sided 95% interval for the difference in success rates (Newcombe's hybrid score interval) must be above minus the margin.
    - **Defaults.** 30 episodes each and a margin of 0.15: with both at 90%, the bound is about −0.14. Ten episodes each cannot show it even at 100%.
 
-`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario run, including `--manual` ones), with parity and episodes for the same artifact that passed. It refuses emulated reports.
+`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario hardware can run, including the `--manual` one; `torque_loss` is induced only on the emulator), with parity and episodes for the same artifact that passed. It refuses emulated reports.
 
 **Hardware test protocol**
 
@@ -926,7 +926,7 @@ An activation for more robots than the server can serve at the revision's execut
   - writes `/etc/neura/agent.env` and a hardened systemd unit (dedicated user, `NoNewPrivileges`, `ProtectSystem=strict`, writes only to the state and install directories);
   - enrolls the server and starts the agent.
 
-  Running it again with a newer bundle is a manual upgrade.
+  Running it again with a newer bundle is a manual upgrade. The install and state directories belong to the agent's user, which stages its own upgrades there, so the installer does everything inside them as that user: root never runs code from them or writes through them, and its own Python runs isolated (`-I`) from the directory it is started in. A test installs as root in a container and checks every Python process it starts.
 - **Remote upgrades** are opt-in at the site: `upgrade_agent` is not among the default allowed operations. `POST /v1/servers/{id}/agent-upgrades` (admin role) sends the server a version, an https URL and the bundle's SHA-256. The agent then:
   1. fetches the bundle and checks its SHA-256;
   2. verifies it against the pinned release keys, so the control plane cannot push code Neura did not sign;
@@ -998,9 +998,9 @@ An activation for more robots than the server can serve at the revision's execut
 
 - **Pinned inputs.**
   - Python and JavaScript dependencies are locked (`uv.lock`, `pnpm-lock.yaml`) and installed frozen.
-  - Base images are pinned by digest in `deploy/docker/Dockerfile`.
+  - Base images are pinned by digest in `deploy/docker/Dockerfile`, and so is every other image production runs (the edge, the database, certbot, the Cloud SQL proxy), in the compose files under `deploy/gcp`: none is pinned in a script, where no updater would see it.
   - Every GitHub Action is pinned to a commit SHA, with its version in a comment.
-  - Dependabot proposes updates for all of them weekly, through CI.
+  - Dependabot proposes updates for all of them weekly, through CI (`.github/dependabot.yml`: the Dockerfile, the compose files of `deploy/gcp` and of the dev stack).
 - **Dependency audit** (`tools/audit_dependencies.py`, the `supply-chain` CI job). It checks every package in `uv.lock` (all groups, PyTorch and LeRobot included) with `pip-audit`, and the console's and docs site's lockfiles with `pnpm audit`. A finding fails CI unless it is fixed or listed in `security/vulnerability-exceptions.yaml` with the reason it does not affect Neura and an expiry date; an expired entry fails too.
   - The first run found six advisories in the docs site's build toolchain (fixed by overriding to patched versions) and one in the console's `yaml` (upgraded).
   - Three are accepted until 2027-01-15, each because the latest compatible upstream release cannot take the fix:
@@ -1061,7 +1061,7 @@ An external penetration test is scheduled before the first customer pilot. This 
 | **Console** | Same-origin API; CSP without inline scripts; frame-ancestors none; tokens in session storage; bearer tokens only, so no CSRF surface; no CORS | Headers on every response (nginx dropped some per location), plus HSTS, COOP and CORP. nginx runs as non-root. Large uploads stream through the proxy. Verified on the built image | Inline styles are allowed in the CSP. **Scheduled** |
 | **TLS** | Staging and production require TLS for agents and Postgres (`verify-full`, now parsed properly); automatic renewal of agent and gateway certificates | `sslmode` is parsed from the URL instead of matched as text | gRPC uses BoringSSL defaults (TLS 1.2+); the management API sits behind the operator's TLS terminator. **Accepted.** The control plane's listener certificate is read at start (restart to rotate). Site CA rotation and robot certificate renewal: **scheduled** |
 | **Supply chain** | Locked dependencies; ruff security rules | Base images pinned by digest; actions pinned by SHA; Dependabot; dependency audit in CI with reviewed, expiring exceptions; release images scanned (critical stops the release), signed, with SBOM and provenance; signed agent bundles (§17.7) | Three accepted advisories, until 2027-01-15 (§17.7) |
-| **Upgrades** | Signature and per-file digests; no extra files; contained paths; launcher and health rollback | A remote upgrade never goes back to an older release | Release keys are pinned at install from the installer argument, so the installer's copy must be checked. Publishing their fingerprints out of band: **scheduled**. The install directory is writable by the agent, which stages releases there. **Accepted** |
+| **Upgrades** | Signature and per-file digests; no extra files; contained paths; launcher and health rollback | A remote upgrade never goes back to an older release | Release keys are pinned at install from the installer argument, so the installer's copy must be checked. Publishing their fingerprints out of band: **scheduled**. The install directory is writable by the agent, which stages releases there. **Accepted**: the installer works inside it only as the agent's user, so a compromised agent cannot use it to become root at the next install |
 | **Artifacts and weights** | Publisher signatures checked at prepare; sealed weights (AES-256-GCM, header-bound); the registry holds ciphertext only | Weight-source tokens are sent over TLS only | No size cap on a single download beyond the digest check and the disk preflight. **Accepted** |
 | **What leaves the site** | Outbound allowlist with telemetry modes; hash-chained ledger | — | The chain has no key: the customer verifies it, and truncating the newest entries is not detectable. Upgrade, weight and health fetches carry no site data and are not in the ledger. **Scheduled**: record them, and anchor the chain head with the control plane |
 | **Support access** | Grants are customer-created, time-boxed, scoped and audited | — | No support access path exists, so support has no access at all. The break-glass session that consumes grants: **scheduled** |
@@ -2083,6 +2083,10 @@ in it (`NEURA_CONTROL_AGENT_RELEASE_*`): the bundle's address and SHA-256, and t
 
 A control plane with no release configured shows the enroll command for an agent installed with
 `deploy/install/install.sh`, and `/install.sh` answers 404.
+
+`<neura>` is the control plane's public URL, which on the cloud deployment is the console's
+address: the console's nginx passes `/install.sh` to the API with `/v1/`. A test runs that nginx
+and asks it for every route the API serves.
 
 ### 29.3 Policy sources, one declaration
 

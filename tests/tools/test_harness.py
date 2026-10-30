@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -247,6 +248,33 @@ def test_a_check_that_leaves_temporary_files_fails(logs: Path) -> None:
     tidy = verify.Check("pytest", [sys.executable, "-c", "pass"], "why", clean=True)
     verify.run(tidy)
     assert tidy.status == "passed"
+
+
+def test_timing_checks_run_alone(logs: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    running: set[str] = set()
+    beside: dict[str, set[str]] = {}
+    lock = threading.Lock()
+
+    def run(check: verify.Check) -> None:
+        with lock:
+            beside[check.name] = set(running)
+            running.add(check.name)
+        time.sleep(0.05)
+        with lock:
+            running.discard(check.name)
+        check.status = "passed"
+
+    monkeypatch.setattr(verify, "run", run)
+    checks = [
+        verify.Check("mypy", ["true"], "why"),
+        verify.Check("console", ["true"], "why"),
+        verify.Check("pytest", ["true"], "why", alone=True),
+        verify.Check("e2e", ["true"], "why", alone=True),
+    ]
+    verify.execute(checks)
+    assert beside["pytest"] == set()
+    assert beside["e2e"] == set()
+    assert all(c.status == "passed" for c in checks)
 
 
 def test_a_check_that_breaks_verify_is_reported_not_lost(

@@ -21,6 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import PostgresDsn
 from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from neura.v1 import common_pb2
@@ -41,7 +42,7 @@ from neura_control.api import (
 from neura_control.clock import utcnow
 from neura_control.database import database_reachable
 from neura_control.db.engine import create_engine, session_factory
-from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey
+from neura_control.db.models import EnrollmentToken, Event, IdempotencyKey, LoginSession
 from neura_control.grpc_site import start_agent_server
 from neura_control.metrics import ControlPlaneMetrics, route_template
 from neura_control.problems import (
@@ -61,6 +62,7 @@ from neura_control.settings import ControlPlaneSettings
 SERVICE_NAME = "neura-control"
 API_VERSION = "v1"
 IDEMPOTENCY_RETENTION = timedelta(hours=24)
+PRUNE_INTERVAL_S = 60.0
 
 log = logging.getLogger("neura.control")
 DatabaseProbe = Callable[[PostgresDsn, float], Awaitable[bool]]
@@ -101,32 +103,50 @@ class RateLimiter:
         return wait
 
 
-async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event) -> None:
-    """Drop events past retention, old idempotency records and expired enrollment tokens.
-    Stopped with ``stop`` rather than cancelled, so a transaction in progress completes."""
+async def _every(
+    interval_s: float, stop: asyncio.Event, work: Callable[[], Awaitable[object]], what: str
+) -> None:
+    """Run ``work`` every ``interval_s`` seconds until ``stop`` is set. A failed pass is logged
+    and the next one runs. Stopped with ``stop`` rather than cancelled, so a transaction in
+    progress completes."""
     while True:
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=60)
+            await asyncio.wait_for(stop.wait(), timeout=interval_s)
         if stop.is_set():
             return
-        with contextlib.suppress(Exception):
-            async with app.state.sessions.begin() as session:
-                now = utcnow()
-                await session.execute(
-                    delete(Event).where(
-                        Event.occurred_at < now - timedelta(hours=settings.event_retention_hours)
-                    )
-                )
-                await session.execute(
-                    delete(IdempotencyKey).where(
-                        IdempotencyKey.created_at < now - IDEMPOTENCY_RETENTION
-                    )
-                )
-                await session.execute(
-                    delete(EnrollmentToken).where(
-                        EnrollmentToken.expires_at < now - timedelta(days=1)
-                    )
-                )
+        try:
+            await work()
+        except Exception:
+            log.exception("%s failed; trying again in %ss", what, interval_s)
+
+
+async def _prune_once(
+    sessions: async_sessionmaker[AsyncSession], settings: ControlPlaneSettings
+) -> None:
+    async with sessions.begin() as session:
+        now = utcnow()
+        await session.execute(
+            delete(Event).where(
+                Event.occurred_at < now - timedelta(hours=settings.event_retention_hours)
+            )
+        )
+        await session.execute(
+            delete(IdempotencyKey).where(IdempotencyKey.created_at < now - IDEMPOTENCY_RETENTION)
+        )
+        await session.execute(
+            delete(EnrollmentToken).where(EnrollmentToken.expires_at < now - timedelta(days=1))
+        )
+        await session.execute(
+            delete(LoginSession).where(LoginSession.expires_at < now - timedelta(days=1))
+        )
+
+
+async def _prune(app: FastAPI, settings: ControlPlaneSettings, stop: asyncio.Event) -> None:
+    """Drop events past retention, old idempotency records, and enrollment tokens and CLI login
+    sessions a day past their expiry."""
+    await _every(
+        PRUNE_INTERVAL_S, stop, lambda: _prune_once(app.state.sessions, settings), "pruning"
+    )
 
 
 async def _sweep_rollouts(
@@ -134,13 +154,12 @@ async def _sweep_rollouts(
 ) -> None:
     """Advance rollouts in progress (design §29.4). Site reports advance them as they arrive;
     the sweep makes sure a missed report only delays one."""
-    while True:
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=settings.rollout_sweep_interval_s)
-        if stop.is_set():
-            return
-        with contextlib.suppress(Exception):
-            await rollouts.sweep(app.state.sessions)
+    await _every(
+        settings.rollout_sweep_interval_s,
+        stop,
+        lambda: rollouts.sweep(app.state.sessions),
+        "the rollout sweep",
+    )
 
 
 async def _dev_bootstrap(app: FastAPI, settings: ControlPlaneSettings) -> None:
@@ -276,6 +295,8 @@ def create_app(
             else secrets.token_hex(12)
         )
         request.state.request_id = request_id
+        started = time.perf_counter()
+        wait = None
         if request.url.path.startswith("/v1/") and request.url.path != "/v1/meta":
             now = time.monotonic()
             address = request.client.host if request.client else ""
@@ -283,15 +304,17 @@ def create_app(
             credential = request.headers.get("Authorization")
             if wait is None and credential:
                 wait = limiter.take(hashlib.sha256(credential.encode()).hexdigest(), now)
-            if wait is not None:
-                response: Response = problem_response(
-                    ReasonCode.API_RATE_LIMITED, instance=request.url.path
-                )
-                response.headers["Retry-After"] = str(max(1, round(wait)))
-                response.headers["X-Request-Id"] = request_id
-                return response
-        started = time.perf_counter()
-        response = await call_next(request)
+        response: Response
+        if wait is not None:
+            response = problem_response(ReasonCode.API_RATE_LIMITED, instance=request.url.path)
+            response.headers["Retry-After"] = str(max(1, round(wait)))
+        else:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                # Answered here, not by the outermost error middleware, so that a 500 carries
+                # its request id and is counted like every other response.
+                response = await handle_unexpected(request, exc)
         response.headers["X-Request-Id"] = request_id
         metrics.request(
             route_template(request.scope),

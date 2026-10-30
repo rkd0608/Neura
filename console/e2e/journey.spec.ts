@@ -102,18 +102,24 @@ test("onboard, connect a server, deploy and approve at the site", async ({ page 
     // --- add a site and connect its GPU server ------------------------------------------------
     await page.getByRole("link", { name: "Add a site" }).click();
     await page.getByRole("button", { name: "Add a site" }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Add a site" });
-    await dialog.getByLabel("Site name").fill("Warehouse 3");
-    await dialog.getByRole("button", { name: "Add site" }).click();
+    const dialog = page.getByRole("dialog", { name: "Create a site" });
+    await dialog.getByLabel("Name", { exact: true }).fill("Warehouse 3");
+    // The same dialog as on Fleet, with the CLI's defaults.
+    await expect(dialog.getByLabel(/^Production/)).toBeChecked();
+    await expect(dialog.getByLabel("Offline allowance (hours)")).toHaveValue("72");
+    await dialog.getByRole("button", { name: "Create site" }).click();
     await expect(page.getByRole("heading", { name: "Warehouse 3" })).toBeVisible();
     await expect(page.getByText("The site has never connected")).toBeVisible();
-    await page.getByRole("button", { name: "Generate install command" }).click();
-    const command = (await page.getByLabel("Install command").textContent()) ?? "";
+    // A new site opens ready to add its server, in the dialog Fleet uses.
+    const connect = page.getByRole("dialog", { name: "Add a server to warehouse-3" });
+    await connect.getByRole("button", { name: "Generate the commands" }).click();
+    const command = (await connect.getByLabel("A production server").textContent()) ?? "";
     expect(command).toMatch(/^neura-agent enroll --control-plane \S+ --token \S+$/);
     await expectAccessible(page, "connect a server");
     expect(site.enroll(command)).toContain("enrolled server");
-    await expect(page.getByText(/enrolled$/)).toBeVisible();
-    await expect(page.getByText("Every preflight check passed.")).toBeVisible();
+    await expect(connect.getByText(/enrolled$/)).toBeVisible();
+    await expect(connect.getByText("Every preflight check passed.")).toBeVisible();
+    await connect.getByRole("button", { name: "Done" }).click();
     await expect(page.locator(".badge", { hasText: "Ready" }).first()).toBeVisible();
     // Updates are merge patches with the version read: renaming the site saves.
     await page.getByRole("button", { name: "Edit site" }).click();
@@ -335,8 +341,9 @@ test("the four pages: a site finds its arm, a pushed policy is deployed and appr
       .first()
       .click();
     const create = page.getByRole("dialog", { name: "Create a site" });
-    await create.getByLabel("Name").fill("Lab line");
-    await create.getByLabel(/^Production/).check();
+    await create.getByLabel("Name", { exact: true }).fill("Lab line");
+    await expect(create.getByLabel(/^Production/)).toBeChecked();
+    await expect(create.getByLabel("Offline allowance (hours)")).toHaveValue("72");
     await create.getByRole("button", { name: "Create site" }).click();
     const card = page.getByRole("region", { name: /lab-line/ });
     await expect(card.getByText("No server yet", { exact: true })).toBeVisible();
@@ -348,6 +355,10 @@ test("the four pages: a site finds its arm, a pushed policy is deployed and appr
     );
     // This stack offers no agent release, so a production server's command is the enroll one.
     const command = (await connect.getByLabel("A production server").textContent()) ?? "";
+    await connect.getByRole("button", { name: "Done" }).click();
+    // The commands work once: opened again, the dialog offers new ones, not the same.
+    await card.getByRole("button", { name: "Add a server" }).click();
+    await expect(connect.getByRole("button", { name: "Generate the commands" })).toBeVisible();
     await connect.getByRole("button", { name: "Done" }).click();
     expect(site.enroll(command)).toContain("enrolled server");
     await expect(card.getByText("Connected", { exact: true })).toBeVisible();

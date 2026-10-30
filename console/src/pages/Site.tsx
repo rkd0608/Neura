@@ -1,31 +1,29 @@
-// A site: its connection, offline allowance, servers with GPUs and preflight, and connecting a
-// new server (design §17.2, §19.3).
+// A site: its connection, offline allowance, servers with GPUs and preflight, and adding a server
+// (design §17.2, §19.3).
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
-import { api, ifMatch, unwrap, type Schemas, idempotent, specVersion } from "../api/client";
+import { api, ifMatch, unwrap, type Schemas, specVersion } from "../api/client";
 import { useApiMutation, useRobots, useServers, useSite } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { BotIcon, BuildingIcon, ServerIcon } from "../components/Icons";
 import { useToasts } from "../components/Toasts";
 import { Field } from "../components/Field";
+import { ConnectServer, Preflight } from "../components/SiteDialogs";
 import {
   Badge,
   Callout,
   Card,
-  CopyField,
   DataAge,
   Empty,
   ErrorState,
   KeyValue,
   Loading,
   PageHeader,
-  Reason,
   Stat,
   Status,
   TabPanel,
   Tabs,
-  Time,
   useTab,
   type TabSpec,
 } from "../components/ui";
@@ -42,7 +40,7 @@ export function SitePage() {
   const [search] = useSearchParams();
   const site = useSite(projectId, siteId);
   const [connecting, setConnecting] = useState(search.has("connect"));
-  const servers = useServers(projectId, siteId, connecting);
+  const servers = useServers(projectId, siteId);
   const robots = useRobots(projectId);
   const can = usePermissions(orgId, projectId);
   const [editing, setEditing] = useState(false);
@@ -90,7 +88,7 @@ export function SitePage() {
             ) : null}
             {can.admin ? (
               <button type="button" className="button primary" onClick={() => setConnecting(true)}>
-                <ServerIcon /> Connect a server
+                <ServerIcon /> Add a server
               </button>
             ) : null}
           </>
@@ -102,9 +100,7 @@ export function SitePage() {
           until its offline allowance runs out.
         </Callout>
       ) : null}
-      {connecting ? (
-        <ConnectServer site={s} servers={servers.data ?? []} onDone={() => setConnecting(false)} />
-      ) : null}
+      <ConnectServer site={s} open={connecting} onClose={() => setConnecting(false)} />
       <Tabs label="Site" tabs={tabs} value={tab} onChange={setTab} />
       {tab === "overview" ? (
         <TabPanel label="Overview">
@@ -168,7 +164,7 @@ export function SitePage() {
                       className="button primary small"
                       onClick={() => setConnecting(true)}
                     >
-                      Connect a server
+                      Add a server
                     </button>
                   ) : null
                 }
@@ -262,138 +258,6 @@ function OfflineAllowance({ site, fetchedAt }: { site: Site; fetchedAt: number }
       {duration(left)} left{" "}
       <span className="muted">of {site.spec.offline_authorization_hours} h</span>
     </span>
-  );
-}
-
-function ConnectServer({
-  site,
-  servers,
-  onDone,
-}: {
-  site: Site;
-  servers: Server[];
-  onDone: () => void;
-}) {
-  const [known] = useState(() => new Set(servers.map((s) => s.metadata.id)));
-  const create = useApiMutation(async () =>
-    unwrap(
-      await api.POST("/v1/sites/{site_id}/enrollment-tokens", {
-        params: { path: { site_id: site.metadata.id }, header: idempotent() },
-        body: { ttl_minutes: 60 },
-      }),
-    ),
-  );
-  const fresh = servers.filter((s) => !known.has(s.metadata.id));
-  const token = create.data;
-
-  return (
-    <Card
-      title="Connect a GPU server"
-      description="The agent dials out to Neura over TLS. No inbound ports, no VPN. Its key is generated on the server and never leaves it."
-      actions={
-        <button type="button" className="button small ghost" onClick={onDone}>
-          Close
-        </button>
-      }
-    >
-      <ol className="stack" style={{ paddingLeft: 18, margin: 0, gap: 16 }}>
-        <li>
-          <strong>Generate a one-time install command</strong>
-          <p className="secondary small">
-            It works once, for this site only, and expires in an hour.
-          </p>
-          <div style={{ marginTop: 8 }}>
-            {token ? (
-              <div className="stack">
-                <CopyField value={token.install_command} label="Install command" />
-                <span className="muted small">
-                  Expires <Time iso={token.expires_at} />. It is shown only now.
-                </span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="button primary"
-                disabled={create.isPending}
-                onClick={() => create.mutate(undefined)}
-              >
-                {create.isPending ? "Generating…" : "Generate install command"}
-              </button>
-            )}
-            {create.isError ? <ErrorState error={create.error} /> : null}
-          </div>
-        </li>
-        <li>
-          <strong>Run it on the server</strong>
-          <p className="secondary small">
-            The agent checks the server first (driver, GPUs, disk) and reports what it finds here.
-          </p>
-        </li>
-        <li aria-live="polite">
-          <strong>Check the server</strong>
-          {fresh.length === 0 ? (
-            <p className="secondary small">{token ? "Waiting for the server to enroll…" : "—"}</p>
-          ) : (
-            fresh.map((server) => (
-              <div key={server.metadata.id} className="stack" style={{ marginTop: 8 }}>
-                <Callout
-                  tone="ok"
-                  title={`${server.status.hostname || server.spec.display_name} enrolled`}
-                >
-                  {(server.status.preflight ?? []).every((c) => c.passed)
-                    ? "Every preflight check passed."
-                    : "Some preflight checks failed; see the fixes below."}
-                </Callout>
-                <Preflight checks={server.status.preflight ?? []} />
-              </div>
-            ))
-          )}
-        </li>
-      </ol>
-    </Card>
-  );
-}
-
-function Preflight({ checks }: { checks: Schemas["PreflightCheck"][] }) {
-  if (checks.length === 0) return <p className="muted">No preflight results reported.</p>;
-  return (
-    <div className="table-wrap">
-      <table>
-        <caption className="visually-hidden">Preflight checks</caption>
-        <thead>
-          <tr>
-            <th scope="col">Check</th>
-            <th scope="col">Result</th>
-            <th scope="col">Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {checks.map((check) => (
-            <tr key={check.name}>
-              <td>
-                <code>{check.name}</code>
-              </td>
-              <td>
-                {check.passed ? (
-                  <Badge tone="ok">Passed</Badge>
-                ) : (
-                  <Badge tone="danger">Failed</Badge>
-                )}
-              </td>
-              <td>
-                <div>{check.detail}</div>
-                {!check.passed && check.fix ? (
-                  <div className="small" style={{ marginTop: 4 }}>
-                    <strong>Fix:</strong> {check.fix}
-                  </div>
-                ) : null}
-                {!check.passed && check.reason ? <Reason code={check.reason} /> : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

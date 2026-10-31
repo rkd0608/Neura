@@ -2303,8 +2303,12 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    tensors with an unrestricted `torch.load`: they are unpickled only as LeRobot's `TimedAction`,
    with storage loaded weights-only, and only from servers the robot's owner runs). All four pass
    one scenario (`test_local.py`). Hosted APIs when their protocols are public.
-3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile
-   against what the policy server serves before anything can move.
+3. **Running without a site** (done): `neura-arm run CONFIG --policy URI`, or `policy:` in the
+   configuration in place of `gateway:`, with the contracts pinned under `revision:`. The URI is
+   a `.py` file (an `@neura.policy` class in this process), `neura://`, `openpi://` or
+   `lerobot://` (`neura_robots.policies`). The policy is opened and checked against the
+   contracts before the arm is connected: a mismatch refuses to start. `ArmProcess` then runs
+   `LocalConnection` instead of the gateway's; episode capture, which the site asks for, is off.
 4. **The incident record**: a rolling buffer of observation metadata, every chunk and the
    runtime's decision on it with its reason, operator commands and faults, written as MCAP (it
    opens in Foxglove and Rerun) on a fault or on request. Images off by default; nothing leaves

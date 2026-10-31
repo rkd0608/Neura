@@ -3,10 +3,12 @@
 neura-arm check CONFIG [--robot-profile FILE]
     connect the arm without moving it, check its calibration and the robot profile against it,
     print where every joint is, and let go (the arm holds, by default)
-neura-arm run CONFIG
-    serve it: the runtime, a session with the gateway, and operator commands on standard input
-    (arm, stop, takeover, reset, instruction TEXT, status, quit). Nothing moves until the
-    operator types arm. Ctrl-C ends the task and exits.
+neura-arm run CONFIG [--policy URI]
+    serve it: the runtime, the policy (from the site gateway, or the configuration's `policy:`
+    without one), and operator commands on standard input (arm, stop, takeover, reset,
+    instruction TEXT, status, quit). Nothing moves until the operator types arm. Ctrl-C ends the
+    task and exits. --policy picker.py or --policy neura://host:port runs that policy with the
+    configuration's contracts instead of the gateway's.
 
 CONFIG is a YAML file: examples/robots/so101-arm.yaml for an SO-101 on its servo bus,
 examples/robots/ros2-arm.yaml for a ROS 2 robot through the relay node (``neura_robots.ros2``).
@@ -33,11 +35,13 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from neura_contracts import RobotProfile, load_document
 from neura_robots.lock import ActuatorBusyError
+from neura_robots.policies import PolicyConfig, describe, open_policy
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
 from neura_robots.ros2.arm import Ros2Arm, Ros2Config, Ros2Joint
 from neura_robots.so101 import ArmError, CameraConfig, So101Arm, So101Config
 from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.grpc_client import RobotCredentials
+from neura_runtime.policy import PolicyClient, PolicyError
 
 
 class _Model(BaseModel):
@@ -111,8 +115,10 @@ class CameraEntry(_Model):
 
 class RobotConfig(_Model):
     robot_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
-    gateway: str
-    credentials: CredentialsConfig
+    # Served by the site gateway (with credentials), or by `policy` directly.
+    gateway: str | None = None
+    credentials: CredentialsConfig | None = None
+    policy: PolicyConfig | None = None
     # Contracts to serve; without them, whatever revision the site assigns this robot.
     revision: RevisionConfig | None = None
     arm: ArmConfig | Ros2ArmConfig
@@ -121,6 +127,16 @@ class RobotConfig(_Model):
     # Where the robot spools recorded episodes when its site records them (design §28.2); unset,
     # the robot never records, whatever the site asks.
     capture_dir: Path | None = None
+
+    @model_validator(mode="after")
+    def _one_source(self) -> RobotConfig:
+        if (self.gateway is None) == (self.policy is None):
+            raise ValueError("set gateway (and credentials) or policy, not both")
+        if self.gateway is not None and self.credentials is None:
+            raise ValueError("a gateway needs credentials")
+        if self.policy is not None and self.revision is None:
+            raise ValueError("a policy without a gateway needs `revision:`, the robot's contracts")
+        return self
 
     @model_validator(mode="after")
     def _cameras_match_the_arm(self) -> RobotConfig:
@@ -132,8 +148,14 @@ class RobotConfig(_Model):
         return self
 
     @classmethod
-    def load(cls, path: Path) -> RobotConfig:
+    def load(cls, path: Path, *, policy: str | None = None) -> RobotConfig:
+        """``policy`` (a URI) runs that policy instead of the gateway, keeping any other
+        ``policy:`` settings the file has."""
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if policy is not None:
+            data.pop("gateway", None)
+            data.pop("credentials", None)
+            data["policy"] = {**(data.get("policy") or {}), "uri": policy}
         base = path.parent
         config = cls.model_validate(data)
 
@@ -149,7 +171,7 @@ class RobotConfig(_Model):
                     "execution_profile": rel(revision.execution_profile),
                 }
             )
-        credentials = config.credentials.model_copy(
+        credentials = config.credentials and config.credentials.model_copy(
             update={"cert_dir": rel(config.credentials.cert_dir)}
         )
         arm: ArmConfig | Ros2ArmConfig
@@ -204,6 +226,7 @@ class RobotConfig(_Model):
 
     def robot_credentials(self) -> RobotCredentials:
         c = self.credentials
+        assert c is not None  # with a gateway, the validator requires credentials
         if c.cert_dir is not None:
             loaded = RobotCredentials.from_directory(c.cert_dir, self.robot_id)
             return dataclasses.replace(loaded, server_name=c.tls_server_name)
@@ -267,7 +290,9 @@ def _read_operator(inbox: OperatorInbox) -> None:
         inbox.submit(line)
 
 
-async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> int:
+async def serve(
+    config: RobotConfig, *, status_every_s: float | None = None, base: Path = Path(".")
+) -> int:
     inbox = OperatorInbox()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -289,8 +314,9 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
     threading.Thread(target=_read_operator, args=(inbox,), daemon=True).start()
 
     binding = config.binding()
-    credentials = config.robot_credentials()
+    credentials = config.robot_credentials() if config.gateway is not None else None
     arm: So101Arm | Ros2Arm | None = None
+    policy: PolicyClient | None = None
     current: list[Any] = []
 
     async def report() -> None:
@@ -306,6 +332,9 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
     reporter = asyncio.create_task(report())
     try:
         if binding is not None:
+            if config.policy is not None:  # checked before the arm is even connected
+                policy = await open_policy(config.policy, binding, base)
+                _say(f"{config.robot_id}: the policy is {describe(config.policy)}")
             arm = config.open_arm(binding.robot)
             arm.connect()
             process = ArmProcess(
@@ -313,12 +342,13 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
                 binding,
                 config.robot_id,
                 config.revision.id if config.revision else "",
-                config.gateway,
-                credentials,
+                config.gateway or "",
+                credentials or "",
                 inbox=inbox,
                 instruction=config.instruction,
                 say=_say,
                 on_quit=stop.set,
+                policy=policy,
             )
             current.append(process)
             _say(f"{config.robot_id}: connected to the arm on {_where(arm)}; serving")
@@ -332,6 +362,9 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
                 _say(f"{config.robot_id}: connected to the arm on {_where(arm)}")
                 return arm
 
+            # No revision: the site assigns one, so there is a gateway (the validator says so).
+            assert config.gateway is not None
+            assert credentials is not None
             assigned = AssignedArm(
                 open_arm,
                 config.robot_id,
@@ -345,12 +378,14 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
             current.append(assigned)
             _say(f"{config.robot_id}: waiting for the site to assign a revision")
             await assigned.run(stop)
-    except (ArmError, ActuatorBusyError) as exc:
+    except (ArmError, ActuatorBusyError, PolicyError) as exc:
         print(f"cannot serve: {exc}", file=sys.stderr)
         return 1
     finally:
         stop.set()
         await reporter
+        if policy is not None:
+            await policy.close()
         if arm is not None:
             on_exit = config.arm.on_exit
             if arm.close():
@@ -371,12 +406,17 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = sub.add_parser("run", help="serve the arm")
     run_parser.add_argument("config", type=Path)
     run_parser.add_argument("--status-every", type=float, default=None, metavar="SECONDS")
+    run_parser.add_argument(
+        "--policy", metavar="URI", help="picker.py[:Class] or neura://host:port"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=os.environ.get("NEURA_LOG_LEVEL", "warning").upper())
-    config = RobotConfig.load(args.config)
+    config = RobotConfig.load(args.config, policy=getattr(args, "policy", None))
     if args.command == "check":
         return check(config, args.robot_profile)
-    return asyncio.run(serve(config, status_every_s=args.status_every))
+    return asyncio.run(
+        serve(config, status_every_s=args.status_every, base=args.config.parent.resolve())
+    )
 
 
 if __name__ == "__main__":

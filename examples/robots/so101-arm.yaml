@@ -8,6 +8,14 @@
 robot_id: so101-a                 # the robot's name at the site: its certificate's name
 gateway: gateway.site.internal:50051
 
+# Without a site gateway, a policy instead (and `revision:` below, the contracts):
+#   policy:
+#     uri: picker.py                # an @neura.policy class, in this process
+#     # uri: neura://gpu-box:50061  # behind `neura-robot serve` (NEURA_SERVE_TOKEN)
+#     # uri: openpi://gpu-box:8000  # openpi's server, with `openpi:` naming its inputs
+#     # uri: lerobot://gpu-box:8080 # LeRobot's server, with `lerobot:` naming the checkpoint
+# or, keeping this file as it is: neura-arm run so101-arm.yaml --policy picker.py
+
 credentials:
   # Mutual TLS: so101-a.key and so101-a.pem (from `neura-robot keygen` and
   # `neura-agent robot-certificate`) and the site's ca.pem.

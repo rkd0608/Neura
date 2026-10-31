@@ -50,6 +50,8 @@ from neura_runtime.grpc_client import (
     monotonic_us,
 )
 from neura_runtime.invariants import InvariantMonitor, watch_robot
+from neura_runtime.local import LocalConnection
+from neura_runtime.policy import PolicyClient
 from neura_runtime.runtime import ACTIVE_STATES, RobotRuntime, RuntimeState, TransitionError
 from neura_runtime.session import SessionClient, SessionConfig
 
@@ -98,7 +100,10 @@ class ArmProcess:
         on_quit: Callable[[], None] | None = None,
         capture: CaptureConfig | None = None,
         capture_dir: Path | None = None,
+        policy: PolicyClient | None = None,
     ) -> None:
+        """Served by the site gateway at ``target``, or, with ``policy``, by that policy directly
+        (``neura_runtime.local``): the runtime is the same either way."""
         self.arm = arm
         self.robot_id = robot_id
         self.revision_id = revision_id
@@ -108,7 +113,11 @@ class ArmProcess:
         self.client = SessionClient(
             self.runtime, SessionConfig(robot_id=robot_id, revision_id=revision_id)
         )
-        self.connection = GatewayConnection(self.client, target, credentials, on_tick=self._on_tick)
+        self.connection: GatewayConnection | LocalConnection = (
+            LocalConnection(self.client, policy, on_tick=self._on_tick)
+            if policy is not None
+            else GatewayConnection(self.client, target, credentials, on_tick=self._on_tick)
+        )
         self.inbox = inbox or OperatorInbox()
         self.say = say
         self.sample_every = max(1, sample_every)

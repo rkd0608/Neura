@@ -15,6 +15,7 @@ pytest.importorskip("lerobot", reason="needs the models group: uv sync --group m
 
 from neura_contracts import ReasonCode, RobotProfile
 from neura_robots.emulator import SO101Emulator, write_calibration
+from neura_robots.policies import PolicyConfig, open_policy
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
 from neura_robots.so101 import CameraConfig, So101Arm, So101Config
 from neura_runtime.binding import load_binding
@@ -101,13 +102,36 @@ class Served:
         await self.task
 
 
+# Without a gateway: every joint toward mid-range, as the gateway's mock policy moves them.
+MID_RANGE = """
+import numpy as np
+import neura_contracts.authoring as neura
+
+
+@neura.policy(chunk_length={chunk_length})
+class MidRange:
+    def act(self, observation):
+        return np.tile(np.array({targets}, dtype=np.float32), ({chunk_length}, 1))
+"""
+
+
 @pytest.fixture
-async def served(config: So101Config, gateway: str) -> AsyncIterator[tuple[Served, list[str]]]:
+async def served(
+    config: So101Config, gateway: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> AsyncIterator[tuple[Served, list[str]]]:
     binding = load_binding(*FILES)
+    policy = None
+    if getattr(request, "param", "gateway") == "policy":
+        targets = [(c.min + c.max) / 2 for c in binding.robot.spec.command_interface]
+        source = tmp_path / "mid_range.py"
+        source.write_text(MID_RANGE.format(chunk_length=binding.chunk_length, targets=targets))
+        policy = await open_policy(PolicyConfig(uri=source.name), binding, tmp_path)
     arm = So101Arm(config, binding.robot)
     arm.connect()
     said: list[str] = []
-    process = ArmProcess(arm, binding, "arm-1", "rev_arm", gateway, "token-arm-1", say=said.append)
+    process = ArmProcess(
+        arm, binding, "arm-1", "rev_arm", gateway, "token-arm-1", say=said.append, policy=policy
+    )
     monitor = InvariantMonitor(clock=lambda: time.monotonic_ns() // 1000, gateway_observed=False)
     process.watch(monitor)
     served = Served(process, said)
@@ -117,6 +141,7 @@ async def served(config: So101Config, gateway: str) -> AsyncIterator[tuple[Serve
     assert monitor.violations == 0, monitor.summary()
 
 
+@pytest.mark.parametrize("served", ["gateway", "policy"], indirect=True)
 async def test_nothing_moves_until_the_operator_arms(
     served: tuple[Served, list[str]], emulator: SO101Emulator
 ) -> None:

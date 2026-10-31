@@ -299,6 +299,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/cli.py`: ``neura-arm``: serve a real arm through a site gateway.
 - `neura_robots/emulator.py`: An emulated SO-101 servo bus: six Feetech STS3215 servos behind a pseudo-terminal.
 - `neura_robots/lock.py`: One actuator authority per robot (design §6.3).
+- `neura_robots/policies.py`: The policy a robot runs without a site gateway: ``policy:`` in a ``neura-arm`` configuration, opened and checked against the robot's contracts before anything can move (design §30.2).
 - `neura_robots/process.py`: The robot-side process for an arm (design §7): the runtime, the session client and the gateway connection around a connected arm (``arm.Arm``: the SO-101, or the simulated ALOHA), driven by a local …
 - `neura_robots/ros2/__init__.py`: ROS 2 robots: a relay node on the robot's ROS side, and the arm Neura's robot-side process drives through it (design §29.8).
 - `neura_robots/ros2/arm.py`: A ROS 2 robot as an arm Neura's robot-side process drives (``arm.Arm``), through the relay node running in the robot's ROS environment (``ros2.relay``).

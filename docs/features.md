@@ -116,6 +116,10 @@ signed upgrades, and the local site API.
   (in-process, served, and openpi's own server in Docker: build `packages/neura-runtime/tests/openpi/`
   as `neura-openpi-test:dev` and set `NEURA_TEST_OPENPI_IMAGE`; LeRobot's own server with the
   models group), `test_local.py::test_a_lerobot_reply_is_unpickled_only_as_actions`
+- Run a robot on one: `neura-arm run CONFIG --policy picker.py` (or `neura://`, `openpi://`,
+  `lerobot://`; `packages/neura-robots/src/neura_robots/policies.py`); tested by
+  `packages/neura-robots/tests/test_process.py::test_nothing_moves_until_the_operator_arms`
+  (through the gateway and through a policy)
 - See it: `neura-robot serve picker.py` serves an `@neura.policy` class on 127.0.0.1:50061
 
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)

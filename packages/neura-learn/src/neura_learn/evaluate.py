@@ -25,7 +25,7 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_learn.stats import compare
+from neura_contracts.stats import compare
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.capture.episode import Episode
 

@@ -1829,7 +1829,7 @@ robots (§28.4, *Jobs at the site*). Three suites:
 - **Simulation.** Both models on the same seeded scenes of a task the site can simulate (ALOHA
   transfer-cube and insertion, §25), in lockstep: the world waits for the policy, as LeRobot
   evaluates its published policies, so the comparison measures the models and not the computer.
-  The verdict is a paired non-inferiority test on the success rates (`neura_learn.stats`): the
+  The verdict is a paired non-inferiority test on the success rates (`neura_contracts.stats`): the
   difference of paired proportions with a Newcombe hybrid-score interval, one-sided at 95%,
   against a margin agreed before the run (0.10 by default):
   - `superior`: the lower bound is above zero;

@@ -22,7 +22,6 @@ import argparse
 import asyncio
 import contextlib
 import json
-import math
 import random
 import sys
 import tempfile
@@ -35,6 +34,7 @@ from typing import Any
 import numpy as np
 
 from neura_contracts import FaultResponse
+from neura_contracts.stats import difference_unpaired
 from neura_robots.process import ArmProcess
 from neura_robots.qualify.harness import write_report
 from neura_robots.qualify.protocol import MARGIN, PAIRS
@@ -44,27 +44,6 @@ from neura_runtime.binding import ExecutionBinding
 from neura_runtime.grpc_client import monotonic_us
 from neura_runtime.runtime import RuntimeState, TransitionError
 from neura_sim.grpc_robots import load_binding
-
-Z_95_ONE_SIDED = 1.6448536269514722
-
-
-def wilson(successes: int, n: int, z: float = Z_95_ONE_SIDED) -> tuple[float, float]:
-    """Wilson score interval for a proportion."""
-    if n == 0:
-        return 0.0, 1.0
-    p = successes / n
-    centre = p + z * z / (2 * n)
-    spread = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    denominator = 1 + z * z / n
-    return (centre - spread) / denominator, (centre + spread) / denominator
-
-
-def newcombe_lower(s1: int, n1: int, s2: int, n2: int, z: float = Z_95_ONE_SIDED) -> float:
-    """Lower confidence bound for p1 - p2 (Newcombe 1998, method 10: hybrid score)."""
-    p1, p2 = s1 / n1, s2 / n2
-    l1, _ = wilson(s1, n1, z)
-    _, u2 = wilson(s2, n2, z)
-    return p1 - p2 - math.sqrt((p1 - l1) ** 2 + (u2 - p2) ** 2)
 
 
 def schedule(pairs: int, seed: int) -> list[str]:
@@ -257,7 +236,7 @@ class Episodes:
         s_n, n_n = sum(e.success for e in by["neura"]), len(by["neura"])
         s_l, n_l = sum(e.success for e in by["local"]), len(by["local"])
         complete = n_n == n_l == config.pairs
-        lower = newcombe_lower(s_n, n_n, s_l, n_l) if n_n and n_l else None
+        lower = difference_unpaired(s_n, n_n, s_l, n_l)[1] if n_n and n_l else None
         return {
             "kind": "neura-closed-loop-episodes",
             "version": 1,

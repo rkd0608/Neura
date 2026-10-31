@@ -13,33 +13,23 @@ from typing import Any
 
 import pytest
 
+from neura_contracts.stats import difference_unpaired
 from neura_robots.qualify.cli import promotion_problems
-from neura_robots.qualify.episodes import (
-    Episode,
-    Episodes,
-    EpisodesConfig,
-    newcombe_lower,
-    schedule,
-    wilson,
-)
+from neura_robots.qualify.episodes import Episode, Episodes, EpisodesConfig, schedule
 from neura_robots.qualify.harness import Qualification, QualifyConfig, ScenarioResult
+from neura_robots.qualify.protocol import MARGIN
 from neura_robots.so101 import So101Config
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_wilson_and_newcombe_match_the_published_example() -> None:
-    # Newcombe (1998), Statistics in Medicine 17:873, example (a): 56/70 vs 48/80, method 10.
-    z = 1.959963984540054
-    assert newcombe_lower(56, 70, 48, 80, z) == pytest.approx(0.0524, abs=1e-4)
-    low, high = wilson(56, 70, z)
-    assert (low, high) == pytest.approx((0.6918, 0.8770), abs=1e-4)  # the closed form
-
-
 def test_the_default_protocol_can_show_non_inferiority() -> None:
-    assert newcombe_lower(27, 30, 27, 30) > -0.15  # 30 episodes each at 90%: passes
-    assert newcombe_lower(10, 10, 10, 10) < -0.15  # 10 each cannot, even at 100%
-    assert newcombe_lower(20, 30, 27, 30) < -0.15  # a real drop fails
+    def lower(s1: int, n1: int, s2: int, n2: int) -> float:
+        return difference_unpaired(s1, n1, s2, n2)[1]
+
+    assert lower(27, 30, 27, 30) > -MARGIN  # 30 episodes each at 90%: passes
+    assert lower(10, 10, 10, 10) < -MARGIN  # 10 each cannot, even at 100%
+    assert lower(20, 30, 27, 30) < -MARGIN  # a real drop fails
 
 
 def test_episodes_alternate_in_balanced_blocks() -> None:

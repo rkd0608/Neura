@@ -4,7 +4,8 @@ evidence to decide."""
 from __future__ import annotations
 
 import pytest
-from neura_learn.stats import (
+
+from neura_contracts.stats import (
     Verdict,
     compare,
     difference_paired,
@@ -12,6 +13,14 @@ from neura_learn.stats import (
     passes,
     wilson,
 )
+
+
+def test_wilson_and_newcombe_match_the_published_example() -> None:
+    # Newcombe (1998), Statistics in Medicine 17:873, example (a): 56/70 vs 48/80, method 10.
+    z = 1.959963984540054
+    delta, low, high = difference_unpaired(56, 70, 48, 80, z)
+    assert (delta, low, high) == pytest.approx((0.2, 0.0524, 0.3339), abs=1e-4)
+    assert wilson(56, 70, z) == pytest.approx((0.6918, 0.8770), abs=1e-4)  # closed form
 
 
 def test_wilson_intervals_stay_inside_zero_and_one() -> None:

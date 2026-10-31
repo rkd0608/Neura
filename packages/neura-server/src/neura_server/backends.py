@@ -33,9 +33,10 @@ from neura.v1 import worker_pb2, worker_pb2_grpc
 from neura_adapters import PolicyBackend
 from neura_contracts import ReasonCode, load_document
 from neura_runtime.policy import ModelInputs, PolicyError
+from neura_runtime.remote import encode_inputs, outputs_from
 from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, private_directory
 from neura_server.supervision import WORKER_STOP_TIMEOUT_S, RestartBackoff
-from neura_server.worker import MAX_MESSAGE_BYTES, encode_inputs, outputs_from
+from neura_server.worker import MAX_MESSAGE_BYTES
 
 log = logging.getLogger("neura.gateway.workers")
 UNIX_PATH_MAX = 107

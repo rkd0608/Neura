@@ -29,6 +29,7 @@ from numpy.typing import NDArray
 from neura_adapters.base import AdapterProperties, blank_inputs
 from neura_contracts import ReasonCode, authoring
 from neura_contracts.inference import PolicyDeclaration
+from neura_runtime.authored import checked, observation
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.policy import ModelInputs, PolicyError
 
@@ -107,17 +108,8 @@ class PythonPolicy:
         for size in batch_sizes:
             self.infer([blank] * size)
 
-    @staticmethod
-    def _observation(inputs: ModelInputs) -> dict[str, Any]:
-        observation: dict[str, Any] = dict(inputs.state)
-        for role, image in inputs.images.items():
-            observation[f"observation.images.{role}"] = image
-        if inputs.instruction:
-            observation["task"] = inputs.instruction
-        return observation
-
     def infer(self, batch: Sequence[ModelInputs]) -> list[NDArray[np.float32]]:
-        observations = [self._observation(inputs) for inputs in batch]
+        observations = [observation(inputs) for inputs in batch]
         try:
             if callable(self._batch) and len(observations) > 1:
                 results = list(self._batch(observations))
@@ -134,18 +126,7 @@ class PythonPolicy:
                 f"act_batch returned {len(results)} chunks for {len(observations)} observations"
             )
         expected = (self.chunk_length, self.action_dim)
-        chunks = []
-        for result in results:
-            chunk = np.asarray(result, dtype=np.float32)
-            if chunk.shape != expected:
-                raise PolicyError(
-                    f"the policy returned {tuple(chunk.shape)}; the robot needs {expected} "
-                    "(chunk_length, action features)"
-                )
-            if not np.isfinite(chunk).all():
-                raise PolicyError("the policy returned NaN or infinite actions")
-            chunks.append(chunk)
-        return chunks
+        return [checked(result, expected) for result in results]
 
 
 def load(

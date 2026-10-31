@@ -2288,9 +2288,16 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    or a typed failure. Freshness, task epochs, merging and faults are the runtime's and behave the
    same over every transport: `LocalConnection` plays the gateway's part for one robot and a
    `PolicyClient` reaches the policy; the observation decoder and the chunk builder are shared
-   with the gateway (`neura_runtime.serving`). Transports, in order: in-process (done; inference on the robot computer),
-   openpi's websocket server, LeRobot's async gRPC server, Neura's gateway; hosted APIs when their
-   protocols are public.
+   with the gateway (`neura_runtime.serving`). Custom models come first, since every team has one:
+   an `@neura.policy` class runs in the robot's process (`InProcessPolicy`, inference on the robot
+   computer) or on another machine with `neura-robot serve`, which speaks the policy worker
+   protocol the site gateway already uses with its workers; the robot checks what is served
+   against its contracts first. Over a network the server requires a token and refuses to listen
+   beyond loopback without one; traffic is not encrypted, so TLS in front of it is the operator's
+   for now. Then adapters for servers teams already run, each a thin translator held to the same
+   suite: openpi's websocket server, then LeRobot's async gRPC server (its replies are pickled:
+   unpickled only as the types it sends, and only from servers the robot's owner trusts). Hosted
+   APIs when their protocols are public.
 3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile
    against what the policy server serves before anything can move.
 4. **The incident record**: a rolling buffer of observation metadata, every chunk and the

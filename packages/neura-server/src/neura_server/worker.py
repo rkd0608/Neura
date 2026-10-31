@@ -31,7 +31,6 @@ from typing import Any, Literal, cast
 
 import grpc
 import numpy as np
-from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, worker_pb2, worker_pb2_grpc
 from neura_adapters import Adapter, load_adapter
@@ -39,7 +38,8 @@ from neura_adapters.profiler import profile_adapter
 from neura_contracts import ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
-from neura_runtime.policy import ModelInputs, PolicyError
+from neura_runtime.policy import PolicyError
+from neura_runtime.remote import decode_inputs
 from neura_server.config import deployment_device, load_binding_files
 
 log = logging.getLogger("neura.worker")
@@ -125,37 +125,6 @@ def describe(adapter: Adapter, binding: ExecutionBinding) -> worker_pb2.WorkerDe
         chunk_length=adapter.chunk_length,
         action_dim=adapter.action_dim,
         pid=os.getpid(),
-    )
-
-
-# --- wire format ---------------------------------------------------------------------------
-
-
-def encode_inputs(inputs: ModelInputs) -> worker_pb2.WorkerInputs:
-    message = worker_pb2.WorkerInputs(instruction=inputs.instruction)
-    for name, vector in inputs.state.items():
-        message.state[name].CopyFrom(tensors.encode(vector))
-    for role, image in inputs.images.items():
-        message.images[role].CopyFrom(tensors.encode(image))
-    if inputs.frozen_prefix is not None:
-        message.frozen_prefix.CopyFrom(tensors.encode(inputs.frozen_prefix))
-    return message
-
-
-def decode_inputs(message: worker_pb2.WorkerInputs) -> ModelInputs:
-    state = {
-        name: np.asarray(tensors.decode(t), dtype=np.float32) for name, t in message.state.items()
-    }
-    images = {
-        role: np.asarray(tensors.decode(t), dtype=np.uint8) for role, t in message.images.items()
-    }
-    prefix = (
-        np.asarray(tensors.decode(message.frozen_prefix), dtype=np.float32)
-        if message.HasField("frozen_prefix")
-        else None
-    )
-    return ModelInputs(
-        state=state, images=images, instruction=message.instruction, frozen_prefix=prefix
     )
 
 
@@ -378,14 +347,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(adapter, binding, args.socket, gateway))
     return 0
-
-
-def outputs_from(response: worker_pb2.InferResponse) -> list[NDArray[np.float32]]:
-    """The chunks of a successful response (gateway side)."""
-    return [
-        np.asarray(tensors.decode(t, require_finite=False), dtype=np.float32)
-        for t in response.chunks.chunks
-    ]
 
 
 if __name__ == "__main__":

@@ -107,8 +107,12 @@ signed upgrades, and the local site API.
 - Code: `packages/neura-runtime/src/neura_runtime/local.py` (the gateway's part for one robot),
   `packages/neura-runtime/src/neura_runtime/policy.py` (model inputs, `PolicyClient`, the
   in-process policy), `packages/neura-runtime/src/neura_runtime/serving.py` (observations decoded,
-  chunks built: shared with the gateway)
-- Tests: `packages/neura-runtime/tests/test_local.py::test_an_in_process_policy_drives_the_runtime_and_its_failures_stop_it`
+  chunks built: shared with the gateway), `packages/neura-runtime/src/neura_runtime/authored.py`
+  (running an `@neura.policy` class), `packages/neura-runtime/src/neura_runtime/remote.py`
+  (`neura-robot serve` and the robot's client, over the policy worker protocol)
+- Tests: `packages/neura-runtime/tests/test_local.py::test_a_policy_drives_the_runtime_and_its_failures_stop_it`
+  (in-process and served)
+- See it: `neura-robot serve picker.py` serves an `@neura.policy` class on 127.0.0.1:50061
 
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
 

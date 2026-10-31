@@ -315,6 +315,7 @@ Under `packages/neura-runtime/src/`:
 
 - `neura_runtime/__init__.py`: Neura robot runtime.
 - `neura_runtime/action_queue.py`: The robot's queue of future actions and the chunk merge rules (design §5).
+- `neura_runtime/authored.py`: Running an ``@neura.policy`` class: the observation it reads and the chunk it must return (design §29.3, §30.2).
 - `neura_runtime/binding.py`: A verified (artifact, robot profile, execution profile) triple and its explicit transforms.
 - `neura_runtime/capture/__init__.py`: Episode capture on the robot (design §28.2): record, spool, upload to the site.
 - `neura_runtime/capture/episode.py`: The episode format a robot records and the site stores (design §28.2): ``neura-episode/1``.
@@ -328,6 +329,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
 - `neura_runtime/local.py`: The gateway's part for one robot, in the robot-side process: sessions, heartbeats and epochs answered locally, and each observation served by a ``PolicyClient`` (design §30.2).
 - `neura_runtime/policy.py`: What a policy takes and gives, wherever it runs: validated model inputs, the failure a robot is told about, and the client the robot-side process asks for action chunks (design §30.2).
+- `neura_runtime/remote.py`: A policy on another machine: ``neura-robot serve`` runs it behind the policy worker protocol (``neura.v1.PolicyWorker``) and ``RemotePolicy`` reaches it from the robot (design §30.2).
 - `neura_runtime/runtime.py`: The robot runtime: the only execution authority in Neura (design §5-§8).
 - `neura_runtime/serving.py`: The serving side of the data-plane protocol, shared by the site gateway and the robot-side transports: observations validated against the contract and decoded into model inputs, and policy outputs …
 - `neura_runtime/session.py`: Session handshake, lease heartbeats and RTT measurement around a ``RobotRuntime``.

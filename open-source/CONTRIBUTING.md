@@ -50,7 +50,8 @@ pytest -k incident              # by name
 Some tests need more than Python, and skip with a reason when it is missing:
 
 - **LeRobot and the SO-101 emulator**: `pip install -e ".[so101,lerobot]"` (Python 3.12+).
-- **MuJoCo**: `pip install -e ".[sim]"`.
+- **MuJoCo**: `pip install -e ".[sim]"`, and headless OpenGL to render its cameras (on Debian or
+  Ubuntu: `sudo apt-get install libegl1 libgl1`; or set `MUJOCO_GL=osmesa` with `libosmesa6`).
 - **openpi's own policy server** (Docker):
   `docker build -t neura-openpi-test:dev packages/neura-runtime/tests/openpi` and
   `NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev pytest packages/neura-runtime/tests/test_local.py`.

@@ -211,7 +211,7 @@ class GatewayConnection(ConnectionLoop):
                 assert isinstance(item.message, dataplane_pb2.ControlRequest)
                 control = await stub.Control(item.message, **kwargs)
                 self.client.on_control_response(control, self._clock())
-        except (TimeoutError, grpc.aio.AioRpcError) as exc:
+        except (asyncio.TimeoutError, grpc.aio.AioRpcError) as exc:
             log.debug("%s call failed: %s", item.channel, exc)
             if item.channel == "open":
                 self.client.on_open_failed(self._clock())

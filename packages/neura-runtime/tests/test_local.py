@@ -5,7 +5,7 @@ LeRobot's async inference server.
 The openpi case needs Docker and its image: build it with
 ``docker build -t neura-openpi-test:dev packages/neura-runtime/tests/openpi`` and set
 ``NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev``; it is skipped otherwise. The LeRobot case needs
-the models group (``uv sync --group models``).
+LeRobot (the lerobot extra, Python 3.12+).
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ async def openpi_server(binding: ExecutionBinding, work: Path) -> AsyncIterator[
 async def lerobot_server(binding: ExecutionBinding, work: Path) -> AsyncIterator[Reached]:
     """LeRobot's own policy server in a process of its own, serving a synthetic ACT checkpoint
     made for these contracts."""
-    from neura_adapters.synthetic import write_act_checkpoint
+    from neura_runtime.synthetic import write_act_checkpoint
 
     checkpoint = write_act_checkpoint(binding.artifact, work / "act")
     with socket.socket() as probe:
@@ -222,7 +222,7 @@ LEROBOT = importlib.util.find_spec("lerobot") is not None
         pytest.param(
             "lerobot",
             marks=pytest.mark.skipif(
-                not LEROBOT, reason="needs the models group: uv sync --group models"
+                not LEROBOT, reason="needs LeRobot (the lerobot or so101 extra, Python 3.12+)"
             ),
         ),
     ],
@@ -300,7 +300,7 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     assert not replay.replay(record).matches
 
 
-@pytest.mark.skipif(not LEROBOT, reason="needs the models group: uv sync --group models")
+@pytest.mark.skipif(not LEROBOT, reason="needs LeRobot (the lerobot or so101 extra, Python 3.12+)")
 def test_a_lerobot_reply_is_unpickled_only_as_actions() -> None:
     import torch
     from lerobot.async_inference.helpers import TimedAction

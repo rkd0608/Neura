@@ -43,15 +43,24 @@ REFERENCE_399 = {
 
 
 def _pinned_mujoco() -> str:
-    """The MuJoCo neura-robots pins for the simulation (its ``sim`` extra), from the package's
-    own metadata."""
-    for line in metadata.requires("neura-robots") or []:
+    """The MuJoCo pinned for the simulation (the ``sim`` extra), from the metadata of the
+    distribution ``neura_robots`` came in: neura-robots in Neura's workspace, neura-robot when
+    published."""
+    installed = []
+    for name in ("neura-robots", "neura-robot"):
+        try:
+            installed.append((name, metadata.requires(name) or []))
+        except metadata.PackageNotFoundError:
+            continue
+    assert len(installed) == 1, f"neura_robots is installed by {[n for n, _ in installed]}"
+    distribution, requires = installed[0]
+    for line in requires:
         requirement = Requirement(line)
         if requirement.name == "mujoco":
             (pin,) = requirement.specifier
             assert pin.operator == "==", f"mujoco is not pinned: {requirement}"
             return pin.version
-    raise AssertionError("neura-robots does not require mujoco")
+    raise AssertionError(f"{distribution} does not require mujoco")
 
 
 @pytest.mark.parametrize("task", ["transfer_cube", "insertion"])
@@ -59,8 +68,8 @@ def test_matches_gym_aloha(task: str) -> None:
     # Another MuJoCo is another simulation: the comparison would not hold, and must not be
     # skipped quietly either.
     assert mujoco.__version__ == _pinned_mujoco(), (
-        f"MuJoCo {mujoco.__version__} is installed, neura-robots pins {_pinned_mujoco()}: "
-        "uv sync --frozen --group models"
+        f"MuJoCo {mujoco.__version__} is installed, the sim extra pins {_pinned_mujoco()}: "
+        "reinstall the sim extra"
     )
     sim = AlohaSim(task)  # type: ignore[arg-type]
     sim.reset(1000)

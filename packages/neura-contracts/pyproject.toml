@@ -3,11 +3,12 @@ name = "neura-contracts"
 version = "0.1.0.dev0"
 description = "Neura contracts: model artifacts, robot profiles, execution profiles and compatibility checks."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "cryptography>=44",
     "pydantic>=2.13,<3",
     "pyyaml>=6.0.2",
+    "typing-extensions>=4.12",
 ]
 
 [project.scripts]
@@ -16,3 +17,8 @@ neura-contracts = "neura_contracts.cli:main"
 [build-system]
 requires = ["uv_build>=0.11,<0.14"]
 build-backend = "uv_build"
+
+# Published as neura-robot, which runs on robot computers' own Python: 3.10 and later (design §30).
+[tool.ruff]
+extend = "../../pyproject.toml"
+target-version = "py310"

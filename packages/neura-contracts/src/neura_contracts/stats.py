@@ -20,8 +20,9 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from enum import StrEnum
 from typing import Any
+
+from neura_contracts.compat import StrEnum
 
 Z_95_ONE_SIDED = 1.6448536269514722
 

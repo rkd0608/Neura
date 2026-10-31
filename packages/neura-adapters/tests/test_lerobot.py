@@ -14,10 +14,10 @@ pytest.importorskip("lerobot", reason="needs the models group: uv sync --group m
 
 from neura_adapters import load_adapter
 from neura_adapters.base import blank_inputs
-from neura_adapters.synthetic import write_act_checkpoint
 from neura_contracts.inference import weights_manifest
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.policy import ModelInputs, PolicyError
+from neura_runtime.synthetic import write_act_checkpoint
 
 
 def small_cameras(artifact: dict[str, Any], robot: dict[str, Any], profile: dict[str, Any]) -> None:
@@ -203,7 +203,7 @@ def test_a_gated_tokenizer_is_substituted_and_the_pipeline_says_so(tmp_path: Pat
     from lerobot.processor import PolicyProcessorPipeline
     from lerobot.processor.tokenizer_processor import TokenizerProcessorStep
 
-    from neura_adapters.synthetic import (
+    from neura_runtime.synthetic import (
         PALIGEMMA_TOKENIZER,
         rename_tokenizer,
         substituted_tokenizer,

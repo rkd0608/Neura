@@ -248,7 +248,7 @@ class CellRobot:
                 self.snapshot = self.status()
             except Exception:
                 log.exception("%s: cell controller", self.name)
-            with contextlib.suppress(TimeoutError):
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(stop.wait(), 0.05)
 
     def step(self, now: float) -> None:

@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
+pytest.importorskip("lerobot", reason="needs LeRobot (the lerobot or so101 extra, Python 3.12+)")
 
 from neura_contracts import FaultResponse, RobotProfile, load_document
 from neura_robots.emulator import SO101Emulator, write_calibration

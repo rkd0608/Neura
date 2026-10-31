@@ -1,7 +1,7 @@
 """The ROS 2 bridge end to end (design §29.8): a simulated ROS 2 arm in one ROS 2 Jazzy
 container, its cameras and the relay node in another, and ``neura-arm``'s process on this machine
-driving the arm through the relay and a live gateway, while packets are dropped on the arm's link
-and then the link is cut.
+driving the arm through the relay with a policy in that process, while packets are dropped on
+the arm's link and then the link is cut.
 
 Needs Docker and the test image: build it with
 ``docker build -t neura-ros2-test:dev packages/neura-robots/tests/ros2`` and set
@@ -16,27 +16,20 @@ import shutil
 import subprocess
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from neura_robots.cli import RobotConfig, Ros2ArmConfig
+from neura_robots.policies import PolicyConfig, open_policy
 from neura_robots.process import ArmProcess
 from neura_robots.ros2 import relay
 from neura_robots.ros2.arm import Ros2Arm
 from neura_runtime.binding import load_binding
 from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
-from neura_server.config import (
-    DeploymentConfig,
-    DeviceConfig,
-    GatewayConfig,
-    ServingConfig,
-    token_digest,
-)
-from neura_server.grpc_server import GatewayServer
 
 ROOT = Path(__file__).resolve().parents[3]
 FILES = tuple(
@@ -69,30 +62,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture
-async def gateway() -> AsyncIterator[str]:
-    artifact, robot, profile = FILES
-    server = GatewayServer(
-        GatewayConfig(
-            listen="127.0.0.1:0",
-            status_listen=None,
-            devices=[DeviceConfig(robot_id="arm-1", token_sha256=token_digest("token-arm-1"))],
-            deployments=[
-                DeploymentConfig(
-                    revision_id="rev_arm",
-                    artifact=artifact,
-                    robot_profile=robot,
-                    execution_profile=profile,
-                    robots=["arm-1"],
-                )
-            ],
-            assignments={"arm-1": "rev_arm"},
-            serving=ServingConfig(backend="simulated", simulate_latency=True),
-        )
-    )
-    await server.start()
-    yield f"127.0.0.1:{server.bound_port}"
-    await server.stop()
+# Every joint toward mid-range: the arm starts off-centre, so it visibly moves.
+MID_RANGE = """
+import numpy as np
+import neura_contracts.authoring as neura
+
+
+@neura.policy(chunk_length={chunk_length})
+class MidRange:
+    def act(self, observation):
+        return np.tile(np.array({targets}, dtype=np.float32), ({chunk_length}, 1))
+"""
 
 
 @contextmanager
@@ -107,8 +87,8 @@ def ros2_robot(sockets: Path) -> Iterator[Callable[[int], None]]:
     run += ["-v", f"{Path(relay.__file__).parent}:/opt/relay:ro"]
     docker("network", "create", name)
     try:
-        # Its DDS traffic over the network, where the drops are. Off-centre: the gateway's mock
-        # policy moves every joint toward mid-range.
+        # Its DDS traffic over the network, where the drops are. Off-centre: the policy moves
+        # every joint toward mid-range.
         docker(
             *run, "--name", f"{name}-arm", "--cap-add", "NET_ADMIN",
             "-e", "FASTDDS_BUILTIN_TRANSPORTS=UDPv4", IMAGE, "python3", "/opt/sim/sim_robot.py",
@@ -147,8 +127,13 @@ async def until(condition: Callable[[], bool], said: list[str], timeout: float =
         await asyncio.sleep(0.02)
 
 
-async def test_a_ros2_arm_is_driven_safely_over_a_lossy_link(gateway: str, tmp_path: Path) -> None:
+async def test_a_ros2_arm_is_driven_safely_over_a_lossy_link(tmp_path: Path) -> None:
     binding = load_binding(*FILES)
+    targets = [(c.min + c.max) / 2 for c in binding.robot.spec.command_interface]
+    (tmp_path / "mid_range.py").write_text(
+        MID_RANGE.format(chunk_length=binding.chunk_length, targets=targets)
+    )
+    policy = await open_policy(PolicyConfig(uri="mid_range.py"), binding, tmp_path)
     example = RobotConfig.load(EXAMPLE)
     assert isinstance(example.arm, Ros2ArmConfig)
     socket = tmp_path / "ros2.sock"
@@ -162,7 +147,7 @@ async def test_a_ros2_arm_is_driven_safely_over_a_lossy_link(gateway: str, tmp_p
         assert isinstance(arm, Ros2Arm)
         await asyncio.to_thread(arm.connect)  # DDS discovery between the containers first
         process = ArmProcess(
-            arm, binding, "arm-1", "rev_arm", gateway, "token-arm-1", say=said.append
+            arm, binding, "arm-1", "rev_arm", "", "", say=said.append, policy=policy
         )
         monitor = InvariantMonitor(
             clock=lambda: time.monotonic_ns() // 1000, gateway_observed=False

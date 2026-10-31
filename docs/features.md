@@ -122,6 +122,14 @@ signed upgrades, and the local site API.
   (through the gateway and through a policy)
 - See it: `neura-robot serve picker.py` serves an `@neura.policy` class on 127.0.0.1:50061
 
+### The open-source release, neura-robot (§30.2)
+
+- Code: `open-source/` (the published repository's own files), `tools/open_source.py` (assembles
+  and checks it), `tools/check_boundary.py`, `packages/neura-contracts/src/neura_contracts/compat.py`
+- Checks: `make open-source-check` (run by `make verify` when it changes): no closed imports,
+  paths or secrets; then lint, types, tests and the quickstart on Python 3.10 and 3.13
+- See it: `make open-source DEST=../neura-robot`, then follow its README
+
 ### The incident record (§30.2)
 
 - Code: `packages/neura-runtime/src/neura_runtime/incident.py` (the recorder and the MCAP file),

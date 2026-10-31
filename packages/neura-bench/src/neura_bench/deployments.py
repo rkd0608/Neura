@@ -1,7 +1,7 @@
 """Contracts and checkpoints for benchmark and test deployments.
 
 A synthetic ACT deployment is the example SO-101 contracts with the model's real architecture,
-random weights (`neura_adapters.synthetic`), the chosen camera resolution, device and precision,
+random weights (`neura_runtime.synthetic`), the chosen camera resolution, device and precision,
 and the artifact's weight manifest computed from the checkpoint. Latency, memory and batching
 depend on the architecture and input shapes, not on what the weights learned.
 """
@@ -16,16 +16,16 @@ from typing import Any, Literal
 
 import yaml
 
-from neura_adapters.synthetic import (
+from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
+from neura_contracts.inference import weights_manifest
+from neura_runtime.binding import ExecutionBinding
+from neura_runtime.synthetic import (
     Size,
     write_act_checkpoint,
     write_diffusion_checkpoint,
     write_pi0_checkpoint,
     write_smolvla_checkpoint,
 )
-from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
-from neura_contracts.inference import weights_manifest
-from neura_runtime.binding import ExecutionBinding
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "examples" / "contracts"
 

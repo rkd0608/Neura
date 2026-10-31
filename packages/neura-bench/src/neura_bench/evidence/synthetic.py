@@ -24,7 +24,7 @@ CONFIG = {
 
 
 def write_checkpoint(directory: Path, *, size: str = "tiny", seed: int = 0) -> Path:
-    from neura_adapters.synthetic import write_act_checkpoint
+    from neura_runtime.synthetic import write_act_checkpoint
 
     with tempfile.TemporaryDirectory() as scratch:
         draft_dir = Path(scratch)

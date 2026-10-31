@@ -18,7 +18,8 @@ EXAMPLE = ROOT / "examples" / "robots" / "so101-arm.yaml"
 def test_the_example_configuration_is_valid() -> None:
     config = RobotConfig.load(EXAMPLE)
     assert config.robot_id == "so101-a"
-    assert config.revision is None  # runs what the site assigns
+    # Served by a site, which assigns the contracts, or by a policy, with the contracts pinned.
+    assert (config.revision is None) == (config.gateway is not None)
     assert config.arm.on_exit == "hold"
     assert set(config.cameras) == {"front", "wrist"}
     so101 = config.so101()
@@ -52,7 +53,7 @@ def test_relative_paths_are_relative_to_the_file(tmp_path: Path) -> None:
 
 
 def test_check_on_the_emulated_arm(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
+    pytest.importorskip("lerobot", reason="needs LeRobot (the so101 extra, Python 3.12+)")
     from neura_robots import cli
     from neura_robots.emulator import SO101Emulator, write_calibration
 

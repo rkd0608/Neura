@@ -6,7 +6,8 @@ The packages listed under ``[tool.neura] open-source`` in pyproject.toml are pub
 ``neura-robot`` (design §30). Each may depend on, and import, only the others in that list: any
 import of another Neura package fails, including one made inside a function or only for type
 checking, since the published package has to install, import and type-check without it. Their
-tests are not checked yet: some still drive the closed gateway (§30.2).
+tests run in the published repository too: a test may reach Neura's closed code (the site gateway,
+say) only behind ``pytest.importorskip`` of that package, so it is skipped there.
 """
 
 from __future__ import annotations
@@ -43,6 +44,22 @@ def neura_imports(path: Path) -> list[tuple[int, str]]:
     return found
 
 
+def skipped_unless(path: Path) -> set[str]:
+    """The top-level packages a test file skips itself without (``pytest.importorskip``)."""
+    found = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), str(path))):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "importorskip"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            found.add(node.args[0].value.split(".")[0])
+    return found
+
+
 def problems() -> list[str]:
     packages = open_packages()
     allowed = set().union(*(modules(p) for p in packages))
@@ -59,6 +76,14 @@ def problems() -> list[str]:
             for line, module in neura_imports(path):
                 if module not in allowed:
                     out.append(f"{path.relative_to(ROOT)}:{line}: imports closed {module}")
+        for path in sorted((ROOT / "packages" / package / "tests").rglob("*.py")):
+            guarded = skipped_unless(path)
+            for line, module in neura_imports(path):
+                if module not in allowed and module not in guarded:
+                    out.append(
+                        f"{path.relative_to(ROOT)}:{line}: imports closed {module} without "
+                        f'pytest.importorskip("{module}")'
+                    )
     return out
 
 

@@ -24,12 +24,13 @@ import struct
 import zlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+
+from neura_contracts.compat import StrEnum
 
 FORMAT = "neura-episode/1"
 MANIFEST = "episode.json"

@@ -23,6 +23,7 @@ touches end to end (code, tests, docs, how to prove it works) is in
 | `docs/` | The engineering design (neura-design.md), this map and the feature map. |
 | `examples/` | Example contracts, robots and a site, used by tests and the docs. |
 | `landing/` | The NucleiLabs site (React, Vite). |
+| `open-source/` | The published neura-robot repository's own files (its code: packages/). |
 | `packages/` | The Python workspace: one package per component (below). |
 | `proto/` | The protobuf schema (neura.v1): the source of the generated bindings. |
 | `qualification/` | Hardware qualification reports (written by neura-qualify). |
@@ -90,7 +91,6 @@ Under `packages/neura-adapters/src/`:
 - `neura_adapters/mock.py`: A deterministic policy for tests, the simulator and development stacks.
 - `neura_adapters/profiler.py`: Measuring an adapter on its device: latency per batch size and peak memory (design §9.2).
 - `neura_adapters/python.py`: Policies brought as Python classes: ``@neura.policy`` (design §29.3).
-- `neura_adapters/synthetic.py`: Checkpoints with the right architecture and random weights, for tests and benchmarks.
 
 Tests, under `packages/neura-adapters/tests/`: `test_lerobot.py`, `test_lora.py`, `test_python_adapter.py`
 
@@ -131,7 +131,7 @@ Under `packages/neura-agent/src/`:
 - `neura_agent/trust.py`: Publisher keys this server trusts (design §17.3, §17.4).
 - `neura_agent/upgrade.py`: Signed agent upgrades with automatic rollback (design §17.3).
 
-Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_jobs.py`, `test_outbound.py`, `test_placement.py`, `test_preflight.py`, `test_robots.py`
+Tests, under `packages/neura-agent/tests/`: `conftest.py`, `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_jobs.py`, `test_outbound.py`, `test_placement.py`, `test_preflight.py`, `test_robots.py`
 
 ## packages/neura-bench
 
@@ -178,6 +178,7 @@ Under `packages/neura-contracts/src/`:
 - `neura_contracts/authoring.py`: ``@neura.policy``: any model, in any framework, as a Neura policy (design §29.3).
 - `neura_contracts/canonical.py`: Canonical JSON (RFC 8785, JSON Canonicalization Scheme) and content digests.
 - `neura_contracts/cli.py`: ``neura-contracts`` command line: validate documents, print digests, check compatibility, sign artifacts and seal weights.
+- `neura_contracts/compat.py`: What Python 3.11 added that neura-robot uses, for robot computers still on 3.10 (JetPack 6, ROS 2 Humble): ``StrEnum``, whose members are their string values.
 - `neura_contracts/compatibility.py`: Compatibility check between a model artifact, a robot profile and an execution profile (§4.4).
 - `neura_contracts/core.py`: Shared vocabularies and constrained types for Neura contracts.
 - `neura_contracts/documents.py`: Loading contract documents from YAML or JSON text.
@@ -338,6 +339,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/runtime.py`: The robot runtime: the only execution authority in Neura (design §5-§8).
 - `neura_runtime/serving.py`: The serving side of the data-plane protocol, shared by the site gateway and the robot-side transports: observations validated against the contract and decoded into model inputs, and policy outputs …
 - `neura_runtime/session.py`: Session handshake, lease heartbeats and RTT measurement around a ``RobotRuntime``.
+- `neura_runtime/synthetic.py`: Checkpoints with the right architecture and random weights, for tests and benchmarks.
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
 
@@ -534,6 +536,7 @@ Under `tools/`:
 - `gen_reason_codes.py`: Generate the reason-code modules (Python, and TypeScript for the console) from catalog/reason_codes.yaml.
 - `gen_schemas.py`: Export JSON Schemas for the contract documents into schemas/.
 - `gen_sdk.py`: Generate the Python SDK's models and operations from api/openapi.yaml.
+- `open_source.py`: Assemble and check the open-source repository, neura-robot, from this one (design §30).
 - `refresh_example_bindings.py`: Refresh execution-profile bindings in examples/contracts to the current document digests.
 - `shoot.mjs`: Look at the NucleiLabs site and the docs the way a visitor does, and fail when a page is broken.
 - `smoke_api.py`: Drive a running dev stack through a whole pilot, the way a customer would, using the SDK.

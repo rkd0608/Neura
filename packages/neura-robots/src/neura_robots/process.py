@@ -458,7 +458,7 @@ class AssignedArm:
                     self.say(f"serving revision {wanted}")
                     process_stop = asyncio.Event()
                     task = asyncio.create_task(self.process.connection.run(process_stop))
-            with contextlib.suppress(TimeoutError):
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=self.poll)
         if task is not None:
             process_stop.set()

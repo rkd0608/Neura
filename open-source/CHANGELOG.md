@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes to neura-robot. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Semantic Versioning](https://semver.org/), with breaking changes possible before 1.0.
+
+## [Unreleased]
+
+### Added
+
+- The robot-side runtime: freshness checks, task epochs, chunk merging (replace, blend, real-time
+  chunking), fault handling with latched faults, and operator authority (arm, stop, takeover,
+  reset).
+- Four ways to reach a policy, one runtime path: in-process `@neura.policy` classes,
+  `neura-robot serve` on another machine, openpi's policy server and LeRobot's async server.
+- `neura-arm`: run an SO-101 or a ROS 2 arm against any of them, the policy checked against the
+  robot's contracts before the arm is connected.
+- Incident records: the last moments of a robot's runtime as MCAP, written on a fault or on
+  request, and `neura-robot replay` to run one back through a fresh runtime.
+- The ROS 2 relay node, an SO-101 servo-bus emulator, and the ALOHA tasks in MuJoCo.
+- Python 3.10 to 3.13, on x86-64 and arm64.
+
+## Roadmap
+
+Planned before 1.0, roughly in order:
+
+- One conformance suite every policy transport must pass, with network-fault sweeps (latency,
+  jitter, stalls, blackouts) and a 24-hour soak per transport.
+- A published, reproducible comparison against LeRobot's async inference under the same faults.
+- Runs on real hardware: an SO-101 through each transport, and a Jetson.
+- Built-in TLS for `neura-robot serve`.
+- Hosted policy APIs as transports, as their protocols are published.

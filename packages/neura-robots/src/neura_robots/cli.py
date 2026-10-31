@@ -324,7 +324,7 @@ async def serve(
 
     async def report() -> None:
         while status_every_s and not stop.is_set():
-            with contextlib.suppress(TimeoutError):
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=status_every_s)
             process = current[0] if current else None
             if isinstance(process, AssignedArm):
@@ -418,7 +418,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     logging.basicConfig(level=os.environ.get("NEURA_LOG_LEVEL", "warning").upper())
-    config = RobotConfig.load(args.config, policy=getattr(args, "policy", None))
+    policy = getattr(args, "policy", None)
+    if policy and "://" not in policy:  # a file on the command line: from where it was typed
+        path, sep, name = policy.partition(":")
+        policy = str(Path(path).resolve()) + sep + name
+    config = RobotConfig.load(args.config, policy=policy)
     if args.command == "check":
         return check(config, args.robot_profile)
     return asyncio.run(

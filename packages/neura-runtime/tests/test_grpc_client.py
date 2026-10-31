@@ -24,7 +24,7 @@ def _message(sequence: int) -> dataplane_pb2.RobotMessage:
 async def _take(iterator: object, timeout: float = 0.5) -> dataplane_pb2.RobotMessage | None:
     try:
         return await asyncio.wait_for(iterator.__anext__(), timeout)  # type: ignore[attr-defined]
-    except (TimeoutError, StopAsyncIteration):
+    except (asyncio.TimeoutError, StopAsyncIteration):
         return None
 
 

@@ -1,0 +1,176 @@
+[project]
+name = "neura-robot"
+version = "0.1.0"
+description = "The robot-side runtime for learned robot policies: one safety layer between any policy and any robot."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "NucleiLabs" }]
+keywords = [
+    "robotics",
+    "robot-learning",
+    "vla",
+    "lerobot",
+    "openpi",
+    "ros2",
+    "policy-serving",
+    "safety",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "cryptography>=44",
+    "grpcio>=1.84,<2",
+    "mcap>=1.2",
+    "numpy>=2.2",
+    "protobuf>=6.31",
+    "pydantic>=2.13,<3",
+    "pyyaml>=6.0.2",
+    "typing-extensions>=4.12",
+]
+
+[project.optional-dependencies]
+# A policy behind openpi's websocket policy server.
+openpi = ["msgpack>=1.1", "websockets>=13"]
+# A policy behind LeRobot's async inference server (LeRobot needs Python 3.12+).
+lerobot = ["lerobot>=0.6.1,<0.7"]
+# The SO-101 arm on its Feetech servo bus, through LeRobot (Python 3.12+).
+so101 = ["lerobot[feetech]>=0.6.1,<0.7"]
+# The ALOHA tasks in MuJoCo, and the simulated robot cell's camera page.
+sim = ["mujoco==3.8.1", "pillow>=11"]
+# Everything the tests, linters and type checker need.
+dev = [
+    "hypothesis>=6.100",  # the newest releases need Python 3.11+
+    "msgpack>=1.1",
+    "mypy>=2.4",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+    "types-grpcio>=1.0.0.20250914",
+    "types-protobuf>=6.30",
+    "types-pyyaml>=6.0.12",
+    "websockets>=13",
+]
+
+[project.scripts]
+neura-robot = "neura_runtime.cli:main"
+neura-arm = "neura_robots.cli:main"
+neura-arm-emulator = "neura_robots.emulator:main"
+neura-aloha-cell = "neura_robots.aloha.cell:main"
+neura-contracts = "neura_contracts.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rkd0608/neura-robot"
+Documentation = "https://github.com/rkd0608/neura-robot/tree/main/docs"
+Issues = "https://github.com/rkd0608/neura-robot/issues"
+Changelog = "https://github.com/rkd0608/neura-robot/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "packages/neura-contracts/src/neura_contracts",
+    "packages/neura-proto/src/neura",
+    "packages/neura-runtime/src/neura_runtime",
+    "packages/neura-robots/src/neura_robots",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "packages/*/src",
+    "packages/*/tests",
+    "proto",
+    "examples",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "packages/neura-proto/src/neura",
+    "packages/neura-contracts/src/neura_contracts/reason_codes.py",
+    "packages/neura-contracts/src/neura_contracts/outbound_schema.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "S", "PT", "C4", "PIE", "RET", "TID"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "N802"]
+"packages/neura-robots/src/neura_robots/emulator.py" = ["S311"]
+
+[tool.ruff.lint.isort]
+# neura_server: Neura's site gateway, which a few tests use when it is installed (else they skip).
+known-first-party = [
+    "neura",
+    "neura_contracts",
+    "neura_robots",
+    "neura_runtime",
+    "neura_server",
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+mypy_path = "packages/neura-contracts/src:packages/neura-proto/src:packages/neura-runtime/src:packages/neura-robots/src"
+explicit_package_bases = true
+exclude = ["packages/neura-proto/src/neura/"]
+
+[[tool.mypy.overrides]]
+module = ["neura.*"]
+follow_imports = "skip"
+follow_untyped_imports = true
+
+# Optional extras, and what exists only in a ROS environment or in the openpi test image.
+[[tool.mypy.overrides]]
+module = [
+    "lerobot.*", "torch", "torch.*", "mujoco", "mujoco.*", "PIL", "PIL.*",
+    "rclpy", "rclpy.*", "sensor_msgs", "sensor_msgs.*", "std_msgs", "std_msgs.*",
+    "msgpack", "msgpack.*", "openpi_client", "openpi_client.*", "websocket_policy_server",
+    "scservo_sdk", "scservo_sdk.*", "gym_aloha", "gym_aloha.*", "gymnasium", "gymnasium.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# Neura's site gateway: a few tests use it when it is installed, and skip otherwise.
+[[tool.mypy.overrides]]
+module = ["neura_server", "neura_server.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+testpaths = ["packages"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+xfail_strict = true
+filterwarnings = ["error"]

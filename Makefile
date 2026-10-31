@@ -160,6 +160,17 @@ docs-setup: ## Install the docs site's dependencies (pnpm)
 docs: ## Docs site dev server on http://127.0.0.1:5175/docs/ (beside the dev stack's console on :3000)
 	cd site && pnpm run start
 
+.PHONY: open-source
+open-source: ## Assemble the published neura-robot tree into DEST (make open-source DEST=../neura-robot)
+	@test -n "$(DEST)" || (echo "set DEST" && exit 1)
+	$(UV) run python tools/open_source.py assemble $(DEST)
+
+.PHONY: open-source-check
+open-source-check: ## Assemble neura-robot and check it alone: leaks, then lint, types, tests on Python 3.10 and 3.13
+	@dest=$$(mktemp -d "$${TMPDIR:-/tmp}/neura-robot-XXXXXX") && \
+	$(UV) run python tools/open_source.py assemble "$$dest/neura-robot" >/dev/null && \
+	$(UV) run python tools/open_source.py check "$$dest/neura-robot"; status=$$?; rm -rf "$$dest"; exit $$status
+
 .PHONY: docs-check
 docs-check: ## Docs: labels, wording, generated references, types and a warning-free build
 	$(UV) run python tools/gen_docs.py --check

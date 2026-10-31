@@ -57,7 +57,13 @@ find what already does it and use it, extend it or refactor it. Each fact has on
 
 **The open-source boundary.** `neura-contracts`, `neura-proto`, `neura-runtime` and `neura-robots`
 are published as `neura-robot` (design §30): they import only each other
-(`tools/check_boundary.py`). Closed code may import them, never the reverse.
+(`tools/check_boundary.py`; their tests may reach closed code only behind `pytest.importorskip`).
+Closed code may import them, never the reverse. They run on robot computers' own Python, so
+3.10 and later: no 3.11+ syntax or library (`asyncio.TimeoutError`, not `TimeoutError`, around
+asyncio waits; `neura_contracts.compat.StrEnum`; `typing_extensions.Self`). The published
+repository is assembled from them and `open-source/` (its README, docs, CI and packaging) by
+`tools/open_source.py`, never edited directly; `make open-source-check` installs it alone on 3.10
+and 3.13 and runs its checks, and `make verify` does so whenever it changes.
 
 **Generated files are never edited by hand.** Change the source and run `make gen`
 (`make examples` for the example contracts); `make check-generated` fails on anything stale. The

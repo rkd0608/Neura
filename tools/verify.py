@@ -208,6 +208,11 @@ def postgres() -> bool:
         return False
 
 
+OPEN_PACKAGES: list[str] = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+    "tool"
+]["neura"]["open-source"]
+
+
 def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[str]]:
     python = [sys.executable]
 
@@ -290,6 +295,17 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
     if has("site/", TOKENS):
         checks.append(
             Check("docs", ["make", "--no-print-directory", "docs-check"], "the docs changed")
+        )
+    published = ["open-source/", "examples/contracts/", "conftest.py", "proto/"]
+    published += [f"packages/{p}/" for p in OPEN_PACKAGES]
+    if has(*published):
+        checks.append(
+            Check(
+                "open-source",
+                ["make", "--no-print-directory", "open-source-check"],
+                "neura-robot changed: its published tree, installed alone on Python 3.10 and 3.13",
+                alone=True,
+            )
         )
     shots = [c.name for c in checks if c.name in ("landing", "docs")]
     if shots:

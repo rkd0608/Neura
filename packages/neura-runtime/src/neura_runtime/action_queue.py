@@ -9,12 +9,12 @@ an action that has already been sent to the controller.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 
 import numpy as np
 from numpy.typing import NDArray
 
 from neura_contracts import ReasonCode
+from neura_contracts.compat import StrEnum
 
 FloatArray = NDArray[np.float64]
 

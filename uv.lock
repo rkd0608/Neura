@@ -2294,6 +2294,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "typing-extensions" },
 ]
 
 [package.metadata]
@@ -2301,6 +2302,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44" },
     { name = "pydantic", specifier = ">=2.13,<3" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "typing-extensions", specifier = ">=4.12" },
 ]
 
 [[package]]

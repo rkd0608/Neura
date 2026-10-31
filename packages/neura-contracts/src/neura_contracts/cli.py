@@ -13,6 +13,7 @@ import shlex
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TypeVar
 
 from neura_contracts import sealing, signing
 from neura_contracts.artifact import ModelArtifact
@@ -34,7 +35,10 @@ def _load(path: str) -> Document:
     return load_document(text)
 
 
-def _load_kind[T: (ModelArtifact, RobotProfile, ExecutionProfile)](path: str, kind: type[T]) -> T:
+_Kind = TypeVar("_Kind", ModelArtifact, RobotProfile, ExecutionProfile)
+
+
+def _load_kind(path: str, kind: type[_Kind]) -> _Kind:
     document = _load(path)
     if not isinstance(document, kind):
         raise _UsageError(f"{path}: expected kind {kind.__name__}, got {document.kind}")

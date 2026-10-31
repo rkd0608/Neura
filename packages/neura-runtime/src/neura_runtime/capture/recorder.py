@@ -18,7 +18,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -43,7 +43,7 @@ def new_episode_id() -> str:
 
 
 def _iso(seconds: float) -> str:
-    return datetime.fromtimestamp(seconds, UTC).isoformat(timespec="milliseconds")
+    return datetime.fromtimestamp(seconds, timezone.utc).isoformat(timespec="milliseconds")
 
 
 @dataclass(frozen=True, slots=True)

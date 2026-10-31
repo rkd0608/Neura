@@ -41,6 +41,7 @@ class LocalConnection(ConnectionLoop):
         super().__init__(client, on_tick, clock)
         self.policy = policy
         self.counters: Counter[str] = Counter()
+        self._failing = 0  # requests the policy has failed in a row: logged once, not each time
         self._generation = 0
         self._session_id = ""
         self._epoch = 0
@@ -140,17 +141,22 @@ class LocalConnection(ConnectionLoop):
         limit_s = binding.profile.spec.freshness.max_observation_age_at_acceptance_us / 1e6
         try:
             output = await asyncio.wait_for(self.policy.infer(inputs), limit_s)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             self._reject(env, ReasonCode.WORKER_TIMED_OUT)
             return
         except PolicyError as exc:
-            log.warning("no chunk for the robot: %s", exc)
+            if self._failing == 0:
+                log.warning("the policy gives no chunks: %s", exc)
+            self._failing += 1
             self._reject(env, exc.reason, str(exc))
             return
         chunk = chunk_from(env, int(observation.anchor_index), output, binding, "local")
         if chunk is None:
             self._reject(env, ReasonCode.WORKER_OUTPUT_INVALID)
             return
+        if self._failing:
+            log.warning("the policy gives chunks again, after %d failed requests", self._failing)
+            self._failing = 0
         self.counters["chunks"] += 1
         self.client.on_gateway_message(
             dataplane_pb2.GatewayMessage(action_chunk=chunk), self._clock()

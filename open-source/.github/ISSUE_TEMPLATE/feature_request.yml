@@ -1,0 +1,16 @@
+name: Feature request
+description: A robot, a policy server, or something the runtime should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How you would like it to work. Safety rules are never relaxed to make something work; if one is in the way, say why.

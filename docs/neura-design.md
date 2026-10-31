@@ -563,7 +563,7 @@ Workers run the artifact's pinned OCI image, without network access beyond the s
 ### 12.1 Implementation notes (M6)
 
 - **Adapters** (`packages/neura-adapters`). The interface is `load → warmup(batch sizes) → infer(batch)` with the declared properties (deterministic, batching, multi-adapter, stateless, device, precision, parameters). Registered: `mock`, `lerobot-act`, `lerobot-smolvla`, `lerobot-pi0`, `lerobot-pi05`, `lerobot-diffusion`. A LeRobot checkpoint (`save_pretrained` layout) runs with its own pre- and post-processors, so outputs match LeRobot's inference for the same inputs. Loading checks the checkpoint against the contract (input names and shapes, action size, chunk length) and refuses a mismatch at prepare, never on a robot. Checkpoints that read a history of observations (Diffusion Policy with `n_obs_steps > 1`) are refused as stateful. bf16 and fp16 run under autocast, because the policies create float32 tensors of their own; ACT in bf16 stays within 2 degrees of fp32. Device out-of-memory is a typed error.
-- **Verified here:** ACT and Diffusion Policy end to end on CPU (synthetic checkpoints: the real LeRobot architectures with random weights, `neura_adapters.synthetic`). SmolVLA and π0 share the same code path but start from pretrained vision-language backbones downloaded from their publishers, which this build environment cannot reach; their first run is on the GPU runner.
+- **Verified here:** ACT and Diffusion Policy end to end on CPU (synthetic checkpoints: the real LeRobot architectures with random weights, `neura_runtime.synthetic`). SmolVLA and π0 share the same code path but start from pretrained vision-language backbones downloaded from their publishers, which this build environment cannot reach; their first run is on the GPU runner.
 - **Policy workers.** `neura-worker serve` runs one model on one device for one batch group and serves `neura.v1.PolicyWorker` (`Describe`, `Infer`) on a Unix socket (mode 0600, in a directory made for that run alone). The gateway uses it only once the socket answers `Describe` for the artifact the group serves. Its first stdout line announces ready or a typed load error. It watches its stdin from the moment it starts, and when the gateway closes it (or exits) a worker still loading exits at once, one serving after stopping its server, so a worker never outlives its gateway. Stopping, the gateway kills a worker that has not announced ready instead of waiting for it, and whoever stops a gateway (the site agent) waits as long as that can take (`neura_server.supervision`) before killing it. *Audit fix:* a worker read its stdin only once serving, the gateway waited 5 s for each worker, and the agent killed the gateway after 5 s: a gateway stopped while a model loaded died with its worker and worker directory left behind. The gateway's `WorkerBackend` supervises one worker per group and restarts it with backoff. Failures reach robots as typed rejections:
   - a worker that exits during a batch: `WORKER_CRASHED`;
   - a batch not finished by its latest deadline (and at least `worker_timeout_ms`): the worker is killed, `WORKER_TIMED_OUT`;
@@ -2325,10 +2325,19 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    request, and a record a fault is waiting on is written when the process ends. A task that runs
    past 500,000 events without an epoch advancing loses its start and is marked unreplayable.
    Nothing leaves the machine.
-5. **Robot-side platforms**: Python 3.10 to 3.13 (JetPack and ROS 2 Humble are 3.10), Linux on
-   x86-64 and aarch64, installed with pip.
-6. **Extraction**: `git filter-repo` keeps the moved files' history; this repository then depends
-   on a released `neura-robot`.
+5. **Robot-side platforms** (done): the open packages run on Python 3.10 to 3.13. Ruff targets 3.10
+   in them; `neura_contracts.compat` provides `StrEnum` on 3.10, and asyncio waits catch
+   `asyncio.TimeoutError`, which on 3.10 is not the builtin `TimeoutError`. LeRobot itself needs
+   3.12+, so the SO-101 driver and the LeRobot transport do too. Linux on x86-64 and arm64.
+6. **The published repository** (done): `rkd0608/neura-robot`, Apache-2.0, one distribution
+   (`neura-robot`, hatchling, the four packages' sources). It starts from a fresh history, not
+   this repository's, and is a one-way mirror: `tools/open_source.py assemble` builds it from the
+   open packages, the protocol, the example contracts, the shared test fixtures (`conftest.py`) and
+   `open-source/` (README, contributing, security policy, docs, CI on 3.10 to 3.13 for x86-64 and
+   arm64, packaging, standalone examples and a quickstart that needs no hardware). `check` refuses
+   a tree with closed imports outside skipped tests, paths of this repository or secrets, then
+   installs it alone on 3.10 and 3.13 and runs its lint, types, tests and quickstart. Contributions
+   there are applied here and come back with the next mirror.
 
 ### 30.3 Proof before launch
 

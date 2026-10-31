@@ -38,8 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         print("\n".join(available_adapters()))
         return 0
-    from neura_adapters.synthetic import write_act_checkpoint
     from neura_contracts.inference import weights_manifest
+    from neura_runtime.synthetic import write_act_checkpoint
 
     if args.command == "weights":
         print(yaml.safe_dump({"weights": weights_manifest(args.directory)}, sort_keys=False))

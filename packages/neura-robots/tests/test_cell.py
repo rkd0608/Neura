@@ -1,5 +1,5 @@
 """The robot cell (``aloha.cell``): its controller's tasks around the robot process, and its
-page's guards. The end-to-end run, with a site agent, is tools/smoke_site_kit.py."""
+page's guards."""
 
 from __future__ import annotations
 

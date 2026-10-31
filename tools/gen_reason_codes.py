@@ -97,7 +97,7 @@ def render(entries: list[dict[str, Any]]) -> str:
         "from __future__ import annotations",
         "",
         "from dataclasses import dataclass",
-        "from enum import StrEnum",
+        "from neura_contracts.compat import StrEnum",
         "from typing import Literal",
         "",
         "Area = Literal[" + ", ".join(f'"{a}"' for a in AREA_ORDER) + "]",

@@ -137,7 +137,7 @@ def not_after(certificate: bytes | x509.Certificate) -> datetime.datetime:
 def needs_renewal(certificate: bytes, *, now: datetime.datetime | None = None) -> bool:
     """True once less than a third of the certificate's lifetime remains."""
     cert = load_certificate(certificate)
-    now = now or datetime.datetime.now(datetime.UTC)
+    now = now or datetime.datetime.now(datetime.timezone.utc)
     lifetime = cert.not_valid_after_utc - cert.not_valid_before_utc
     return cert.not_valid_after_utc - now < lifetime / 3
 
@@ -150,7 +150,7 @@ class CertificateAuthority:
     @classmethod
     def create(cls, common_name: str, *, days: int = 3650) -> CertificateAuthority:
         key = new_key()
-        now = datetime.datetime.now(datetime.UTC)
+        now = datetime.datetime.now(datetime.timezone.utc)
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name[:64])])
         certificate = (
             x509.CertificateBuilder()
@@ -206,7 +206,7 @@ class CertificateAuthority:
         client: bool,
         server_names: Sequence[str],
     ) -> bytes:
-        now = datetime.datetime.now(datetime.UTC)
+        now = datetime.datetime.now(datetime.timezone.utc)
         alternative: list[x509.GeneralName] = [x509.UniformResourceIdentifier(identity_uri)]
         for name in server_names:
             try:

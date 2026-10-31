@@ -117,7 +117,7 @@ class OpenPIPolicy:
                 self._connect_timeout_s,
             )
             greeting = await asyncio.wait_for(connection.recv(), self._connect_timeout_s)
-        except (OSError, TimeoutError, EOFError, WebSocketException) as error:
+        except (OSError, asyncio.TimeoutError, EOFError, WebSocketException) as error:
             # EOFError: something accepted the connection and closed it before answering
             raise PolicyError(
                 f"no openpi server answers at {self.uri}: {type(error).__name__}: {error}",
@@ -143,7 +143,7 @@ class OpenPIPolicy:
         except asyncio.CancelledError:
             await self._drop()  # its answer must not be taken for the next request's
             raise
-        except (OSError, TimeoutError, WebSocketException) as error:
+        except (OSError, asyncio.TimeoutError, WebSocketException) as error:
             await self._drop()
             raise PolicyError(
                 f"the openpi server at {self.uri}: {type(error).__name__}: {error}",

@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
+pytest.importorskip("lerobot", reason="needs LeRobot (the lerobot or so101 extra, Python 3.12+)")
+pytest.importorskip("neura_server", reason="episode capture needs Neura's site gateway")
 
 from neura_contracts import RobotProfile
 from neura_robots.emulator import SO101Emulator, write_calibration

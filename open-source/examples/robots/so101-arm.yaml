@@ -1,0 +1,50 @@
+# neura-arm configuration for one SO-101 follower arm, run against a policy directly.
+#
+#   neura-arm check so101-arm.yaml --robot-profile ../contracts/so101.robot.yaml
+#   neura-arm run so101-arm.yaml --policy ../policies/mid_range.py
+#
+# Relative paths in this file are relative to it; --policy on the command line is relative to
+# where you run the command. Needs the so101 extra (LeRobot's servo driver, Python 3.12+).
+
+robot_id: so101-a
+
+# The robot's contracts: what the model expects, what the robot accepts, and how they are run
+# together (rates, freshness limits, how chunks merge). Checked against each other, and against
+# the policy, before the arm is connected.
+revision:
+  id: local
+  artifact: ../contracts/act-so101.artifact.yaml
+  robot_profile: ../contracts/so101.robot.yaml
+  execution_profile: ../contracts/act-so101-30hz.profile.yaml
+
+# The policy, unless --policy names one:
+#   uri: mid_range.py               an @neura.policy class, in this process
+#   uri: neura://gpu-box:50061      the same, behind `neura-robot serve` (NEURA_SERVE_TOKEN)
+#   uri: openpi://gpu-box:8000      openpi's server, with `openpi:` naming its inputs
+#   uri: lerobot://gpu-box:8080     LeRobot's server, with `lerobot:` naming the checkpoint
+policy:
+  uri: ../policies/mid_range.py
+
+arm:
+  type: so101
+  # The servo bus adapter. Prefer the stable by-id path over /dev/ttyACM0. With no arm, start
+  # `neura-arm-emulator` and use the pseudo-terminal it prints.
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_0000000000-if00
+  # LeRobot's calibration, from:
+  #   lerobot-calibrate --robot.type=so101_follower --robot.port=<port> --robot.id=so101-a
+  calibration_id: so101-a
+  # calibration_dir: ~/.cache/huggingface/lerobot/calibration/robots/so_follower
+  # Largest move of any joint in one command, degrees (0-100 for the gripper): a last guard
+  # behind the runtime's range checks. Keep it small for a first run.
+  max_relative_target: 10
+  # On exit: hold the last position with torque on (an SO-101 falls without torque), or release.
+  on_exit: hold
+
+cameras:  # by camera role in the robot profile
+  front: {type: opencv, index_or_path: /dev/v4l/by-id/usb-front-camera-video-index0, fps: 30}
+  wrist: {type: opencv, index_or_path: /dev/v4l/by-id/usb-wrist-camera-video-index0, fps: 30}
+  # No cameras yet? {type: synthetic} draws a moving test pattern at the profile's size.
+
+# Incident records: the last moments before a fault, or the operator's `incident`, as MCAP.
+# Replay one with `neura-robot replay <file>`. Null keeps none.
+incidents_dir: incidents

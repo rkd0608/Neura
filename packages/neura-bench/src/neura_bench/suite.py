@@ -22,13 +22,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
-from neura_adapters.synthetic import Size
 from neura_bench import measure, realtime
 from neura_bench.deployments import DeploymentFiles, Model, VlaTiming, synthetic, write_files
 from neura_bench.metrics import Result, Slo
 from neura_bench.sim import SECOND, Contention, GroupSpec, LatencyModel, Scenario, simulate
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.synthetic import Size
 from neura_server import capacity
 from neura_server.config import ServingConfig, profile_batch_sizes
 from neura_server.profiles import ProfilePoint

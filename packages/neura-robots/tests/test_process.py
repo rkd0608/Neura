@@ -1,5 +1,6 @@
-"""``neura-arm`` end to end: the emulated arm through LeRobot's bus driver, served by a live
-gateway over gRPC, driven by operator commands."""
+"""``neura-arm`` end to end: the emulated arm through LeRobot's bus driver, driven by operator
+commands and served by a policy in this process, or by a live site gateway over gRPC (the gateway
+is not part of neura-robot: those cases are skipped without it)."""
 
 from __future__ import annotations
 
@@ -7,11 +8,12 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
 import pytest
 
-pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
+pytest.importorskip("lerobot", reason="needs LeRobot (the lerobot or so101 extra, Python 3.12+)")
 
 from neura_contracts import ReasonCode, RobotProfile
 from neura_robots.emulator import SO101Emulator, write_calibration
@@ -21,14 +23,6 @@ from neura_robots.so101 import CameraConfig, So101Arm, So101Config
 from neura_runtime.binding import load_binding
 from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RuntimeState
-from neura_server.config import (
-    DeploymentConfig,
-    DeviceConfig,
-    GatewayConfig,
-    ServingConfig,
-    token_digest,
-)
-from neura_server.grpc_server import GatewayServer
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 FILES = (
@@ -39,16 +33,21 @@ FILES = (
 CAMERAS = {"front": CameraConfig("synthetic"), "wrist": CameraConfig("synthetic")}
 
 
-@pytest.fixture
-async def gateway() -> AsyncIterator[str]:
+@asynccontextmanager
+async def site_gateway() -> AsyncIterator[str]:
+    """A site gateway (Neura's site layer, not part of neura-robot) serving a mock policy."""
+    site = pytest.importorskip("neura_server.config", reason="needs Neura's site gateway")
+    grpc_server = pytest.importorskip("neura_server.grpc_server")
     artifact, robot, profile = FILES
-    server = GatewayServer(
-        GatewayConfig(
+    server = grpc_server.GatewayServer(
+        site.GatewayConfig(
             listen="127.0.0.1:0",
             status_listen=None,
-            devices=[DeviceConfig(robot_id="arm-1", token_sha256=token_digest("token-arm-1"))],
+            devices=[
+                site.DeviceConfig(robot_id="arm-1", token_sha256=site.token_digest("token-arm-1"))
+            ],
             deployments=[
-                DeploymentConfig(
+                site.DeploymentConfig(
                     revision_id="rev_arm",
                     artifact=artifact,
                     robot_profile=robot,
@@ -57,12 +56,20 @@ async def gateway() -> AsyncIterator[str]:
                 )
             ],
             assignments={"arm-1": "rev_arm"},
-            serving=ServingConfig(backend="simulated", simulate_latency=True),
+            serving=site.ServingConfig(backend="simulated", simulate_latency=True),
         )
     )
     await server.start()
-    yield f"127.0.0.1:{server.bound_port}"
-    await server.stop()
+    try:
+        yield f"127.0.0.1:{server.bound_port}"
+    finally:
+        await server.stop()
+
+
+@pytest.fixture
+async def gateway() -> AsyncIterator[str]:
+    async with site_gateway() as target:
+        yield target
 
 
 @pytest.fixture
@@ -117,11 +124,15 @@ class MidRange:
 
 @pytest.fixture
 async def served(
-    config: So101Config, gateway: str, tmp_path: Path, request: pytest.FixtureRequest
+    config: So101Config, tmp_path: Path, request: pytest.FixtureRequest
 ) -> AsyncIterator[tuple[Served, list[str]]]:
     binding = load_binding(*FILES)
     policy = None
-    if getattr(request, "param", "gateway") == "policy":
+    gateway = ""
+    stack = AsyncExitStack()
+    if getattr(request, "param", "policy") == "gateway":
+        gateway = await stack.enter_async_context(site_gateway())
+    else:
         targets = [(c.min + c.max) / 2 for c in binding.robot.spec.command_interface]
         source = tmp_path / "mid_range.py"
         source.write_text(MID_RANGE.format(chunk_length=binding.chunk_length, targets=targets))
@@ -137,11 +148,12 @@ async def served(
     served = Served(process, said)
     yield served, said
     await served.close()
+    await stack.aclose()
     arm.close()
     assert monitor.violations == 0, monitor.summary()
 
 
-@pytest.mark.parametrize("served", ["gateway", "policy"], indirect=True)
+@pytest.mark.parametrize("served", ["policy", "gateway"], indirect=True)
 async def test_nothing_moves_until_the_operator_arms(
     served: tuple[Served, list[str]], emulator: SO101Emulator
 ) -> None:

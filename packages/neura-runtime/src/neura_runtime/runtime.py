@@ -12,7 +12,6 @@ import logging
 from collections import Counter, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Protocol
 
 import numpy as np
@@ -27,6 +26,7 @@ from neura_contracts import (
     ReasonCode,
     RtcMerge,
 )
+from neura_contracts.compat import StrEnum
 from neura_runtime import tensors
 from neura_runtime.action_queue import ActionQueue, MergeKind, MergeSettings
 from neura_runtime.binding import ExecutionBinding

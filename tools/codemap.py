@@ -66,6 +66,7 @@ TOP_LEVEL = {
     "docs": "The engineering design (neura-design.md), this map and the feature map.",
     "examples": "Example contracts, robots and a site, used by tests and the docs.",
     "landing": "The NucleiLabs site (React, Vite).",
+    "open-source": "The published neura-robot repository's own files (its code: packages/).",
     "packages": "The Python workspace: one package per component (below).",
     "proto": "The protobuf schema (neura.v1): the source of the generated bindings.",
     "qualification": "Hardware qualification reports (written by neura-qualify).",

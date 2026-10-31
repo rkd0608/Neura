@@ -124,7 +124,9 @@ warn_unreachable = true
 plugins = ["pydantic.mypy"]
 mypy_path = "packages/neura/src:packages/neura-contracts/src:packages/neura-proto/src:packages/neura-control/src:packages/neura-agent/src:packages/neura-runtime/src:packages/neura-server/src:packages/neura-sim/src:packages/neura-sdk/src:packages/neura-adapters/src:packages/neura-bench/src:tools"
 explicit_package_bases = true
-exclude = ["packages/neura-proto/src/neura/"]
+# The agent tests' conftest only puts their directory on sys.path; neura-control's is also
+# named conftest, which mypy would take for the same module.
+exclude = ["packages/neura-proto/src/neura/", "packages/neura-agent/tests/conftest\\.py$"]
 
 [[tool.mypy.overrides]]
 module = ["neura.*"]

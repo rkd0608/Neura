@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
+from typing_extensions import Self
 
 from neura_contracts.core import (
     API_VERSION,

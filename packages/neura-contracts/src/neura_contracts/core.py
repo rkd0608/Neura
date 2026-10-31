@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Hashable, Iterable
-from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from neura_contracts.canonical import DIGEST_PATTERN, content_digest
+from neura_contracts.compat import StrEnum
 
 API_VERSION: Literal["neura.dev/v1alpha1"] = "neura.dev/v1alpha1"
 

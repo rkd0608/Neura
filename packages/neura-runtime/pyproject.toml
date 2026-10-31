@@ -3,7 +3,7 @@ name = "neura-runtime"
 version = "0.1.0.dev0"
 description = "Neura robot runtime: action queue, chunk merging, fencing, state machine and session client."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "neura-contracts",
     "neura-proto",
@@ -25,3 +25,8 @@ neura-robot = "neura_runtime.cli:main"
 [build-system]
 requires = ["uv_build>=0.11,<0.14"]
 build-backend = "uv_build"
+
+# Published as neura-robot, which runs on robot computers' own Python: 3.10 and later (design §30).
+[tool.ruff]
+extend = "../../pyproject.toml"
+target-version = "py310"

@@ -7,7 +7,7 @@ Regenerate with `make gen`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from neura_contracts.compat import StrEnum
 from typing import Literal
 
 Area = Literal["contracts", "gateway", "scheduler", "worker", "runtime", "agent", "capture", "evaluation", "training", "rollout", "api"]

@@ -8,11 +8,12 @@ import time
 from typing import Any, Literal
 
 from neura_cli import keys
+from neura_cli.fleet import ROBOT_TONES, Tone, robot_state
 from neura_cli.local_site import LocalSite, agent_installed
 from neura_cli.session import CliError, Context
 from neura_cli.ui import when
 
-LIVE = {"Ready", "Running", "Serving", "Healthy"}
+SITE_TONES: dict[str, Tone] = {"connected": "ok", "offline": "warn", "no server yet": "muted"}
 
 
 def register(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -150,12 +151,8 @@ def run_list(args: argparse.Namespace, ctx: Context) -> int:
 
 
 def _colored(ctx: Context, state: str) -> str:
-    s = ctx.out.s
-    if state in ("connected", "ready", "running"):
-        return s.good(state)
-    if state in ("offline", "missing", "needs setup", "attention"):
-        return s.warn(state)
-    return s.quiet(state)
+    """A site's state (`_state`), coloured."""
+    return ctx.out.s.tone(SITE_TONES[state], state)
 
 
 def run_show(args: argparse.Namespace, ctx: Context) -> int:
@@ -342,22 +339,6 @@ def _local(ctx: Context, name: str) -> LocalSite:
 # --- robots ------------------------------------------------------------------------------------
 
 
-def robot_state(robot: dict[str, Any]) -> str:
-    status = robot["status"]
-    phase = status.get("phase", "Unknown")
-    if status.get("discovered") and status.get("present") is False:
-        return "missing"
-    if phase == "Offline":
-        return "offline"
-    if phase == "NeedsAttention":
-        return "needs setup" if status.get("discovered") else "attention"
-    if status.get("policy_version_id"):
-        return "running"
-    if phase in LIVE:
-        return "ready"
-    return str(phase).lower()
-
-
 def _robot_table(ctx: Context, robots: list[dict[str, Any]], site_names: dict[str, str]) -> None:
     out = ctx.out
     if not robots:
@@ -378,7 +359,7 @@ def _robot_table(ctx: Context, robots: list[dict[str, Any]], site_names: dict[st
             (
                 robot["spec"]["name"],
                 site_names.get(robot["spec"]["site_id"], robot["spec"]["site_id"]),
-                _colored(ctx, state),
+                out.s.tone(ROBOT_TONES[state], state),
                 running,
             )
         )

@@ -19,6 +19,7 @@ models-setup: ## Also install PyTorch and LeRobot (the models group), for model 
 .PHONY: gen
 gen: ## Regenerate code and reference docs from proto/, catalog/, contract models and the API spec
 	$(UV) run python tools/gen_reason_codes.py
+	$(UV) run python tools/gen_fleet.py
 	$(UV) run python tools/gen_outbound.py
 	$(UV) run python tools/gen_dashboards.py
 	$(UV) run python tools/gen_proto.py
@@ -35,6 +36,7 @@ examples: ## Refresh example execution-profile bindings to current digests
 .PHONY: check-generated
 check-generated: ## Fail if any generated file is stale
 	$(UV) run python tools/gen_reason_codes.py --check
+	$(UV) run python tools/gen_fleet.py --check
 	$(UV) run python tools/gen_outbound.py --check
 	$(UV) run python tools/gen_dashboards.py --check
 	$(UV) run python tools/gen_proto.py --check

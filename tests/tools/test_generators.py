@@ -19,6 +19,7 @@ import gen_reason_codes  # noqa: E402
     "script",
     [
         "gen_reason_codes.py",
+        "gen_fleet.py",
         "gen_proto.py",
         "gen_schemas.py",
         "refresh_example_bindings.py",

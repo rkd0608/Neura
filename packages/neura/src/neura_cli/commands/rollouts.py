@@ -7,12 +7,11 @@ import re
 import time
 from typing import Any, cast
 
-from neura_cli.commands.sites import robot_state
+from neura_cli.fleet import ROLLOUT_LABELS, ROLLOUT_TONES, TERMINAL, robot_state
 from neura_cli.session import CliError, Context, Session
 from neura_cli.ui import when
 from neura_sdk.models import Rollout, RolloutCreate
 
-TERMINAL = {"live", "stopped", "cancelled"}
 DURATION = re.compile(r"^(\d+(?:\.\d+)?)([smh]?)$")
 
 
@@ -189,14 +188,16 @@ def _outcome(ctx: Context, rollout: dict[str, Any]) -> int:
     out, status = ctx.out, rollout["status"]
     out.line()
     state = status["state"]
+    label = ROLLOUT_LABELS.get(state, state).capitalize()
+    word = out.s.tone(ROLLOUT_TONES.get(state, "info"), label)
     if state == "live":
-        out.line(f"  {out.s.good('Live')}  {status['name']}")
+        out.line(f"  {word}  {status['name']}")
     elif state in ("stopped", "cancelled"):
         why = status.get("message") or status.get("reason") or ""
-        out.line(f"  {out.s.bad(state.capitalize())}  {why}")
+        out.line(f"  {word}  {why}")
         out.hint("The robots kept running what they ran before.")
     else:
-        out.line(f"  {out.s.warn(state.replace('_', ' '))}  {status['name']}")
+        out.line(f"  {word}  {status['name']}")
         if state == "awaiting_approval":
             out.hint("Someone at the site approves it: neura approve, on the site's server.")
         out.hint(f"Follow it: neura status {rollout['metadata']['id']}")
@@ -255,7 +256,7 @@ def run_status(args: argparse.Namespace, ctx: Context) -> int:
             (
                 (
                     r["status"]["name"],
-                    r["status"]["state"].replace("_", " "),
+                    ROLLOUT_LABELS.get(r["status"]["state"], r["status"]["state"]),
                     when(r["metadata"].get("created_at")),
                     r["metadata"]["id"],
                 )

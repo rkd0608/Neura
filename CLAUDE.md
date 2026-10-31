@@ -51,7 +51,8 @@ find what already does it and use it, extend it or refactor it. Each fact has on
 - The protocol: `proto/neura/v1/`.
 - Contract documents: inferred by `packages/neura-contracts/src/neura_contracts/inference.py`,
   never hand-written per policy.
-- The fleet's words (robot states, rollout steps): `console/src/lib/fleet.ts`, shared with the CLI.
+- The fleet's words (robot states, rollout states and steps): `catalog/fleet.yaml` (the console's
+  and the CLI's are generated from it).
 - Design tokens: `console/src/styles/tokens.css`, shared by the console, the site and the docs.
 
 **Generated files are never edited by hand.** Change the source and run `make gen`

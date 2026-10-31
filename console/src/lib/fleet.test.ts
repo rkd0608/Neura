@@ -23,6 +23,8 @@ describe("robotState", () => {
     expect(robotState(robot({ phase: "Offline" }))).toBe("offline");
     expect(robotState(robot({ phase: "NeedsAttention", discovered: true }))).toBe("needs setup");
     expect(robotState(robot({ phase: "NeedsAttention" }))).toBe("attention");
+    // With nothing assigned, its runtime's state (Fleet said "unknown", the CLI "waiting").
+    expect(robotState(robot({ phase: "Waiting" }))).toBe("waiting");
     // Missing only when its server no longer reports it, not when it has nothing to run.
     expect(robotState(robot({ phase: "Offline", discovered: true, present: false }))).toBe(
       "missing",

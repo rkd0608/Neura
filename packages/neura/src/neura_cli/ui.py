@@ -16,20 +16,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, TextIO
 
-MARKS = {
-    "passed": "✓",
-    "skipped": "–",  # noqa: RUF001 - a dash, on purpose
-    "failed": "✗",
-    "running": "◐",
-    "pending": " ",
-}
-STEP_LABELS = {
-    "check": "Fits the robots",
-    "prepare": "At the site",
-    "shadow": "Shadow test",
-    "approve": "Approval",
-    "switch": "Switch",
-}
+from neura_cli.fleet import STEP_LABELS, STEP_MARKS, STEP_TONES, Tone
+
+# A terminal has fewer colours than the console: work in progress (info) shows as a warning does.
+TONE_CODES: dict[Tone, str] = {"ok": "32", "warn": "33", "info": "33", "danger": "31", "muted": "2"}
 
 
 @dataclass
@@ -38,6 +28,10 @@ class Style:
 
     def _wrap(self, code: str, text: str) -> str:
         return f"\033[{code}m{text}\033[0m" if self.color else text
+
+    def tone(self, tone: Tone, text: str) -> str:
+        """``text`` coloured as the console colours its tone (catalog/fleet.yaml)."""
+        return self._wrap(TONE_CODES[tone], text)
 
     def good(self, text: str) -> str:
         return self._wrap("32", text)
@@ -117,12 +111,8 @@ class Output:
 
     def step(self, step: dict[str, Any]) -> None:
         """One step of a rollout, as `neura deploy` follows it."""
-        mark = {
-            "passed": self.s.good(MARKS["passed"]),
-            "failed": self.s.bad(MARKS["failed"]),
-            "running": self.s.warn(MARKS["running"]),
-            "skipped": self.s.quiet(MARKS["skipped"]),
-        }.get(step["state"], " ")
+        state = step["state"]
+        mark = self.s.tone(STEP_TONES.get(state, "muted"), STEP_MARKS.get(state, " "))
         label = STEP_LABELS.get(step["name"], step["name"])
         summary = step.get("summary", "")
         text = label if step["state"] != "pending" else self.s.quiet(label)

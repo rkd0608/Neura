@@ -20,6 +20,7 @@ import { FaultTable } from "../components/Tables";
 import { useToasts } from "../components/Toasts";
 import { Field } from "../components/Field";
 import {
+  Badge,
   Card,
   DataAge,
   Empty,
@@ -38,7 +39,17 @@ import {
 } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { shortId, slug } from "../lib/format";
-import { label, tone } from "../lib/phases";
+import { ROBOT_TONE, robotState, type RobotState } from "../lib/fleet";
+
+/** A robot's state in the words Fleet and `neura robots` use, greyed when its site is offline. */
+function RobotStatus({ robot, stale }: { robot: Schemas["Robot"]; stale: boolean }) {
+  const state = robotState(robot);
+  return (
+    <span className={stale ? "stale" : undefined}>
+      <Badge tone={stale ? "muted" : ROBOT_TONE[state]}>{state}</Badge>
+    </span>
+  );
+}
 
 function profileName(profile: Schemas["RobotProfile"] | undefined): string {
   const meta = profile?.document.metadata as { name?: string; version?: string } | undefined;
@@ -62,15 +73,15 @@ export function Robots() {
   const list = (robots.data ?? []).filter((r) => {
     if (siteFilter !== "all" && r.spec.site_id !== siteFilter) return false;
     if (!query) return true;
-    return `${r.spec.display_name} ${r.spec.name} ${r.status.phase} ${siteName(r.spec.site_id)}`
+    return `${r.spec.display_name} ${r.spec.name} ${robotState(r)} ${siteName(r.spec.site_id)}`
       .toLowerCase()
       .includes(query.toLowerCase());
   });
-  const phases = (robots.data ?? []).reduce<Record<string, number>>((acc, r) => {
-    const key = r.status.phase;
-    acc[key] = (acc[key] ?? 0) + 1;
-    return acc;
-  }, {});
+  const states = new Map<RobotState, number>();
+  for (const r of robots.data ?? []) {
+    const state = robotState(r);
+    states.set(state, (states.get(state) ?? 0) + 1);
+  }
 
   return (
     <>
@@ -88,9 +99,9 @@ export function Robots() {
       />
       {robots.data && robots.data.length > 0 ? (
         <div className="row" aria-label="Robots by state" role="group">
-          {Object.entries(phases).map(([phase, n]) => (
-            <span key={phase} className={`badge ${tone(phase)}`}>
-              {n} {label(phase).toLowerCase()}
+          {[...states].map(([state, n]) => (
+            <span key={state} className={`badge ${ROBOT_TONE[state]}`}>
+              {n} {state}
             </span>
           ))}
         </div>
@@ -183,7 +194,7 @@ export function Robots() {
                         <span className="sub mono">{robot.spec.name}</span>
                       </td>
                       <td>
-                        <Status phase={robot.status.phase} stale={stale} />
+                        <RobotStatus robot={robot} stale={stale} />
                         {robot.status.reason ? (
                           <div className="small">
                             <Reason code={robot.status.reason} />
@@ -418,7 +429,7 @@ export function RobotPage() {
         title={r.spec.display_name}
         meta={
           <>
-            <Status phase={r.status.phase} stale={stale} />
+            <RobotStatus robot={r} stale={stale} />
             <span>
               at{" "}
               {site ? (
@@ -498,7 +509,7 @@ export function RobotPage() {
             <Card title="Observed">
               <KeyValue
                 items={[
-                  ["State", <Status key="s" phase={r.status.phase} stale={stale} />],
+                  ["State", <RobotStatus key="s" robot={r} stale={stale} />],
                   [
                     "Reason",
                     r.status.reason ? (

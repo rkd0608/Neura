@@ -1,0 +1,73 @@
+# The fleet's words: what a robot's state and a rollout's states and steps are called, and how
+# each looks, in the console and from the `neura` command (design §19.4, §29). One source:
+# `make gen` writes console/src/generated/fleet.ts and packages/neura/src/neura_cli/fleet.py,
+# and checks every state, step and kind here against api/openapi.yaml.
+#
+# Tones: ok | warn | danger | info | muted (the console's badges; the CLI's colours).
+
+catalog_version: 1
+
+robot_states:
+  running: ok
+  ready: ok
+  preparing: info
+  waiting: warn # starved; the approved local response is active (§19.4)
+  needs setup: warn # found by its site, not set up yet (§29.5)
+  attention: danger # faulted, rejected or blocked: a person must act (§19.4)
+  missing: danger # its server no longer reports it (§29.5)
+  offline: muted # no recent data: the last known state, greyed (§19.1, §19.4)
+  unknown: muted # no data has ever arrived
+
+# A robot's state is the first rule whose conditions all hold. `phase` lists the phases
+# (ConsolePhase) it may be in; `true` means the field is set, `false` that it is reported false.
+# The last rule has no conditions.
+robot_rules:
+  - state: missing
+    when: { discovered: true, present: false }
+  - state: offline
+    when: { phase: [Offline] }
+  - state: needs setup
+    when: { phase: [NeedsAttention], discovered: true }
+  - state: attention
+    when: { phase: [NeedsAttention] }
+  - state: waiting
+    when: { phase: [Waiting] }
+  - state: running # what it runs is shown beside it, moving or not
+    when: { policy_version_id: true }
+  - state: running
+    when: { phase: [Running] }
+  - state: ready
+    when: { phase: [Ready] }
+  - state: preparing
+    when: { phase: [Preparing] }
+  - state: unknown
+    when: {}
+
+rollout_states: # label, tone, and whether the rollout has ended (§29.4)
+  checking: { label: checking, tone: info }
+  preparing: { label: preparing, tone: info }
+  shadow_testing: { label: shadow testing, tone: info }
+  awaiting_approval: { label: awaiting approval, tone: warn }
+  switching: { label: switching, tone: info }
+  live: { label: live, tone: ok, terminal: true }
+  stopped: { label: stopped, tone: danger, terminal: true }
+  cancelled: { label: cancelled, tone: muted, terminal: true }
+
+rollout_steps: # what `neura deploy` prints for each step, and the console shows
+  check: Fits the robots
+  prepare: At the site
+  shadow: Shadow test
+  approve: Approval
+  switch: Switch
+
+step_states: # a step's tone, and its mark in the CLI
+  pending: { tone: muted, mark: " " }
+  running: { tone: info, mark: "◐" }
+  passed: { tone: ok, mark: "✓" }
+  skipped: { tone: muted, mark: "–" }
+  failed: { tone: danger, mark: "✗" }
+
+rollout_kinds:
+  deploy: Deploy
+  try: Try
+  rollback: Rollback

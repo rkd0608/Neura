@@ -35,7 +35,8 @@ inferred, so nobody writes them by hand.
 Sign in, sites, robots, policies, deploy, try, rollback, status, logs, approve, doctor.
 
 - Code: `packages/neura/src/neura_cli/` (one module per command group in `commands/`; `ui.py`
-  for how it talks)
+  for how it talks; `fleet.py`, the words for robots and rollouts, generated from
+  `catalog/fleet.yaml` with the console's, by `make gen`)
 - Tests: `packages/neura-control/tests/test_neura_cli.py::test_the_quickstart_from_a_fresh_workspace_to_a_moving_arm`
   (the docs' page, run against a live control plane and a real agent),
   `packages/neura/tests/test_cli_offline.py`
@@ -198,6 +199,8 @@ ledger and its allowlist.
 Fleet, Policies, Rollouts and Settings, on the public API only.
 
 - Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts),
+  `console/src/lib/fleet.ts` (robot and rollout words, from `catalog/fleet.yaml` through
+  `console/src/generated/fleet.ts`, the same as the CLI's),
   `console/src/components/Field.tsx` (a form field wired to its label, hint and error),
   `console/src/styles/app.css` (large), `console/src/styles/tokens.css` (shared with the site
   and docs)

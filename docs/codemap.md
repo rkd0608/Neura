@@ -66,6 +66,7 @@ Under `packages/neura/src/`:
 - `neura_cli/commands/rollouts.py`: `neura deploy|try|rollback|status|cancel|logs`: changing what robots run, and watching it.
 - `neura_cli/commands/sites.py`: `neura site ...` and `neura robots`: where robots are, and the robots there.
 - `neura_cli/config.py`: Where the CLI keeps what it needs between commands: the API's address, a token, the workspace, the publisher key it signs with, and the sites this machine runs.
+- `neura_cli/fleet.py`: The fleet's words: what robots and rollouts are called, in the console and from `neura` (design §19.4, §29).
 - `neura_cli/keys.py`: The publisher key this machine signs policy versions with (design §17.3).
 - `neura_cli/local_site.py`: A site agent run by `neura site join` on this machine, for this user (design §29.5).
 - `neura_cli/session.py`: A signed-in CLI: its API client, its workspace, and names turned into identifiers.
@@ -418,7 +419,7 @@ Under `console/`:
 - `src/components/ui.tsx`: Small, accessible building blocks shared by every page.
 - `src/lib/config.ts`: Where the console's links outside itself go, set at build time (VITE_* environment variables, the names the NucleiLabs site uses for the same addresses).
 - `src/lib/context.ts`: Where the console is (the organization and project in the URL) and what the signed-in principal may do there.
-- `src/lib/fleet.ts`: The fleet's vocabulary, shared by the console's pages and the `neura` command (design §29): what a robot's state is called, what a rollout's steps and states are called, and their tones.
+- `src/lib/fleet.ts`: The fleet's words for the console's pages (design §19.4, §29): what a robot's state is called, what a rollout's steps and states are called, and their tones.
 - `src/lib/format.ts`: Formatting helpers.
 - `src/lib/phases.ts`: The console's state vocabulary (design §19.4): every observed phase has one label and one tone.
 - `src/lib/theme.ts`: Theme: dark (the default), light, or the operating system's.
@@ -513,6 +514,7 @@ Under `tools/`:
 - `edit_hook.py`: What the agent is told right after it writes a file (Claude Code's PostToolUse hook, configured in .claude/settings.json).
 - `gen_dashboards.py`: Generate the Grafana dashboards in deploy/observability/grafana/dashboards from the panel definitions below, so their layout stays uniform and their queries are checked by the tests (every metric …
 - `gen_docs.py`: Generate the docs site's reference pages from their sources (design §26.4, §26.5).
+- `gen_fleet.py`: Generate the fleet's words (Python for the CLI, TypeScript for the console) from catalog/fleet.yaml, checking every state, step and kind it names against api/openapi.yaml.
 - `gen_outbound.py`: Generate the outbound schema module from catalog/outbound.yaml (design §18.2).
 - `gen_proto.py`: Generate Python protobuf and gRPC bindings from proto/.
 - `gen_reason_codes.py`: Generate the reason-code modules (Python, and TypeScript for the console) from catalog/reason_codes.yaml.

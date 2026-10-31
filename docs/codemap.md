@@ -327,6 +327,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/grpc_client.py`: asyncio/gRPC adapter that moves ``SessionClient`` messages to and from a site gateway.
 - `neura_runtime/interfaces.py`: Integration points a supported robot integration implements (design §3, §7).
 - `neura_runtime/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
+- `neura_runtime/lerobot_server.py`: A policy behind LeRobot's async inference server (``lerobot.async_inference.policy_server``, LeRobot 0.6): the robot's ``PolicyClient`` for it, unchanged on the server's side (design §30.2).
 - `neura_runtime/local.py`: The gateway's part for one robot, in the robot-side process: sessions, heartbeats and epochs answered locally, and each observation served by a ``PolicyClient`` (design §30.2).
 - `neura_runtime/openpi.py`: A policy behind an openpi policy server (Physical Intelligence's ``serve_policy.py``): the robot's ``PolicyClient`` for it, unchanged on the server's side (design §30.2).
 - `neura_runtime/policy.py`: What a policy takes and gives, wherever it runs: validated model inputs, the failure a robot is told about, and the client the robot-side process asks for action chunks (design §30.2).

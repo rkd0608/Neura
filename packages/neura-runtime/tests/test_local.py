@@ -1,24 +1,32 @@
 """The runtime without a gateway, through ``LocalConnection``: an ``@neura.policy`` class in this
-process and over the network (``neura-robot serve``), and a policy behind openpi's own server.
+process and over the network (``neura-robot serve``), and policies behind openpi's own server and
+LeRobot's async inference server.
 
 The openpi case needs Docker and its image: build it with
 ``docker build -t neura-openpi-test:dev packages/neura-runtime/tests/openpi`` and set
-``NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev``; it is skipped otherwise.
+``NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev``; it is skipped otherwise. The LeRobot case needs
+the models group (``uv sync --group models``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
+import pickle
 import shutil
+import socket
 import subprocess
+import sys
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+import yaml
 
 from neura.v1 import worker_pb2
 from neura_contracts import ReasonCode
@@ -26,6 +34,7 @@ from neura_runtime import remote
 from neura_runtime.authored import AuthoredPolicy
 from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.invariants import InvariantMonitor, watch_robot
+from neura_runtime.lerobot_server import LeRobotPolicy, unpickle_actions
 from neura_runtime.local import LocalConnection
 from neura_runtime.openpi import OpenPIKeys, OpenPIPolicy, StateKey
 from neura_runtime.policy import InProcessPolicy, PolicyClient, PolicyError
@@ -68,7 +77,7 @@ def now_us() -> int:
 async def until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
     deadline = time.monotonic() + timeout
     while not condition():
-        assert time.monotonic() < deadline
+        assert time.monotonic() < deadline, condition
         await asyncio.sleep(0.01)
 
 
@@ -112,15 +121,74 @@ async def openpi_server(binding: ExecutionBinding, work: Path) -> AsyncIterator[
 
 
 @asynccontextmanager
+async def lerobot_server(binding: ExecutionBinding, work: Path) -> AsyncIterator[Reached]:
+    """LeRobot's own policy server in a process of its own, serving a synthetic ACT checkpoint
+    made for these contracts."""
+    from neura_adapters.synthetic import write_act_checkpoint
+
+    checkpoint = write_act_checkpoint(binding.artifact, work / "act")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    serve = (
+        "from lerobot.async_inference.configs import PolicyServerConfig\n"
+        "from lerobot.async_inference.policy_server import serve\n"
+        f"serve(PolicyServerConfig(host='127.0.0.1', port={port}, fps=30, inference_latency=0.0))"
+    )
+    # LeRobot leaves a file in TMPDIR for every policy it loads: give it one under the test's.
+    scratch = work / "lerobot-tmp"
+    scratch.mkdir()
+    with (work / "lerobot.log").open("wb") as log:
+        process = subprocess.Popen(
+            [sys.executable, "-c", serve],
+            stdout=log,
+            stderr=log,
+            cwd=work,
+            env={**os.environ, "TMPDIR": str(scratch)},
+        )
+    client = LeRobotPolicy(f"127.0.0.1:{port}", binding, policy_type="act", checkpoint=checkpoint)
+    try:
+        deadline = time.monotonic() + 120
+        while True:  # the server takes a while to import LeRobot and listen
+            try:
+                await client.load()
+                break
+            except PolicyError:
+                assert process.poll() is None, (work / "lerobot.log").read_text()[-2000:]
+                assert time.monotonic() < deadline, "LeRobot's server did not start"
+                await asyncio.sleep(0.5)
+        yield Reached(client, process.kill, ReasonCode.WORKER_UNAVAILABLE)
+        await client.close()
+    finally:
+        process.kill()
+        process.wait()
+
+
+@dataclass
+class Reached:
+    policy: PolicyClient
+    fail: Callable[[], None]  # from now on, every request fails
+    reason: ReasonCode  # what the robot is told when one does
+
+
+@asynccontextmanager
 async def reached(
     how: str, policy: AuthoredPolicy, binding: ExecutionBinding, work: Path
-) -> AsyncIterator[PolicyClient]:
+) -> AsyncIterator[Reached]:
+    def fail() -> None:
+        (work / "fail").touch()  # still.py and serve_still.py fail from now on
+
+    failed = ReasonCode.WORKER_INFERENCE_FAILED
     if how == "in-process":
-        yield InProcessPolicy(policy)
+        yield Reached(InProcessPolicy(policy), fail, failed)
         return
     if how == "openpi":
         async with openpi_server(binding, work) as openpi:
-            yield openpi
+            yield Reached(openpi, fail, failed)
+        return
+    if how == "lerobot":
+        async with lerobot_server(binding, work) as served:
+            yield served
         return
     description = worker_pb2.WorkerDescription(chunk_length=policy.declaration.chunk_length)
     server, port = await remote.serve(
@@ -129,10 +197,13 @@ async def reached(
     client = remote.RemotePolicy(f"127.0.0.1:{port}", token="secret")
     try:
         await client.check(binding)
-        yield client
+        yield Reached(client, fail, failed)
     finally:
         await client.close()
         await server.stop(grace=None)
+
+
+LEROBOT = importlib.util.find_spec("lerobot") is not None
 
 
 @pytest.mark.parametrize(
@@ -147,15 +218,31 @@ async def reached(
                 reason="needs Docker and NEURA_TEST_OPENPI_IMAGE (tests/openpi/Dockerfile)",
             ),
         ),
+        pytest.param(
+            "lerobot",
+            marks=pytest.mark.skipif(
+                not LEROBOT, reason="needs the models group: uv sync --group models"
+            ),
+        ),
     ],
 )
 async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     how: str, tmp_path: Path
 ) -> None:
+    profile = EXAMPLES / "act-so101-30hz.profile.yaml"
+    if how == "lerobot":
+        # ACT behind LeRobot's server takes 0.3 to 0.5 s a chunk on this CPU, too slow for the
+        # 30 Hz profile's 150 ms: the robot rightly refuses every chunk. Declare what it allows.
+        document = yaml.safe_load(profile.read_text())
+        document["spec"]["freshness"] = {
+            "max_observation_age_at_dispatch_us": 1_000_000,
+            "max_observation_age_at_acceptance_us": 1_500_000,
+            "request_timeout_us": 2_000_000,
+        }
+        profile = tmp_path / "act-so101-cpu.profile.yaml"
+        profile.write_text(yaml.safe_dump(document))
     binding = load_binding(
-        EXAMPLES / "act-so101.artifact.yaml",
-        EXAMPLES / "so101.robot.yaml",
-        EXAMPLES / "act-so101-30hz.profile.yaml",
+        EXAMPLES / "act-so101.artifact.yaml", EXAMPLES / "so101.robot.yaml", profile
     )
     source = tmp_path / "still.py"
     source.write_text(
@@ -164,8 +251,8 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     controller = FakeController()
     runtime = RobotRuntime(binding, controller, FakeSensors(binding))
     client = SessionClient(runtime, SessionConfig(robot_id="arm-1", revision_id="rev_local"))
-    async with reached(how, AuthoredPolicy.load(str(source)), binding, tmp_path) as policy:
-        connection = LocalConnection(client, policy)
+    async with reached(how, AuthoredPolicy.load(str(source)), binding, tmp_path) as served:
+        connection = LocalConnection(client, served.policy)
         monitor = InvariantMonitor(clock=now_us, gateway_observed=False)
         watch_robot(
             monitor,
@@ -184,9 +271,9 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
             runtime.arm(now_us())
             await until(lambda: runtime.state is RuntimeState.RUNNING and runtime.dispatched > 30)
 
-            (tmp_path / "fail").touch()  # every request fails now: the robot runs dry and stops
+            served.fail()  # every request fails now: the robot runs dry and stops
             await until(lambda: runtime.state is RuntimeState.FAULTED)
-            assert connection.counters[ReasonCode.WORKER_INFERENCE_FAILED.value] > 0
+            assert connection.counters[served.reason.value] > 0
             commands = len(controller.commands)
             await asyncio.sleep(0.3)
             assert len(controller.commands) == commands
@@ -194,3 +281,19 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
             stop.set()
             await serving
     assert monitor.violations == 0, monitor.summary()
+
+
+@pytest.mark.skipif(not LEROBOT, reason="needs the models group: uv sync --group models")
+def test_a_lerobot_reply_is_unpickled_only_as_actions() -> None:
+    import torch
+    from lerobot.async_inference.helpers import TimedAction
+
+    actions = [TimedAction(timestamp=1.0, timestep=7, action=torch.ones(6))]
+    assert unpickle_actions(pickle.dumps(actions))[0].action.tolist() == [1.0] * 6
+
+    class Hostile:
+        def __reduce__(self) -> tuple[object, tuple[str]]:
+            return (os.system, ("touch /tmp/owned",))
+
+    with pytest.raises(pickle.UnpicklingError, match="may not contain"):
+        unpickle_actions(pickle.dumps([Hostile()]))

@@ -2297,9 +2297,12 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    for now. Then adapters for servers teams already run, each a thin translator held to the same
    suite: openpi's websocket server (done: `OpenPIKeys` maps Neura's inputs to the policy's names;
    openpi's wire has no request ids, so a request given up on drops the connection rather than
-   let its answer be taken for the next one's), then LeRobot's async gRPC server (its replies are pickled:
-   unpickled only as the types it sends, and only from servers the robot's owner trusts). Hosted
-   APIs when their protocols are public.
+   let its answer be taken for the next one's), then LeRobot's async gRPC server (done: the robot
+   tells it which checkpoint to load; every observation is sent must-go, and an answer whose first
+   timestep is not the request's is refused. Its replies are pickled, and pickle would load their
+   tensors with an unrestricted `torch.load`: they are unpickled only as LeRobot's `TimedAction`,
+   with storage loaded weights-only, and only from servers the robot's owner runs). All four pass
+   one scenario (`test_local.py`). Hosted APIs when their protocols are public.
 3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile
    against what the policy server serves before anything can move.
 4. **The incident record**: a rolling buffer of observation metadata, every chunk and the

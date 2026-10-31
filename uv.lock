@@ -2388,6 +2388,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+lerobot = [
+    { name = "lerobot" },
+]
 openpi = [
     { name = "msgpack" },
     { name = "websockets" },
@@ -2396,13 +2399,14 @@ openpi = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.84,<2" },
+    { name = "lerobot", marker = "extra == 'lerobot'", specifier = ">=0.6.1,<0.7" },
     { name = "msgpack", marker = "extra == 'openpi'", specifier = ">=1.1" },
     { name = "neura-contracts", editable = "packages/neura-contracts" },
     { name = "neura-proto", editable = "packages/neura-proto" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "websockets", marker = "extra == 'openpi'", specifier = ">=13" },
 ]
-provides-extras = ["openpi"]
+provides-extras = ["openpi", "lerobot"]
 
 [[package]]
 name = "neura-sdk"
@@ -2508,6 +2512,7 @@ models = [
     { name = "neura-adapters", extra = ["lerobot"] },
     { name = "neura-learn", extra = ["models"] },
     { name = "neura-robots", extra = ["sim", "so101"] },
+    { name = "neura-runtime", extra = ["lerobot"] },
 ]
 
 [package.metadata]
@@ -2544,6 +2549,7 @@ models = [
     { name = "neura-adapters", extras = ["lerobot"], editable = "packages/neura-adapters" },
     { name = "neura-learn", extras = ["models"], editable = "packages/neura-learn" },
     { name = "neura-robots", extras = ["so101", "sim"], editable = "packages/neura-robots" },
+    { name = "neura-runtime", extras = ["lerobot"], editable = "packages/neura-runtime" },
 ]
 
 [[package]]

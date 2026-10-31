@@ -14,6 +14,8 @@ dependencies = [
 [project.optional-dependencies]
 # Policies behind an openpi policy server (neura_runtime.openpi): its websocket and msgpack wire.
 openpi = ["msgpack>=1.1", "websockets>=13"]
+# Policies behind LeRobot's async inference server (neura_runtime.lerobot_server).
+lerobot = ["lerobot>=0.6.1,<0.7"]
 
 [project.scripts]
 neura-robot = "neura_runtime.cli:main"

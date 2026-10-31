@@ -87,7 +87,7 @@ dev-report: ## What is running here and what went wrong: dev stack, local sites,
 
 .PHONY: test-models
 test-models: ## Model tests: LeRobot adapters, real workers, benchmarks, the SO-101 integration, evaluation and fine-tuning, the improvement loop end to end (needs models-setup; the loop's tests also NEURA_TEST_DATABASE_URL)
-	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench packages/neura-robots packages/neura-learn tests/integration/test_act_worker.py tests/integration/test_shadow_worker.py packages/neura-control/tests/test_improvement_e2e.py packages/neura-control/tests/test_shadow_e2e.py
+	$(UV) run --group models pytest packages/neura-adapters packages/neura-bench packages/neura-robots packages/neura-learn packages/neura-runtime/tests/test_local.py tests/integration/test_act_worker.py tests/integration/test_shadow_worker.py packages/neura-control/tests/test_improvement_e2e.py packages/neura-control/tests/test_shadow_e2e.py
 	$(UV) run --group models neura-bench run --preset smoke --out $${TMPDIR:-/tmp}/neura-bench-smoke
 
 .PHONY: qualify-emulated

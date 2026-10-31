@@ -37,6 +37,7 @@ import numpy as np
 from neura_contracts import FaultResponse
 from neura_robots.process import ArmProcess
 from neura_robots.qualify.harness import write_report
+from neura_robots.qualify.protocol import MARGIN, PAIRS
 from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.so101 import So101Arm, So101Config
 from neura_runtime.binding import ExecutionBinding
@@ -84,9 +85,9 @@ class EpisodesConfig:
     execution_profile: Path
     checkpoint: Path
     device: str = "cpu"
-    pairs: int = 30  # episodes per arm
+    pairs: int = PAIRS  # episodes per arm
     seconds: float = 30.0  # the longest an episode may run
-    margin: float = 0.15  # non-inferiority margin on the success rate
+    margin: float = MARGIN  # non-inferiority margin on the success rate
     seed: int = 0
     instruction: str | None = None
     blinded: bool = True
@@ -311,9 +312,9 @@ def add_parser(sub: Any) -> None:
     episodes.add_argument("--execution-profile", type=Path)
     episodes.add_argument("--checkpoint", type=Path)
     episodes.add_argument("--device", default="cpu")
-    episodes.add_argument("--pairs", type=int, default=30, help="episodes per arm")
+    episodes.add_argument("--pairs", type=int, default=PAIRS, help="episodes per arm")
     episodes.add_argument("--seconds", type=float, default=30.0, help="longest episode")
-    episodes.add_argument("--margin", type=float, default=0.15)
+    episodes.add_argument("--margin", type=float, default=MARGIN)
     episodes.add_argument("--seed", type=int, default=0)
     episodes.add_argument("--instruction")
     episodes.add_argument("--unblinded", action="store_true", help="tell the operator the arm")

@@ -150,7 +150,9 @@ neura-qualify promote --report qualify.json --episodes episodes.json \
 It refuses an emulated report, a report with a failed scenario or without one that hardware can
 run (every scenario but `torque_loss`, which only the emulated arm can induce; `bus_unplugged`
 needs `--manual`), parity not measured or not passed, episodes without non-inferiority, and
-episodes of a different artifact.
+episodes of a different artifact or execution profile. It also refuses reports judged more
+loosely than the defaults: a larger `--hold-tolerance`, `--parity-atol` or `--margin`, a shorter
+`--nominal-seconds`, fewer `--pairs`, or `--unblinded` episodes. A run may be stricter.
 
 ## Known limitations
 

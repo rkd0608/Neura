@@ -296,6 +296,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/qualify/cli.py`: ``neura-qualify``: qualify a robot integration on hardware (design §7.1).
 - `neura_robots/qualify/episodes.py`: Closed-loop parity: operator-scored episodes served by Neura and by LeRobot alone (design §7.1).
 - `neura_robots/qualify/harness.py`: Hardware qualification: the fault suite and open-loop parity on a real arm (design §7.1).
+- `neura_robots/qualify/protocol.py`: The qualification protocol's defaults (design §7.1): what ``neura-qualify`` runs with unless told otherwise, and the limits ``promote`` holds a run to.
 - `neura_robots/qualify/reference.py`: The policy as LeRobot runs it on its own: the reference for parity (design §10).
 - `neura_robots/qualify/site.py`: The site a robot connects to during qualification and the evidence runs: the site's gateway process, with its real policy workers, behind the TCP fault proxy, on this machine (design §7.1).
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).

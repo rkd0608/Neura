@@ -272,7 +272,7 @@ Stale reply, duplicate reply, reordered replies, reply for old epoch, reply for 
    - **Verdict.** The lower bound of the one-sided 95% interval for the difference in success rates (Newcombe's hybrid score interval) must be above minus the margin.
    - **Defaults.** 30 episodes each and a margin of 0.15: with both at 90%, the bound is about −0.14. Ten episodes each cannot show it even at 100%.
 
-`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario hardware can run, including the `--manual` one; `torque_loss` is induced only on the emulator), with parity and episodes for the same artifact that passed. It refuses emulated reports.
+`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario hardware can run, including the `--manual` one; `torque_loss` is induced only on the emulator), with parity and episodes for the same artifact and execution profile that passed. It refuses emulated reports, and reports judged by a looser protocol than the defaults (`qualify/protocol.py`: hold tolerance, parity tolerance, nominal duration, episodes per arm, margin, blinding); each report records what it was judged by.
 
 **Hardware test protocol**
 

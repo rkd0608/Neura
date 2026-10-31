@@ -41,6 +41,7 @@ from neura_contracts import ReasonCode
 from neura_robots.emulator import SO101Emulator
 from neura_robots.lock import ActuatorBusyError
 from neura_robots.process import ArmProcess
+from neura_robots.qualify.protocol import HOLD_TOLERANCE, NOMINAL_S, PARITY_ATOL
 from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.so101 import So101Arm, So101Config
 from neura_runtime import tensors
@@ -64,11 +65,11 @@ class QualifyConfig:
     device: str = "cpu"  # where the site's worker and the reference run
     scenarios: tuple[str, ...] = ()  # empty: every scenario that applies
     manual: bool = False  # include scenarios the operator performs (unplugging the bus)
-    nominal_s: float = 20.0
-    hold_tolerance: float = 1.0  # degrees (0-100 units for the gripper)
+    nominal_s: float = NOMINAL_S
+    hold_tolerance: float = HOLD_TOLERANCE
     settle_s: float = 0.3  # after a hold is commanded, before it is measured
     parity_samples: int = 10
-    parity_atol: float = 1e-3  # in the artifact's action units
+    parity_atol: float = PARITY_ATOL
     instruction: str | None = None
     emulator: SO101Emulator | None = None
     workdir: Path | None = None
@@ -584,6 +585,12 @@ class Qualification:
                 "execution_profile": self.binding.execution_profile_digest,
                 "execution_profile_name": self.binding.profile.metadata.name,
                 "device": self.config.device,
+            },
+            # What it was judged by: promotion holds these to the defaults.
+            "protocol": {
+                "hold_tolerance": self.config.hold_tolerance,
+                "nominal_s": self.config.nominal_s,
+                "parity_atol": self.config.parity_atol,
             },
             "scenarios": [r.to_json() for r in self.results],
             "global_checks": [c.to_json() for c in global_checks],

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import json
 import logging
 import os
@@ -40,6 +39,7 @@ from neura.v1 import site_pb2
 from neura_agent import trust
 from neura_agent.identity import atomic_write
 from neura_contracts import ModelArtifact, ReasonCode, parse_document, signing
+from neura_contracts.inference import weights_manifest
 from neura_runtime.binding import ExecutionBinding
 from neura_server.capture.store import EpisodeFilter, StoreError
 from neura_server.sandbox import Invocation, failed_run, launcher_for, private_directory
@@ -75,24 +75,6 @@ def _version(package: str) -> str:
         return version(package)
     except PackageNotFoundError:
         return "unknown"
-
-
-def weights_manifest(directory: Path) -> list[dict[str, Any]]:
-    """``spec.weights`` for every file of a checkpoint directory."""
-    entries = []
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for block in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(block)
-        entries.append(
-            {
-                "path": path.relative_to(directory).as_posix(),
-                "digest": f"sha256:{digest.hexdigest()}",
-                "size_bytes": path.stat().st_size,
-            }
-        )
-    return entries
 
 
 def link_tree(source: Path, target: Path) -> None:

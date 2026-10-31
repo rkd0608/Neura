@@ -14,7 +14,8 @@ pytest.importorskip("lerobot", reason="needs the models group: uv sync --group m
 
 from neura_adapters import ModelInputs, PolicyError, load_adapter
 from neura_adapters.base import blank_inputs
-from neura_adapters.synthetic import weights_manifest, write_act_checkpoint
+from neura_adapters.synthetic import write_act_checkpoint
+from neura_contracts.inference import weights_manifest
 from neura_runtime.binding import ExecutionBinding
 
 

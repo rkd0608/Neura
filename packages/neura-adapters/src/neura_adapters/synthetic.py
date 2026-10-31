@@ -12,7 +12,6 @@ language-conditioned model's tokenizer.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -318,21 +317,3 @@ def rename_tokenizer(directory: Path, name: str, replacement: str) -> None:
 
     for path in directory.glob("policy_*processor*.json"):
         path.write_text(json.dumps(walk(json.loads(path.read_text())), indent=2), encoding="utf-8")
-
-
-def weights_manifest(directory: Path) -> list[dict[str, Any]]:
-    """The artifact's `spec.weights` entries for every file of a checkpoint directory."""
-    entries = []
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for block in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(block)
-        entries.append(
-            {
-                "path": path.relative_to(directory).as_posix(),
-                "digest": f"sha256:{digest.hexdigest()}",
-                "size_bytes": path.stat().st_size,
-            }
-        )
-    return entries

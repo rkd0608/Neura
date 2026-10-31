@@ -275,7 +275,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/aloha/__init__.py`: The ALOHA bimanual tasks of gym-aloha (transfer cube, insertion) on the MuJoCo bindings alone.
 - `neura_robots/aloha/arm.py`: The simulated ALOHA as a robot integration: what ``neura-arm``'s process, the runtime and the qualification harness see of a real arm (``So101Arm``), on the MuJoCo scene.
 - `neura_robots/aloha/cell.py`: ``neura-aloha-cell``: a robot cell of simulated ALOHAs served by a Neura site, running their task back to back, and a page to watch them.
-- `neura_robots/aloha/contracts.py`: Contracts for serving an ALOHA policy to the simulated ALOHA: the robot profile (from the scene's actuators), the model artifact (from the checkpoint's own configuration and files) and an execution …
+- `neura_robots/aloha/contracts.py`: Contracts for serving an ALOHA policy to the simulated ALOHA: the robot profile (from the scene's actuators), the model artifact (inferred from the checkpoint's own configuration and files, as for …
 - `neura_robots/aloha/fidelity.py`: Step-for-step comparison of ``neura_robots.aloha`` with gym-aloha itself.
 - `neura_robots/aloha/world.py`: Time for the simulated ALOHA.
 - `neura_robots/arm.py`: What the robot-side process (``process.ArmProcess``) needs of an arm integration: the runtime's Controller and SensorSource, plus recovery, revalidation and telemetry.

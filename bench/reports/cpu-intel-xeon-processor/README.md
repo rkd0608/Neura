@@ -4,11 +4,11 @@ Generated 2026-10-15T05:07:49+00:00 from commit `184b221` with `neura-bench run 
 
 > **This run is on a CPU development host, not a GPU.** It shows the harness working end to end and how sharing behaves on this host. Its numbers say nothing about GPU capacity: run `make bench` on the GPU runner for that.
 
-Models: synthetic checkpoints with the real LeRobot architectures and random weights (ACT and Diffusion Policy, size `small`, cameras 128 x 96, fp32). Latency, memory and batching depend on architecture and shapes, not on what weights learned; closed-loop task success needs trained weights and is not measured here.
+Models: synthetic checkpoints with the real LeRobot architectures and random weights (ACT, Diffusion Policy; size `small`, cameras 128 x 96, fp32). Latency, memory and batching depend on architecture and shapes, not on what weights learned; closed-loop task success needs trained weights and is not measured here.
 
 ## Robots per device at the SLO
 
-SLO: at most 1.0 deadline misses per 1,000 requests, at most 0.0 starvation events per robot-hour, and no robot faults. A configuration's capacity is the largest robot count at which it and every smaller count measured met the SLO (simulation with measured latency and contention, below).
+SLO: at most 1.0 deadline misses per 1,000 requests, at most 0.0 starvation events per robot-hour, no robot faults. A configuration's capacity is the largest robot count at which it and every smaller count measured met the SLO (simulation with measured latency and contention, below).
 
 | Case | Workload | One device per robot | One process per robot | Best Neura |
 | --- | --- | --- | --- | --- |
@@ -16,13 +16,13 @@ SLO: at most 1.0 deadline misses per 1,000 requests, at most 0.0 starvation even
 | Same weights on every robot | synchronized (bursty) arrivals | 1 | 1, fails at 2 | 2, fails at 4 (Neura, deadline + fairness) |
 | Same weights on every robot | phased, with a background GPU job | 0 (fails at 1) | 0 (fails at 1) | 0 (fails at 1) (Neura, deadline + fairness) |
 | Per-robot LoRA adapters of one base model | phased arrivals | 1 | 8, fails at 12 | 8, fails at 12 (Neura, multi-adapter batching) |
-| Different full fine-tunes of one architecture | phased arrivals | 1 | 8, fails at 12 | 8, fails at 12 (Neura, co-located groups) |
-| Different full fine-tunes of one architecture | phased, with a background GPU job | 0 (fails at 1) | 0 (fails at 1) | 0 (fails at 1) (Neura, co-located groups) |
+| 2 different full fine-tunes of one architecture | phased arrivals | 1 | 8, fails at 12 | 8, fails at 12 (Neura, co-located groups) |
+| 2 different full fine-tunes of one architecture | phased, with a background GPU job | 0 (fails at 1) | 0 (fails at 1) | 0 (fails at 1) (Neura, co-located groups) |
 | Different architectures (ACT and Diffusion Policy) | phased arrivals | 0 (fails at 1) | 1, fails at 2 | 1, fails at 2 (Neura, co-located groups) |
 
 - **Same weights on every robot:** sharing a device pays, but here one process per robot serves as many or more (8 against 8): on this device batching does not beat co-location. Neura, deadline + fairness serves 8 robots per device (0.125 device-hours per robot-hour, against 1 with a device per robot); at 12 robots it misses the SLO, so the crossover where one device stops paying is between 8 and 12.
 - **Per-robot LoRA adapters of one base model:** sharing a device pays, but here one process per robot serves as many or more (8 against 8): on this device batching does not beat co-location. Neura, multi-adapter batching serves 8 robots per device (0.125 device-hours per robot-hour, against 1 with a device per robot); at 12 robots it misses the SLO, so the crossover where one device stops paying is between 8 and 12.
-- **Different full fine-tunes of one architecture:** sharing a device pays, but here one process per robot serves as many or more (8 against 8): on this device batching does not beat co-location. Neura, co-located groups serves 8 robots per device (0.125 device-hours per robot-hour, against 1 with a device per robot); at 12 robots it misses the SLO, so the crossover where one device stops paying is between 8 and 12.
+- **2 different full fine-tunes of one architecture:** sharing a device pays, but here one process per robot serves as many or more (8 against 8): on this device batching does not beat co-location. Neura, co-located groups serves 8 robots per device (0.125 device-hours per robot-hour, against 1 with a device per robot); at 12 robots it misses the SLO, so the crossover where one device stops paying is between 8 and 12.
 - **Different architectures (ACT and Diffusion Policy):** sharing does not pay on this device: Neura, co-located groups serves 1 robot(s) at the SLO.
 
 ## Measurements on the device
@@ -36,7 +36,7 @@ Forward-pass latency through a worker process, ACT:
 | 4 | 144.10 | 167.22 | 846 | 56 |
 | 8 | 192.24 | 227.51 | 856 | 42 |
 
-Forward-pass latency through a worker process, DIFFUSION:
+Forward-pass latency through a worker process, Diffusion Policy:
 
 | Batch | p50 (ms) | p99 (ms) | Peak memory (MiB) | Samples |
 | --- | --- | --- | --- | --- |
@@ -153,7 +153,7 @@ Per 1,000 requests: deadline misses (served after the predicted starvation time 
 | Neura, multi-adapter batching | 12 | 836.84 | 807.5 | 457.5 | 15.1 | 64.6 / 98.3 / 100.3 | 3.01 | 99% | 0.083 | 856 |
 | Neura, multi-adapter batching | 16 | 862.86 | 431.2 | 346.9 | 8.0 | 61.5 / 97.5 / 100.3 | 4.93 | 100% | 0.062 | 856 |
 
-### Different full fine-tunes of one architecture: phased arrivals
+### 2 different full fine-tunes of one architecture: phased arrivals
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -171,7 +171,7 @@ Per 1,000 requests: deadline misses (served after the predicted starvation time 
 | Neura, co-located groups | 12 | 361.31 | 225.0 | 92.5 | 80.0 | 4.7 / 95.2 / 99.6 | 1.19 | 86% | 0.083 | 1696 |
 | Neura, co-located groups | 16 | 891.69 | 579.4 | 420.0 | 18.1 | 55.7 / 97.7 / 99.8 | 2.54 | 100% | 0.062 | 1709 |
 
-### Different full fine-tunes of one architecture: phased, with a background GPU job
+### 2 different full fine-tunes of one architecture: phased, with a background GPU job
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -206,7 +206,7 @@ The production gateway with real worker processes on the device and simulated ro
 | Same weights on every robot: phased arrivals | Dedicated: one process per robot, one device | 3 | 135 / 135 | 7.41 / 0.00 | 0.0 / 0.0 | 2.0 / 1.8 | 3.7 / 3.7 | 1.00 / 1.00 | 25% / 24% | 0.1% | 0 |
 | Same weights on every robot: synchronized (bursty) arrivals | Neura, deadline + fairness | 4 | 182 / 182 | 10.99 / 10.99 | 0.0 / 0.0 | 2.4 / 3.9 | 48.3 / 75.5 | 1.08 / 1.07 | 32% / 30% | 0.0% | 0 |
 | Same weights on every robot: phased, with a background GPU job | Neura, deadline + fairness | 4 | 887 / 820 | 624.58 / 615.85 | 0.0 / 0.0 | 49.4 / 5.3 | 95.7 / 97.7 | 2.21 / 2.17 | 99% / 98% | 0.0% | 0 |
-| Different full fine-tunes of one architecture: phased arrivals | Neura, co-located groups | 4 | 180 / 180 | 0.00 / 0.00 | 0.0 / 0.0 | 4.6 / 4.0 | 6.5 / 5.7 | 1.00 / 1.00 | 34% / 32% | 0.0% | 0 |
+| 2 different full fine-tunes of one architecture: phased arrivals | Neura, co-located groups | 4 | 180 / 180 | 0.00 / 0.00 | 0.0 / 0.0 | 4.6 / 4.0 | 6.5 / 5.7 | 1.00 / 1.00 | 34% / 32% | 0.0% | 0 |
 | Different architectures (ACT and Diffusion Policy): phased arrivals | Neura, co-located groups | 4 | 517 / 514 | 504.84 / 793.77 | 0.0 / 0.0 | 17.3 / 3.8 | 95.0 / 69.8 | 1.36 / 1.47 | 99% / 96% | 0.0% | 0 |
 
 ## Method and limits

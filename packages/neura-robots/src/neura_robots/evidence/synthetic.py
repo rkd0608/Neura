@@ -19,6 +19,7 @@ CONFIG = {
         "observation.images.top": {"type": "VISUAL", "shape": [3, 480, 640]},
         "observation.state": {"type": "STATE", "shape": [14]},
     },
+    "output_features": {"action": {"type": "ACTION", "shape": [14]}},
 }
 
 

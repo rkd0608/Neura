@@ -1,6 +1,6 @@
 """Contracts for serving an ALOHA policy to the simulated ALOHA: the robot profile (from the
-scene's actuators), the model artifact (from the checkpoint's own configuration and files) and an
-execution profile that binds them.
+scene's actuators), the model artifact (inferred from the checkpoint's own configuration and
+files, as for any LeRobot checkpoint) and an execution profile that binds them.
 
 The robot's commands are the policy's actions, in the same order and units: six absolute joint
 positions in radians and a normalized gripper (0 closed, 1 open) per arm. Joint ranges are the
@@ -12,25 +12,19 @@ refuses what no gripper command should be.
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
+from neura_contracts.inference import lerobot_artifact, read_lerobot_config, weights_manifest
 from neura_robots.aloha import DT, JOINTS, AlohaSim
 from neura_runtime.binding import ExecutionBinding
 
 API = "neura.dev/v1alpha1"
 CONTROL_PERIOD_US = round(DT * 1_000_000)
 GRIPPER_RANGE = (-0.25, 1.25)
-# Placeholder: the qualification and evidence sites run policy workers as local processes, not
-# in the runtime image the artifact pins.
-RUNTIME_IMAGE = (
-    "registry.example.com/neura/lerobot-worker@sha256:"
-    "0000000000000000000000000000000000000000000000000000000000000002"
-)
 
 
 def command_range(sim: AlohaSim, index: int) -> tuple[str, float, float]:
@@ -96,116 +90,26 @@ def robot_profile(task: str = "transfer_cube") -> dict[str, Any]:
     }
 
 
-def _weights_manifest(directory: Path) -> list[dict[str, Any]]:
-    """``spec.weights``: every file of the checkpoint, with its digest and size."""
-    entries = []
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for block in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(block)
-        entries.append(
-            {
-                "path": path.relative_to(directory).as_posix(),
-                "digest": f"sha256:{digest.hexdigest()}",
-                "size_bytes": path.stat().st_size,
-            }
-        )
-    return entries
-
-
 def artifact(
-    checkpoint: Path,
-    *,
-    name: str,
-    source: str,
-    device: str = "cpu",
-    precision: str = "fp32",
+    checkpoint: Path, *, name: str, source: str, task: str = "transfer_cube"
 ) -> dict[str, Any]:
-    """The artifact for a LeRobot ACT checkpoint trained on the ALOHA scene, from its
-    ``config.json``: the image inputs it reads (of the top camera), the 14-value state, and its
-    chunk length."""
-    config = json.loads((checkpoint / "config.json").read_text(encoding="utf-8"))
+    """The artifact of a LeRobot ACT checkpoint trained on the ALOHA scene, inferred from its
+    ``config.json`` for the simulated ALOHA's robot profile (``neura_contracts.inference``), its
+    weights credited to ``source``."""
+    config = read_lerobot_config(checkpoint)
     if config.get("type") != "act":
         raise ValueError(f"{checkpoint}: an ACT checkpoint is expected, not {config.get('type')}")
-    inputs: list[dict[str, Any]] = []
-    for key, feature in config["input_features"].items():
-        if feature["type"] == "STATE":
-            if feature["shape"] != [len(JOINTS)]:
-                raise ValueError(f"{key}: shape {feature['shape']}, the ALOHA state has 14")
-            inputs.append(
-                {
-                    "kind": "state",
-                    "name": key,
-                    "components": [
-                        {
-                            "name": joint,
-                            "unit": "normalized" if joint.endswith("_gripper") else "rad",
-                            "frame": "joint_space",
-                        }
-                        for joint in JOINTS
-                    ],
-                }
-            )
-        elif feature["type"] == "VISUAL":
-            role = key.rsplit(".", 1)[-1]
-            channels, height, width = feature["shape"]
-            if role != "top" or channels != 3:
-                raise ValueError(f"{key}: the simulated ALOHA serves the top camera (3 channels)")
-            inputs.append(
-                {
-                    "kind": "image",
-                    "name": key,
-                    "camera_role": role,
-                    "width": width,
-                    "height": height,
-                    "color_order": "rgb",
-                    "accepted_encodings": [{"encoding": "raw"}],
-                }
-            )
-        else:
-            raise ValueError(f"{key}: input type {feature['type']} is not served")
-    sim = AlohaSim()
-    outputs = [{k: v for k, v in f.items() if k not in ("min", "max")} for f in _features(sim)]
-    kind = "cpu" if device == "cpu" else "cuda"
-    return {
-        "api_version": API,
-        "kind": "ModelArtifact",
-        "metadata": {
-            "name": name,
-            "version": "hub",
-            "description": f"LeRobot ACT trained on the ALOHA scene ({source}).",
-        },
-        "spec": {
-            "weights": _weights_manifest(checkpoint),
-            "runtime_image": {"reference": RUNTIME_IMAGE},
-            "adapter": {"name": "lerobot-act", "version": "0.1.0"},
-            "processing": {"preprocessing_version": "0.1.0", "postprocessing_version": "0.1.0"},
-            "inputs": inputs,
-            "outputs": {
-                "chunk_length": int(config["chunk_size"]),
-                "control_period_us": CONTROL_PERIOD_US,
-                "features": outputs,
-            },
-            "properties": {
-                "deterministic": True,
-                "stateful": False,
-                "language_conditioned": False,
-                "rtc_capable": False,
-                "batchable": True,
-            },
-            "validated_merge_modes": ["replace"],
-            "devices": [{"device": kind, "precisions": [precision], "min_memory_mib": 1}],
-            "licenses": {
-                "code": {"spdx_id": "Apache-2.0", "url": "https://github.com/huggingface/lerobot"},
-                "weights": (
-                    {"name": source, "url": f"https://huggingface.co/{source}"}
-                    if _hub_repo(source)
-                    else {"name": source}
-                ),
-            },
-        },
-    }
+    license_ = {"name": source}
+    if _hub_repo(source):
+        license_["url"] = f"https://huggingface.co/{source}"
+    return lerobot_artifact(
+        config,
+        robot_profile(task),
+        name=name,
+        version="hub",
+        weights=weights_manifest(checkpoint),
+        weights_license=license_,
+    )
 
 
 def _hub_repo(source: str) -> bool:
@@ -298,7 +202,7 @@ def write(
 ) -> Deployment:
     """Write the three documents for serving ``checkpoint`` and return their paths."""
     robot = robot_profile(task)
-    model = artifact(checkpoint, name=name, source=source, device=device, precision=precision)
+    model = artifact(checkpoint, name=name, source=source, task=task)
     profile = execution_profile(model, robot, chunking=chunking, device=device, precision=precision)
     directory.mkdir(parents=True, exist_ok=True)
     paths = []

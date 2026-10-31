@@ -5,6 +5,7 @@ simulated scenes, and the job entry point the agent runs."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -24,10 +25,10 @@ from neura_learn.evaluate import (
     evaluate_replay,
     replay_samples,
 )
-from neura_learn.train import Recipe, base_statistics, fine_tune
+from neura_learn.train import Recipe, _LossLog, base_statistics, fine_tune
 
 from neura_bench.deployments import DeploymentFiles, synthetic
-from neura_runtime.capture.episode import Episode
+from neura_runtime.capture.episode import STEPS, Episode
 from neura_runtime.capture.testing import synthetic_episode
 
 
@@ -49,9 +50,13 @@ def episodes(directory: Path, files: DeploymentFiles, count: int = 3) -> list[Ep
 def test_replay_measures_how_far_a_model_is_from_what_robots_did(
     tmp_path: Path, model: DeploymentFiles
 ) -> None:
-    recorded = episodes(tmp_path / "eps", model)
+    recorded = episodes(tmp_path / "eps", model, count=4)
+    missing = recorded[3].steps()  # one state reading lost: the episode is left out, not the run
+    missing.state[5, 0] = np.nan
+    missing.save(recorded[3].directory / STEPS)
     suite = ReplaySuite(stride=4)
-    samples = replay_samples(recorded, model.binding, suite)
+    samples, skipped = replay_samples(recorded, model.binding, suite)
+    assert skipped == {"step 5 has a missing state reading": 1}
     assert samples
     assert {outcome for _, outcome, _, _ in samples} == {"success", "failure"}
 
@@ -79,6 +84,7 @@ def test_replay_measures_how_far_a_model_is_from_what_robots_did(
     report = evaluate_replay(recorded, perfect, model.binding, suite, baseline=perfect)
     assert report["verdict"] == "non_inferior"
     assert report["episodes"] == 3
+    assert report["skipped"] == skipped
 
     real = adapter_predict(model.binding, model.checkpoint)  # type: ignore[arg-type]
     report = evaluate_replay(recorded, real, model.binding, suite)
@@ -115,7 +121,7 @@ def test_a_fine_tune_produces_a_checkpoint_serving_can_load(
     assert report.losses[-1][0] == 3
     # Serving loads it with the base model's contracts and it produces chunks.
     predict = adapter_predict(model.binding, checkpoint)
-    samples = replay_samples(recorded, model.binding, ReplaySuite(stride=8))
+    samples, _ = replay_samples(recorded, model.binding, ReplaySuite(stride=8))
     (chunk,) = predict([samples[0][2]])
     assert chunk.shape == (model.binding.chunk_length, model.binding.action_dim)
     from safetensors.numpy import load_file
@@ -123,6 +129,21 @@ def test_a_fine_tune_produces_a_checkpoint_serving_can_load(
     before = load_file(model.checkpoint / "model.safetensors")
     after = load_file(checkpoint / "model.safetensors")
     assert any(not np.array_equal(before[k], after[k]) for k in before)  # it trained
+
+
+def test_losses_keep_their_steps_past_a_thousand() -> None:
+    """LeRobot's log rounds its step from 1000 on (1K, 2K): each logged loss is still put at
+    its own step."""
+    from lerobot.utils.logging_utils import AverageMeter, MetricsTracker
+
+    tracker = MetricsTracker(8, 1000, 10, {"loss": AverageMeter("loss", ":.3f")})
+    log = _LossLog(lambda _: None, log_every=50)
+    for step in range(1, 1501):
+        tracker.step()
+        tracker.loss = 1 / step
+        if step % 50 == 0:
+            log.emit(logging.makeLogRecord({"msg": str(tracker)}))
+    assert [step for step, _ in log.losses] == list(range(50, 1501, 50))
 
 
 def test_the_job_entry_point_runs_replay_and_training(

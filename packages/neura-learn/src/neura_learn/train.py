@@ -24,7 +24,8 @@ from neura_adapters.lerobot import policy_config
 Progress = Callable[[str], None]
 log = logging.getLogger("neura.learn")
 
-_LOSS = re.compile(r"\bstep:(?P<step>[0-9.]+[KM]?)\b.*?\bloss:(?P<loss>[0-9.eE+-]+)")
+# LeRobot's training line. Its step is rounded from 1000 on (1K, 2K), so it is not read.
+_LOSS = re.compile(r"\bstep:\S+ .*?\bloss:(?P<loss>[0-9.eE+-]+)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,21 +76,21 @@ class TrainingReport:
 
 
 class _LossLog(logging.Handler):
-    """LeRobot logs its training metrics as text; keep each logged step's loss."""
+    """LeRobot logs its training metrics as text; keep each logged step's loss. It logs every
+    ``log_every``-th step from the first (``step % log_freq == 0``): the k-th line is step
+    k * ``log_every``."""
 
-    def __init__(self, progress: Progress) -> None:
+    def __init__(self, progress: Progress, log_every: int) -> None:
         super().__init__(logging.INFO)
         self.losses: list[tuple[int, float]] = []
         self.progress = progress
+        self.log_every = log_every
 
     def emit(self, record: logging.LogRecord) -> None:
-        text = record.getMessage()
-        match = _LOSS.search(text)
+        match = _LOSS.search(record.getMessage())
         if match is None:
             return
-        raw = match.group("step")
-        scale = {"K": 1_000, "M": 1_000_000}.get(raw[-1], 1)
-        step = int(float(raw.rstrip("KM")) * scale)
+        step = (len(self.losses) + 1) * self.log_every
         loss = float(match.group("loss"))
         self.losses.append((step, loss))
         self.progress(f"step {step}: loss {loss:.4f}")
@@ -174,7 +175,7 @@ def fine_tune(
         save_freq=recipe.steps,
         log_freq=recipe.log_every,
     )
-    handler = _LossLog(progress)
+    handler = _LossLog(progress, recipe.log_every)
     root = logging.getLogger()
     previous_handlers, previous_level = list(root.handlers), root.level
     original = lerobot_train.init_logging

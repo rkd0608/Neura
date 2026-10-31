@@ -39,6 +39,7 @@ from neura_robots.qualify.harness import (
     required,
     write_report,
 )
+from neura_robots.qualify.protocol import HOLD_TOLERANCE, MARGIN, NOMINAL_S, PAIRS, PARITY_ATOL
 from neura_robots.so101 import CameraConfig, So101Config
 
 ROOT = Path(__file__).resolve().parents[5]
@@ -183,6 +184,39 @@ def _promote(args: argparse.Namespace) -> int:
     return 0
 
 
+# What a run may change, as its report records it: the option, the default it is held to, and
+# whether a larger value is looser. A run may be stricter than the default, never looser.
+LIMITS = (
+    ("qualification", "hold_tolerance", "--hold-tolerance", HOLD_TOLERANCE, True),
+    ("qualification", "parity_atol", "--parity-atol", PARITY_ATOL, True),
+    ("qualification", "nominal_s", "--nominal-seconds", NOMINAL_S, False),
+    ("episodes", "pairs", "--pairs", PAIRS, False),
+    ("episodes", "margin", "--margin", MARGIN, True),
+)
+
+
+def protocol_problems(report: dict[str, Any], episodes: dict[str, Any]) -> list[str]:
+    """Where the reports were judged by a looser protocol than the defaults, or do not say what
+    they were judged by."""
+    reports = {"qualification": report, "episodes": episodes}
+    problems = []
+    for name, key, option, limit, larger_is_looser in LIMITS:
+        value = (reports[name].get("protocol") or {}).get(key)
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            problems.append(
+                f"the {name} report does not record its {option} (it was written before reports "
+                "did): run it again"
+            )
+        elif value > limit if larger_is_looser else value < limit:
+            bound = "at most" if larger_is_looser else "at least"
+            problems.append(
+                f"the {name} ran with {option} {value:g}: promotion needs {bound} {limit:g}"
+            )
+    if (episodes.get("protocol") or {}).get("blinded") is not True:
+        problems.append("the episodes were not blinded (--unblinded)")
+    return problems
+
+
 def promotion_problems(report: dict[str, Any], episodes: dict[str, Any]) -> list[str]:
     """Why these reports cannot make a combination Supported (empty: they can)."""
     problems = []
@@ -202,14 +236,17 @@ def promotion_problems(report: dict[str, Any], episodes: dict[str, Any]) -> list
         )
     if episodes.get("kind") != "neura-closed-loop-episodes":
         problems.append("the episodes file is not a closed-loop episodes report")
-    else:
-        if episodes.get("emulated"):
-            problems.append("the episodes are from the emulated arm")
-        if not episodes.get("verdict", {}).get("non_inferior"):
-            problems.append("closed-loop non-inferiority was not shown")
-        if episodes.get("contracts", {}).get("artifact") != report["contracts"]["artifact"]:
-            problems.append("the episodes ran a different artifact")
-    return problems
+        return problems
+    if episodes.get("emulated"):
+        problems.append("the episodes are from the emulated arm")
+    if not episodes.get("verdict", {}).get("non_inferior"):
+        problems.append("closed-loop non-inferiority was not shown")
+    contracts = episodes.get("contracts", {})
+    if contracts.get("artifact") != report["contracts"]["artifact"]:
+        problems.append("the episodes ran a different artifact")
+    if contracts.get("execution_profile") != report["contracts"].get("execution_profile"):
+        problems.append("the episodes ran a different execution profile")
+    return problems + protocol_problems(report, episodes)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -229,9 +266,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--device", default="cpu")
     run.add_argument("--scenarios", help=f"comma-separated subset of: {', '.join(SCENARIOS)}")
     run.add_argument("--manual", action="store_true", help="include operator-performed faults")
-    run.add_argument("--nominal-seconds", type=float, default=20.0)
-    run.add_argument("--hold-tolerance", type=float, default=1.0, help="degrees")
-    run.add_argument("--parity-atol", type=float, default=1e-3)
+    run.add_argument("--nominal-seconds", type=float, default=NOMINAL_S)
+    run.add_argument("--hold-tolerance", type=float, default=HOLD_TOLERANCE, help="degrees")
+    run.add_argument("--parity-atol", type=float, default=PARITY_ATOL)
     run.add_argument("--instruction")
     run.add_argument("--yes", action="store_true", help="skip the operator's confirmation")
     run.add_argument("--out", type=Path, required=True)

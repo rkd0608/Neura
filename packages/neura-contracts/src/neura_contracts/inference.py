@@ -255,11 +255,12 @@ def declared_artifact(
     version: str,
     weights: list[dict[str, Any]],
     runtime_image: str | None = None,
-    weights_license: str | None = None,
+    weights_license: str | Mapping[str, str] | None = None,
     code_license: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """The model artifact of any policy, from its declaration and the robot it is for. State
-    components and action features are the robot's, in its order and units."""
+    components and action features are the robot's, in its order and units. A license is a
+    name, or a license reference (``name``, ``spdx_id``, ``url``)."""
     spec = _spec(robot)
     robot_name = robot.get("metadata", {}).get("name", "the robot")
     robot_cameras = {c["role"]: c for c in spec.get("cameras", [])}
@@ -361,7 +362,9 @@ def declared_artifact(
             "licenses": {
                 "code": code_license
                 or {"spdx_id": "Apache-2.0", "url": "https://github.com/huggingface/lerobot"},
-                "weights": {"name": weights_license or "Customer-owned"},
+                "weights": dict(weights_license)
+                if isinstance(weights_license, Mapping)
+                else {"name": weights_license or "Customer-owned"},
             },
         },
     }
@@ -375,7 +378,7 @@ def lerobot_artifact(
     version: str,
     weights: list[dict[str, Any]],
     runtime_image: str | None = None,
-    weights_license: str | None = None,
+    weights_license: str | Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """The model artifact of a LeRobot checkpoint (its ``config.json``) for ``robot``."""
     return declared_artifact(

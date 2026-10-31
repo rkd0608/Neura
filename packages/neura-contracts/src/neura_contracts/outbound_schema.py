@@ -179,7 +179,7 @@ RESULTS: dict[str, OutboundField] = {
     'evaluation.robots': OutboundField(False, 'Shadow: how many robots it shadowed.'),
     'evaluation.duration_s': OutboundField(False, 'Shadow: how long it shadowed, in seconds.'),
     'evaluation.divergence.*': OutboundField(False, "Shadow: how far the candidate's actions were from the running model's (mean, p95, max share of each command's range)."),
-    'evaluation.skipped.*': OutboundField(False, "Shadow: observations not compared, by why (candidate busy, invalid input, running model's result lost)."),
+    'evaluation.skipped.*': OutboundField(False, "Shadow: observations not compared, by why (candidate busy, invalid input, running model's result lost). Replay: how many recorded episodes were left out, by why (incomplete, recorded for another robot or camera, a missing state reading)."),
     'training.recipe.*': OutboundField(False, 'Training: the recipe (steps, batch size, learning rate, seed, normalization).'),
     'training.dataset.*': OutboundField(False, 'Training: episodes and frames trained on, and why any were left out.'),
     'training.training.*': OutboundField(False, 'Training: steps, duration and loss.'),

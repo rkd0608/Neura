@@ -272,7 +272,7 @@ Stale reply, duplicate reply, reordered replies, reply for old epoch, reply for 
    - **Verdict.** The lower bound of the one-sided 95% interval for the difference in success rates (Newcombe's hybrid score interval) must be above minus the margin.
    - **Defaults.** 30 episodes each and a margin of 0.15: with both at 90%, the bound is about −0.14. Ten episodes each cannot show it even at 100%.
 
-`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario hardware can run, including the `--manual` one; `torque_loss` is induced only on the emulator), with parity and episodes for the same artifact that passed. It refuses emulated reports.
+`neura-qualify promote` writes the docs site's Supported entry only from a complete hardware report (every scenario hardware can run, including the `--manual` one; `torque_loss` is induced only on the emulator), with parity and episodes for the same artifact and execution profile that passed. It refuses emulated reports, and reports judged by a looser protocol than the defaults (`qualify/protocol.py`: hold tolerance, parity tolerance, nominal duration, episodes per arm, margin, blinding); each report records what it was judged by.
 
 **Hardware test protocol**
 
@@ -1829,7 +1829,7 @@ robots (§28.4, *Jobs at the site*). Three suites:
 - **Simulation.** Both models on the same seeded scenes of a task the site can simulate (ALOHA
   transfer-cube and insertion, §25), in lockstep: the world waits for the policy, as LeRobot
   evaluates its published policies, so the comparison measures the models and not the computer.
-  The verdict is a paired non-inferiority test on the success rates (`neura_learn.stats`): the
+  The verdict is a paired non-inferiority test on the success rates (`neura_contracts.stats`): the
   difference of paired proportions with a Newcombe hybrid-score interval, one-sided at 95%,
   against a margin agreed before the run (0.10 by default):
   - `superior`: the lower bound is above zero;
@@ -1842,7 +1842,9 @@ robots (§28.4, *Jobs at the site*). Three suites:
 - **Replay.** Both models on observations the site's robots recorded (§28.2). At every *n*-th
   recorded frame each model predicts a chunk, compared with the actions the robot then executed,
   in the model's units and normalized by each action's range. Errors are reported by episode
-  outcome. The candidate passes (`non_inferior`) when its mean error on successful episodes is at
+  outcome. An episode the model cannot use is left out and counted by why, by the same rule as
+  a dataset export (`usable_frames`: incomplete, another robot or camera, a missing state
+  reading). The candidate passes (`non_inferior`) when its mean error on successful episodes is at
   most the baseline's × (1 + 0.25) + 0.01, and is `inconclusive` without successful episodes. A
   replay is a regression check on real data: it can catch a candidate that drifts from behavior
   that worked, but it cannot show a candidate is better, since the baseline produced those actions.

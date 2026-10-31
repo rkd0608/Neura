@@ -28,8 +28,6 @@ from neura_contracts import ReasonCode
 from neura_runtime.runtime import RobotRuntime
 from neura_server.scheduler import SchedulerStats
 
-MISSED_DROPS = frozenset({ReasonCode.REQUEST_EXPIRED.value})
-
 
 @dataclass(slots=True)
 class Window:
@@ -42,7 +40,6 @@ class Window:
     served_late: int = 0
     expired: int = 0
     failed: int = 0
-    starved_on_arrival: int = 0
     dispatched: int = 0
     batches: int = 0
     batch_sizes: Counter[int] = field(default_factory=Counter)
@@ -50,7 +47,6 @@ class Window:
     faults: int = 0
     actions_dispatched: int = 0
     actions_trimmed: int = 0
-    chunks_accepted: int = 0
     chunks_rejected_at_robot: int = 0
     ages_at_dispatch_us: list[int] = field(default_factory=list)
     device_busy_s: dict[str, float] = field(default_factory=dict)
@@ -170,7 +166,6 @@ class Snapshot:
     batch_sizes: Counter[int]
     expired: int
     failed: int
-    starved_on_arrival: int
     robots: dict[str, RobotSnapshot]
     busy_s: dict[str, float]
 
@@ -189,7 +184,6 @@ def snapshot(
         batch_sizes=sum((Counter(s.batch_sizes) for s in stats), Counter()),
         expired=sum(s.dropped.get(ReasonCode.REQUEST_EXPIRED.value, 0) for s in stats),
         failed=sum(s.failed for s in stats),
-        starved_on_arrival=sum(s.starved_on_arrival for s in stats),
         robots={
             name: RobotSnapshot(Counter(runtime.counters), runtime.dispatched, faults)
             for name, (runtime, faults) in robots.items()
@@ -216,7 +210,6 @@ def window(
         served_late=served_late,
         expired=after.expired - before.expired,
         failed=after.failed - before.failed,
-        starved_on_arrival=after.starved_on_arrival - before.starved_on_arrival,
         dispatched=after.dispatched - before.dispatched,
         batches=after.batches - before.batches,
         batch_sizes=after.batch_sizes - before.batch_sizes,
@@ -230,7 +223,6 @@ def window(
         result.faults += robot.faults - start.faults
         result.actions_dispatched += robot.dispatched - start.dispatched
         result.actions_trimmed += diff.get("actions_trimmed", 0)
-        result.chunks_accepted += diff.get("chunks_accepted", 0)
         result.chunks_rejected_at_robot += sum(diff.get(code, 0) for code in ROBOT_REJECTIONS)
     result.device_busy_s = {d: busy - before.busy_s.get(d, 0.0) for d, busy in after.busy_s.items()}
     return result

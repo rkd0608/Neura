@@ -18,13 +18,13 @@ import yaml
 
 from neura_adapters.synthetic import (
     Size,
-    weights_manifest,
     write_act_checkpoint,
     write_diffusion_checkpoint,
     write_pi0_checkpoint,
     write_smolvla_checkpoint,
 )
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
+from neura_contracts.inference import weights_manifest
 from neura_runtime.binding import ExecutionBinding
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "examples" / "contracts"

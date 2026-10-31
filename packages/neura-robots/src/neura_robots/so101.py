@@ -30,6 +30,7 @@ Telemetry (commanded, sent and measured positions) is kept for ``neura-qualify``
 from __future__ import annotations
 
 import contextlib
+import logging
 import subprocess
 import time
 from collections import Counter, deque
@@ -45,6 +46,8 @@ from neura_contracts import FaultResponse, RobotProfile
 from neura_robots.cameras import SyntheticCamera, latest_frame
 from neura_robots.lock import ActuatorLock
 from neura_runtime.interfaces import CommandResult, ImageFrame, SensorSnapshot
+
+log = logging.getLogger("neura.arm")
 
 POSITION_SUFFIX = ".pos"
 RESOLUTION = 4096
@@ -304,18 +307,29 @@ class So101Arm:
             )
         return problems
 
-    def close(self, *, hold: bool | None = None) -> None:
+    def close(self, *, hold: bool | None = None) -> bool:
         """Stop the cameras, then hold (default with on_exit=hold) or release, and let go of the
-        actuator."""
+        port and the actuator whatever the bus does. Returns whether the arm confirmed the hold
+        or the release."""
         hold = self.config.on_exit == "hold" if hold is None else hold
         self._disconnect_cameras()
-        if self.robot is not None and getattr(self.robot.bus, "is_connected", False):
-            with contextlib.suppress(Exception):
-                if hold:
-                    self._hold()
+        confirmed = False
+        try:
+            bus = self.robot.bus if self.robot is not None else None
+            if bus is not None and getattr(bus, "is_connected", False):
                 self.lock.release_port()  # before the port closes, or the flag stays behind
-                self.robot.bus.disconnect(not hold)
-        self.lock.release()
+                try:
+                    confirmed = self._hold() if hold else True
+                    bus.disconnect(disable_torque=not hold)  # a release drops torque first
+                except Exception as exc:  # a silent or failing bus: the port still closes
+                    confirmed = False
+                    log.warning(
+                        "the arm did not confirm the %s: %s", "hold" if hold else "release", exc
+                    )
+                    bus.disconnect(disable_torque=False)
+        finally:
+            self.lock.release()
+        return confirmed
 
     # --- Controller -------------------------------------------------------------------------------
 

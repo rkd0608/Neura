@@ -249,7 +249,7 @@ The full walkthrough is in the docs: [Deploy a policy](site/docs/deploy-a-policy
 
 | What | Result | Where |
 | --- | --- | --- |
-| GPU sharing, NVIDIA L4 | 32 robots on one shared policy, 96 on different fine-tunes, inside the deadline SLO; on this device, plain co-location matched or beat batching | [bench/reports/nvidia-l4](bench/reports/nvidia-l4/README.md) |
+| GPU sharing, NVIDIA L4 | 32 robots on one shared policy and 96 on four fine-tunes (24 each, batched within each), inside the deadline SLO: simulated with measured latency, validated in real time up to 16 robots. One process per robot also reached 96 in simulation, unproven: measured contention cuts it to 24 when every robot asks at once | [bench/reports/nvidia-l4](bench/reports/nvidia-l4/README.md) |
 | Vision-language-action models | SmolVLA and π0 measured on the same device, including where sharing does not pay | [bench/reports/nvidia-l4-vla](bench/reports/nvidia-l4-vla/README.md) |
 | Soak | 72 simulated hours with injected faults, no invariant violated | [soak/reports](soak/reports) |
 | Hardware qualification | The SO-101 fault suite and parity on the emulated arm (real hardware pending) | [qualification/reports](qualification/reports) |

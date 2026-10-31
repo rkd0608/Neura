@@ -294,8 +294,11 @@ async def serve(config: RobotConfig, *, status_every_s: float | None = None) -> 
         stop.set()
         await reporter
         if arm is not None:
-            arm.close()
-            _say(f"{config.robot_id}: let go of the arm ({config.arm.on_exit})")
+            on_exit = config.arm.on_exit
+            if arm.close():
+                _say(f"{config.robot_id}: let go of the arm ({on_exit})")
+            else:
+                _say(f"{config.robot_id}: let go of the arm; the {on_exit} was NOT confirmed")
     return 0
 
 

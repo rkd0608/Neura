@@ -7,7 +7,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from neura_robots.qualify.episodes import wilson
+from neura_contracts.stats import wilson
 
 Z_95_TWO_SIDED = 1.959964
 

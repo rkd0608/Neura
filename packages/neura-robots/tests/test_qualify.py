@@ -13,26 +13,23 @@ from typing import Any
 
 import pytest
 
+from neura_contracts.stats import difference_unpaired
 from neura_robots.qualify.cli import promotion_problems
-from neura_robots.qualify.episodes import newcombe_lower, schedule, wilson
+from neura_robots.qualify.episodes import Episode, Episodes, EpisodesConfig, schedule
 from neura_robots.qualify.harness import Qualification, QualifyConfig, ScenarioResult
+from neura_robots.qualify.protocol import MARGIN
 from neura_robots.so101 import So101Config
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_wilson_and_newcombe_match_the_published_example() -> None:
-    # Newcombe (1998), Statistics in Medicine 17:873, example (a): 56/70 vs 48/80, method 10.
-    z = 1.959963984540054
-    assert newcombe_lower(56, 70, 48, 80, z) == pytest.approx(0.0524, abs=1e-4)
-    low, high = wilson(56, 70, z)
-    assert (low, high) == pytest.approx((0.6918, 0.8770), abs=1e-4)  # the closed form
-
-
 def test_the_default_protocol_can_show_non_inferiority() -> None:
-    assert newcombe_lower(27, 30, 27, 30) > -0.15  # 30 episodes each at 90%: passes
-    assert newcombe_lower(10, 10, 10, 10) < -0.15  # 10 each cannot, even at 100%
-    assert newcombe_lower(20, 30, 27, 30) < -0.15  # a real drop fails
+    def lower(s1: int, n1: int, s2: int, n2: int) -> float:
+        return difference_unpaired(s1, n1, s2, n2)[1]
+
+    assert lower(27, 30, 27, 30) > -MARGIN  # 30 episodes each at 90%: passes
+    assert lower(10, 10, 10, 10) < -MARGIN  # 10 each cannot, even at 100%
+    assert lower(20, 30, 27, 30) < -MARGIN  # a real drop fails
 
 
 def test_episodes_alternate_in_balanced_blocks() -> None:
@@ -45,27 +42,40 @@ def test_episodes_alternate_in_balanced_blocks() -> None:
         assert a != b
 
 
-def _on_hardware(**config: Any) -> dict[str, Any]:
-    """The report of a run on a real arm (no emulator) in which every scenario the harness
-    chose passed, as are parity and the global checks: what a passing hardware run writes."""
+STARTED = datetime(2026, 10, 15, 10, tzinfo=UTC).timestamp()
+
+
+def _setup() -> dict[str, Any]:
+    """A real arm (no emulator) and the example contracts."""
     contracts = ROOT / "examples" / "contracts"
-    run = Qualification(
-        QualifyConfig(
-            arm=So101Config(port="/dev/ttyACM0", calibration_id="arm-1"),
-            artifact=contracts / "act-so101.artifact.yaml",
-            robot_profile=contracts / "so101.robot.yaml",
-            execution_profile=contracts / "act-so101-30hz.profile.yaml",
-            checkpoint=Path("checkpoint"),
-            **{"manual": True, **config},
-        )
-    )
+    return {
+        "arm": So101Config(port="/dev/ttyACM0", calibration_id="arm-1"),
+        "artifact": contracts / "act-so101.artifact.yaml",
+        "robot_profile": contracts / "so101.robot.yaml",
+        "execution_profile": contracts / "act-so101-30hz.profile.yaml",
+        "checkpoint": Path("checkpoint"),
+    }
+
+
+def _on_hardware(**config: Any) -> dict[str, Any]:
+    """The report of a run on a real arm in which every scenario the harness chose passed, as
+    are parity and the global checks: what a passing hardware run writes."""
+    run = Qualification(QualifyConfig(**_setup(), **{"manual": True, **config}))
     for name, _ in run.applicable():
         result = ScenarioResult(name)
         result.check("passed", True)
         run.results.append(result)
     run.parity = {"measured": True, "passed": True, "max_abs_error": 0.0}
-    started = datetime(2026, 10, 15, 10, tzinfo=UTC).timestamp()
-    return run.report(started, started + 600)
+    return run.report(STARTED, STARTED + 600)
+
+
+def _closed_loop(**config: Any) -> dict[str, Any]:
+    """The closed-loop report of a run on the same arm and contracts in which every episode,
+    of both arms, succeeded."""
+    run = Episodes(EpisodesConfig(**_setup(), **config))
+    order = schedule(run.config.pairs, run.config.seed)
+    run.episodes = [Episode(i, arm, True, 10.0, 300) for i, arm in enumerate(order, 1)]
+    return run.report(STARTED)
 
 
 def _report(**overrides: Any) -> dict[str, Any]:
@@ -75,12 +85,7 @@ def _report(**overrides: Any) -> dict[str, Any]:
 
 
 def _episodes(**overrides: Any) -> dict[str, Any]:
-    episodes: dict[str, Any] = {
-        "kind": "neura-closed-loop-episodes",
-        "emulated": False,
-        "contracts": {"artifact": _report()["contracts"]["artifact"]},
-        "verdict": {"non_inferior": True},
-    }
+    episodes = _closed_loop()
     episodes.update(overrides)
     return episodes
 
@@ -106,6 +111,27 @@ def test_only_a_complete_hardware_pass_is_promoted() -> None:
     assert promotion_problems(_report(), _episodes(verdict={"non_inferior": False}))
     assert promotion_problems(_report(), _episodes(contracts={"artifact": "sha256:b"}))
     assert promotion_problems(_report(), _episodes(emulated=True))
+
+
+def test_a_protocol_looser_than_the_defaults_is_not_promoted() -> None:
+    report = _on_hardware(hold_tolerance=45.0, parity_atol=1.0, nominal_s=2.0)
+    episodes = _closed_loop(pairs=20, margin=0.95, blinded=False)
+    episodes["contracts"]["execution_profile"] = "sha256:c"
+    assert report["passed"]  # each by its own protocol
+    assert episodes["verdict"]["non_inferior"]
+    assert promotion_problems(report, episodes) == [
+        "the episodes ran a different execution profile",
+        "the qualification ran with --hold-tolerance 45: promotion needs at most 1",
+        "the qualification ran with --parity-atol 1: promotion needs at most 0.001",
+        "the qualification ran with --nominal-seconds 2: promotion needs at least 20",
+        "the episodes ran with --pairs 20: promotion needs at least 30",
+        "the episodes ran with --margin 0.95: promotion needs at most 0.15",
+        "the episodes were not blinded (--unblinded)",
+    ]
+    stricter = _on_hardware(hold_tolerance=0.5, parity_atol=1e-4, nominal_s=60.0)
+    assert promotion_problems(stricter, _closed_loop(pairs=40, margin=0.10)) == []
+    del report["protocol"]  # written before reports recorded it
+    assert "does not record its --hold-tolerance" in " ".join(promotion_problems(report, episodes))
 
 
 def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:

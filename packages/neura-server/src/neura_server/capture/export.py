@@ -143,6 +143,23 @@ def frames(
     return out
 
 
+def usable_frames(
+    episode: Episode, binding: ExecutionBinding, steps: Steps | None = None
+) -> tuple[list[dict[str, Any]], str | None]:
+    """The episode's model-unit frames and None, or no frames and why the episode cannot be used
+    for this model: the one rule for training (``export_lerobot``) and replay alike."""
+    problem = fits(episode, binding)
+    if problem is not None:
+        return [], problem
+    try:
+        rows = frames(episode, binding, steps)
+    except ValueError as exc:  # a missing state reading
+        return [], str(exc)
+    if not rows:
+        return [], "no camera frame was recorded"
+    return rows, None
+
+
 def export_lerobot(
     episodes: list[Episode],
     binding: ExecutionBinding,
@@ -166,15 +183,7 @@ def export_lerobot(
     report = ExportReport(root=root, repo_id=repo_id, fps=fps, features=spec)
     usable: list[tuple[Episode, list[dict[str, Any]]]] = []
     for episode in episodes:
-        problem = fits(episode, binding)
-        rows: list[dict[str, Any]] = []
-        if problem is None:
-            try:
-                rows = frames(episode, binding)
-            except ValueError as exc:
-                problem = str(exc)
-            if problem is None and not rows:
-                problem = "no camera frame was recorded"
+        rows, problem = usable_frames(episode, binding)
         if problem is not None:
             report.skipped.append({"episode_id": episode.episode_id, "reason": problem})
         else:

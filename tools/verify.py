@@ -27,6 +27,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import traceback
@@ -43,11 +44,26 @@ FRONTENDS = ("console/", "landing/", "site/")
 # Files outside Python whose tests are not found by imports.
 COVERED_BY = {
     "deploy/install/": ["tests/integration/test_install_upgrade.py"],
+    "deploy/console/": ["tests/integration/test_console_proxy.py"],
+    "deploy/": ["tests/tools/test_supply_chain.py"],
+    ".github/dependabot.yml": ["tests/tools/test_supply_chain.py"],
     "deploy/observability/": ["tests/integration/test_observability.py"],
     "api/openapi.yaml": ["tests/api", "packages/neura-control/tests"],
     "catalog/": ["tests/tools", "packages/neura-contracts/tests"],
     "site/docs/": ["tests/tools/test_docs.py"],
     "tools/": ["tests/tools"],
+    # Where the web images link: what the apps read, and what their builds pass.
+    **{
+        path: ["tests/tools/test_web_build_urls.py"]
+        for path in (
+            "console/src/lib/config.ts",
+            "landing/src/config.ts",
+            "site/docusaurus.config.ts",
+            "deploy/docker/Dockerfile",
+            "deploy/gcp/deploy.sh",
+            ".github/workflows/release.yml",
+        )
+    },
 }
 # Changes no automatic check covers, and what does.
 BY_HAND = {
@@ -69,6 +85,7 @@ class Check:
     env: dict[str, str] = field(default_factory=dict)
     after: tuple[str, ...] = ()  # checks that must finish first (their builds)
     clean: bool = False  # run with an empty TMPDIR, and fail on anything left in it
+    alone: bool = False  # its tests measure time: nothing else runs beside it
     status: str = "not run"
     seconds: float = 0.0
     detail: str = ""
@@ -244,6 +261,7 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
                 why,
                 env=env,
                 clean=True,
+                alone=True,
             )
         )
     if has("console/", TOKENS, "api/openapi.yaml"):
@@ -293,12 +311,16 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
                 "--e2e: the console's journey",
                 cwd=ROOT / "console",
                 env=e2e_env,
+                alone=True,
             )
         )
     if args.models:
         checks.append(
             Check(
-                "models", ["make", "--no-print-directory", "test-models"], "--models: real models"
+                "models",
+                ["make", "--no-print-directory", "test-models"],
+                "--models: real models",
+                alone=True,
             )
         )
     notes = uncovered(files)
@@ -329,10 +351,11 @@ def run(check: Check) -> None:
         check.log.write_text(problem + "\n", encoding="utf-8")
         return
     env = {**os.environ, **check.env}
-    scratch = LOGS / f"tmp-{check.name}"
+    scratch = Path()
     if check.clean:
-        shutil.rmtree(scratch, ignore_errors=True)
-        scratch.mkdir(parents=True)
+        # In the system's temporary directory, not the checkout: its path stays short, so the Unix
+        # sockets processes make under it fit (about 108 bytes), from any worktree.
+        scratch = Path(tempfile.mkdtemp(prefix=f"nv-{check.name}-"))
         env["TMPDIR"] = str(scratch)
         # PyTorch keeps its compiled kernels under TMPDIR by default: a cache, kept between runs.
         env.setdefault("TORCHINDUCTOR_CACHE_DIR", str(LOGS / "torch-cache"))
@@ -358,6 +381,8 @@ def run(check: Check) -> None:
         check.detail = f"left {len(left)} in TMPDIR ({', '.join(left[:3])}); {check.detail}"
         with check.log.open("a", encoding="utf-8") as log:
             log.write(f"\nLeft in {scratch}, which was empty before:\n" + "\n".join(left) + "\n")
+    if check.clean:
+        shutil.rmtree(scratch, ignore_errors=True)  # its contents are named in the log
 
 
 def summary_of(check: Check) -> str:
@@ -398,9 +423,13 @@ def execute(checks: list[Check]) -> None:
     first = [c for c in checks if c.name in ("sizes", "maps", "ruff")]
     for check in first:
         guarded(check)
-    rest = [c for c in checks if c not in first and not c.after]
+    rest = [c for c in checks if c not in first and not c.after and not c.alone]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(guarded, rest))
+    # Timing tests (latency, deadlines, holds) are judged on a machine nothing else is loading:
+    # beside the builds they fail for the builds' sake, not their own.
+    for check in (c for c in checks if c.alone):
+        guarded(check)
     for check in (c for c in checks if c.after):
         blocked = [n for n in check.after if by_name[n].status != "passed"]
         if blocked:

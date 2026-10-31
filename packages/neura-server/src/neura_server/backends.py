@@ -1,7 +1,8 @@
 """What runs a batch group's forward passes, as seen from the gateway's dispatcher.
 
 `WorkerBackend` supervises one policy worker process (`neura_server.worker`) per batch group and
-talks to it over a Unix socket (design §9.1, §12). It restarts a worker that exits or hangs, and
+talks to it over a Unix socket in a directory made for that run alone (design §9.1, §12), once the
+socket has said it serves the artifact asked for. It restarts a worker that exits or hangs, and
 never delivers a result from a worker incarnation other than the one the batch was sent to: a
 batch in flight when its worker dies fails with WORKER_CRASHED, one whose worker hangs fails with
 WORKER_TIMED_OUT, and while no worker is ready batches fail with WORKER_UNAVAILABLE. Robots get
@@ -17,6 +18,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import shutil
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -29,14 +31,14 @@ from numpy.typing import NDArray
 
 from neura.v1 import worker_pb2, worker_pb2_grpc
 from neura_adapters import ModelInputs, PolicyBackend, PolicyError
-from neura_contracts import ReasonCode
-from neura_server.sandbox import Invocation, Launcher, ProcessLauncher
+from neura_contracts import ReasonCode, load_document
+from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, private_directory
+from neura_server.supervision import WORKER_STOP_TIMEOUT_S, RestartBackoff
 from neura_server.worker import MAX_MESSAGE_BYTES, encode_inputs, outputs_from
 
 log = logging.getLogger("neura.gateway.workers")
-HEALTHY_RUN_S = 30.0
-MAX_BACKOFF_S = 30.0
 UNIX_PATH_MAX = 107
+SOCKET = "sock"  # in its run's own directory: "<group>-<incarnation>/sock", as short as before
 
 
 class Backend(Protocol):
@@ -93,8 +95,9 @@ class WorkerSpec:
     adapter: str | None = None
     warmup_batches: tuple[int, ...] = (1,)
 
-    def invocation(self, socket: Path) -> Invocation:
-        """``neura-worker serve`` for this spec, listening on ``socket``."""
+    def invocation(self, directory: Path) -> Invocation:
+        """``neura-worker serve`` for this spec, listening on a socket in ``directory``, the run's
+        own (the only one it may write)."""
         flags = ["--device", self.device, "--warmup", ",".join(str(b) for b in self.warmup_batches)]
         if self.adapter is not None:
             flags += ["--adapter", self.adapter]
@@ -105,10 +108,7 @@ class WorkerSpec:
         ]
         if self.checkpoint is not None:
             inputs.append(("--checkpoint", self.checkpoint))
-        return Invocation("serve", self.device, flags, inputs, [("--socket", socket)])
-
-    def arguments(self, socket: Path) -> list[str]:
-        return self.invocation(socket).host_args()
+        return Invocation("serve", self.device, flags, inputs, directory, [("--socket", SOCKET)])
 
 
 class WorkerBackend:
@@ -129,7 +129,7 @@ class WorkerBackend:
         self.launcher: Launcher = launcher or ProcessLauncher(command or [])
         self._socket_dir = socket_dir
         self._start_timeout_s = start_timeout_s
-        if len(str(self._socket_path(999_999))) > UNIX_PATH_MAX:
+        if len(str(self._run_dir(999_999) / SOCKET)) > UNIX_PATH_MAX:
             raise ValueError(f"worker socket directory {socket_dir} is too long for Unix sockets")
         self.state = "stopped"  # starting | ready | restarting | failed | stopped
         self.incarnation = 0
@@ -147,8 +147,8 @@ class WorkerBackend:
         self._stopping = False
         self.ready = asyncio.Event()
 
-    def _socket_path(self, incarnation: int) -> Path:
-        return self._socket_dir / f"{self.name}-{incarnation}.sock"
+    def _run_dir(self, incarnation: int) -> Path:
+        return self._socket_dir / f"{self.name}-{incarnation}"
 
     # --- lifecycle ----------------------------------------------------------------------------
 
@@ -163,8 +163,10 @@ class WorkerBackend:
         if process is not None and process.returncode is None:
             if process.stdin is not None:
                 process.stdin.close()  # the worker exits when its stdin closes
+            if self.state != "ready":
+                process.kill()  # loading, or failed to: nothing of its to finish
             try:
-                await asyncio.wait_for(process.wait(), timeout=5)
+                await asyncio.wait_for(process.wait(), timeout=WORKER_STOP_TIMEOUT_S)
             except TimeoutError:
                 process.kill()
                 await process.wait()
@@ -182,24 +184,32 @@ class WorkerBackend:
         return self._stopping
 
     async def _supervise(self) -> None:
-        backoff = 0.5
+        backoff = RestartBackoff(first_s=0.5, max_s=30.0)
         while not self._stop_requested():
             self.incarnation += 1
-            socket = self._socket_path(self.incarnation)
+            directory = private_directory(self._run_dir(self.incarnation))
             self.state = "starting" if self.restarts == 0 else "restarting"
-            started = time.monotonic()
-            run = f"{self.name}-{self.incarnation}"
-            process = self._process = await asyncio.create_subprocess_exec(
-                *self.launcher.command(run, self.spec.invocation(socket)),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-            )
+            backoff.started()
+            run = directory.name
+            try:
+                process = self._process = await asyncio.create_subprocess_exec(
+                    *self.launcher.command(run, self.spec.invocation(directory)),
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                )
+            except BaseException:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise
             log.info("worker %s starting (pid %s) on %s", self.name, process.pid, self.spec.device)
             drain: asyncio.Task[None] | None = None
             try:
                 announced = await self._await_announcement(process)
+                if "ready" in announced and (problem := await self._connect(directory)):
+                    process.kill()
+                    announced = {
+                        "error": {"code": ReasonCode.WORKER_LOAD_FAILED.value, "message": problem}
+                    }
                 if "ready" in announced:
-                    await self._connect(socket)
                     self.description = announced["ready"]
                     self.last_error = None
                     self.state = "ready"
@@ -222,8 +232,9 @@ class WorkerBackend:
                 await self._disconnect()
                 if drain is not None:
                     drain.cancel()
-                # A killed launcher process (a hung worker) can leave its container running.
-                removal = asyncio.ensure_future(self.launcher.remove(run))
+                # A killed launcher process (a hung worker) can leave its container running; the
+                # run's directory goes once the container has.
+                removal = asyncio.ensure_future(self._remove(run, directory))
                 self._removals.add(removal)
                 removal.add_done_callback(self._removals.discard)
                 await asyncio.shield(removal)
@@ -237,11 +248,15 @@ class WorkerBackend:
                 }
             if self.state != "failed":
                 self.state = "restarting"
-            if time.monotonic() - started > HEALTHY_RUN_S:
-                backoff = 0.5
-            log.warning("worker %s exited with %s; restarting in %.1fs", self.name, code, backoff)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, MAX_BACKOFF_S)
+            delay = backoff.exited()
+            log.warning("worker %s exited with %s; restarting in %.1fs", self.name, code, delay)
+            await asyncio.sleep(delay)
+
+    async def _remove(self, run: str, directory: Path) -> None:
+        try:
+            await self.launcher.remove(run)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
 
     async def _await_announcement(self, process: asyncio.subprocess.Process) -> dict[str, Any]:
         """The worker's ready or error line. Other output before it is logged and skipped."""
@@ -283,16 +298,30 @@ class WorkerBackend:
         while line := await process.stdout.readline():
             log.info("worker %s: %s", self.name, line.decode(errors="replace").rstrip())
 
-    async def _connect(self, socket: Path) -> None:
+    async def _connect(self, directory: Path) -> str | None:
+        """Connect to the run's socket. None once it answers for the artifact this group serves;
+        otherwise why it is not used."""
         self._channel = grpc.aio.insecure_channel(
-            f"unix://{socket}",
+            f"unix://{directory / SOCKET}",
             options=[
                 ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
                 ("grpc.max_send_message_length", MAX_MESSAGE_BYTES),
             ],
         )
         self._stub = worker_pb2_grpc.PolicyWorkerStub(self._channel)
-        await self._stub.Describe(worker_pb2.DescribeRequest(), timeout=10)
+        try:
+            described = await self._stub.Describe(worker_pb2.DescribeRequest(), timeout=10)
+            expected = load_document(self.spec.artifact.read_text(encoding="utf-8")).digest()
+        except grpc.aio.AioRpcError as exc:
+            problem = f"announced ready, but its socket does not answer: {exc.code().name}"
+        except (OSError, ValueError) as exc:
+            problem = f"cannot read the artifact it was asked to serve: {exc}"
+        else:
+            if described.artifact_digest == expected:
+                return None
+            problem = f"its socket answers for artifact {described.artifact_digest}, not {expected}"
+        await self._disconnect()
+        return problem
 
     async def _disconnect(self) -> None:
         channel, self._channel, self._stub = self._channel, None, None

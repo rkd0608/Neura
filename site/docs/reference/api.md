@@ -924,6 +924,18 @@ Request body: `application/json`, `LoginApprovalCreate`.
 
 Responses: `200`, `401`, `403`, `404`, `413`, `422`, `428`, `429`, `500`, `503`.
 
+### The sign-in waiting for a code, shown before a person approves it
+
+`GET /v1/login-codes/{user_code}` · operation `getLoginCode`
+
+What started it, by the name it gave itself, and when (design §29.2). Only a signed-in person can look a code up, as only a person can approve one. 404 when no sign-in waits for the code.
+
+| Parameter | In | Required | Description |
+| --- | --- | --- | --- |
+| `user_code` | path | yes | The code `neura login` shows, with or without its dash, in any case. |
+
+Responses: `200`, `401`, `403`, `404`, `429`, `500`, `503`.
+
 ## Improvement
 
 ### List a deployment's evaluations

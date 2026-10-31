@@ -1,21 +1,19 @@
-// Sites & servers: the project's sites, their servers and connection state, and the dialog that
-// adds a site (design §19.3).
+// Sites & servers: the project's sites, their servers and connection state; a new site opens on
+// its page, ready to connect its server (design §19.3).
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { api, unwrap, idempotent } from "../api/client";
-import { useApiMutation, useRobots, useSites } from "../api/queries";
-import { Dialog } from "../components/Dialog";
+import { useRobots, useSites } from "../api/queries";
 import { BuildingIcon, PlusIcon } from "../components/Icons";
-import { DataAge, Empty, ErrorState, Field, Loading, PageHeader, Status } from "../components/ui";
+import { NewSite } from "../components/SiteDialogs";
+import { DataAge, Empty, ErrorState, Loading, PageHeader, Status } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
-import { slug } from "../lib/format";
 
 export function Sites() {
   const { orgId, projectId, base } = useScope();
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -110,103 +108,11 @@ export function Sites() {
           })}
         </div>
       )}
-      <NewSiteDialog open={open} onClose={() => setOpen(false)} projectId={projectId} base={base} />
+      <NewSite
+        open={open}
+        onClose={() => setOpen(false)}
+        onCreated={(site) => void navigate(`${base}/sites/${site.metadata.id}?connect=1`)}
+      />
     </>
-  );
-}
-
-function NewSiteDialog({
-  open,
-  onClose,
-  projectId,
-  base,
-}: {
-  open: boolean;
-  onClose: () => void;
-  projectId: string;
-  base: string;
-}) {
-  const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [hours, setHours] = useState(24);
-  const create = useApiMutation(
-    async () =>
-      unwrap(
-        await api.POST("/v1/projects/{project_id}/sites", {
-          params: { path: { project_id: projectId }, header: idempotent() },
-          body: {
-            spec: {
-              name: slug(name) || "site",
-              display_name: name.trim(),
-              offline_authorization_hours: hours,
-              kind: "production",
-            },
-          },
-        }),
-      ),
-    [["p", projectId, "sites"]],
-  );
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Add a site"
-      description="You will connect its GPU server next."
-    >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          create.mutate(undefined, {
-            onSuccess: (site) => {
-              onClose();
-              void navigate(`${base}/sites/${site.metadata.id}?connect=1`);
-            },
-          });
-        }}
-      >
-        <div className="dialog-body">
-          <Field id="site-name" label="Site name" hint="For example, the warehouse or cell name.">
-            <input
-              id="site-name"
-              type="text"
-              required
-              maxLength={200}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-          <Field
-            id="site-hours"
-            label="Offline allowance (hours)"
-            hint="How long the site keeps operating on its committed configuration without reaching Neura. After that it stops serving until it reconnects."
-          >
-            <input
-              id="site-hours"
-              type="number"
-              min={1}
-              max={8760}
-              required
-              value={hours}
-              onChange={(event) => setHours(Number(event.target.value))}
-            />
-          </Field>
-          {create.isError ? (
-            <ErrorState error={create.error} title="Could not add the site" />
-          ) : null}
-        </div>
-        <div className="dialog-footer form-actions">
-          <button type="button" className="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="button primary"
-            disabled={!name.trim() || create.isPending}
-          >
-            {create.isPending ? "Adding…" : "Add site"}
-          </button>
-        </div>
-      </form>
-    </Dialog>
   );
 }

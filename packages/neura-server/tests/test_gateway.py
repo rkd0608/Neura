@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -11,7 +13,16 @@ from neura_contracts import ReasonCode
 from neura_runtime.runtime import RobotRuntime, RuntimeState, SendObservation
 from neura_runtime.session import Outbound
 from neura_runtime.testing import FakeController, FakeSensors
+from neura_server.config import (
+    DeploymentConfig,
+    DeviceConfig,
+    GatewayConfig,
+    ServingConfig,
+    load_binding,
+    token_digest,
+)
 from neura_server.gateway import Deployment
+from neura_server.grpc_server import GatewayServer
 from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.testing import GW0, MS, R0, Robot, make_core
 
@@ -71,6 +82,27 @@ def test_admission_rejects_and_releases_the_lease(make_binding: Any) -> None:
     assert rejected
     assert rejected[0].rejected.code == "ADMISSION_CAPACITY_EXCEEDED"
     assert len(core.leases.active()) == len(names) - len(rejected)
+
+
+def test_admission_plans_with_the_link_robots_measure(make_binding: Any) -> None:
+    # A session is admitted before its robot has measured anything, with the default link
+    # allowance (design §8); what its heartbeats then report is what later admissions plan with.
+    binding = make_binding()
+    core = make_core(binding, ["r1", "r2"])
+    accepted = Robot(binding, "r1").open(core, GW0).accepted
+    beat = dataplane_pb2.HeartbeatRequest(
+        session_id=accepted.session_id,
+        lease_generation=accepted.lease_generation,
+        rtt_p99_us=150 * MS,
+        rtt_recent_us=150 * MS,
+    )
+    assert core.heartbeat("r1", beat, GW0 + 1 * MS).WhichOneof("result") == "ack"
+    second = Robot(binding, "r2").open(core, GW0 + 2 * MS)
+    # The first robot's uplink alone exceeds the 100 ms dispatch-freshness limit.
+    assert second.rejected.code == ReasonCode.ADMISSION_CAPACITY_EXCEEDED.value
+    assert "observation age at dispatch" in second.rejected.message
+    group = next(iter(core.groups.values()))
+    assert accepted.session_id in group.admission.admitted  # an admitted session is never evicted
 
 
 def test_observation_rejections(make_binding: Any) -> None:
@@ -206,6 +238,23 @@ def test_decode_observation_checks_everything(make_binding: Any) -> None:
     invalid(lambda o: o.frozen_prefix.shape.append(1))
 
 
+def test_a_tensor_numpy_cannot_build_is_rejected_not_raised(make_binding: Any) -> None:
+    # A robot's frozen prefix is decoded without an expected shape; 70 dimensions is more than
+    # numpy builds, and the gateway must answer with a typed rejection.
+    binding = make_binding("smolvla")
+    core = make_core(binding, ["r1"])
+    robot = Robot(binding, "r1")
+    robot.open(core, GW0)
+    robot.runtime.set_instruction("pick")
+    robot.runtime.arm(robot.now)
+    message = robot.observation()
+    message.observation.frozen_prefix.CopyFrom(
+        common_pb2.Tensor(dtype=common_pb2.DTYPE_FLOAT32, shape=[1] * 70, data=b"\0" * 4)
+    )
+    (delivery,) = core.receive("r1", message, message.ByteSize(), GW0)
+    assert delivery.message.rejected.reason.code == ReasonCode.PROTOCOL_MESSAGE_INVALID.value
+
+
 @pytest.mark.parametrize("model", ["act", "smolvla"])
 def test_mock_policy_outputs_are_in_range(make_binding: Any, model: str) -> None:
     binding = make_binding(model)
@@ -230,7 +279,7 @@ def test_a_robot_may_run_either_revision_during_a_switch(make_binding: Any) -> N
         Deployment("rev_1", binding, frozenset({"r1", "r2"})),
         Deployment("rev_2", binding, frozenset({"r1", "r2"})),
     ]
-    assert core.replace_deployments(both) == []
+    assert core.replace_deployments(both) == {}
     assert core.allowed_revisions("r1") == ["rev_1", "rev_2"]
 
     old = Robot(binding, "r1", "rev_1")
@@ -255,3 +304,43 @@ def test_replacing_deployments_without_a_batch_group_is_refused(make_binding: An
     with pytest.raises(ValueError, match="no batch group"):
         core.replace_deployments([Deployment("rev_x", binding, frozenset({"r1"}))])
     assert core.allowed_revisions("r1") == ["rev_1"]  # unchanged
+
+
+@pytest.mark.parametrize(
+    ("change", "told"),
+    [
+        ({"devices": []}, ReasonCode.AUTH_DEVICE_REVOKED),
+        ({"deployments": []}, ReasonCode.DEPLOYMENT_NOT_ACTIVE),
+    ],
+)
+async def test_a_robot_whose_session_a_reload_closes_is_told_why(
+    change: dict[str, Any], told: ReasonCode
+) -> None:
+    examples = Path(__file__).resolve().parents[3] / "examples" / "contracts"
+    deployment = DeploymentConfig(
+        revision_id="rev_1",
+        artifact=examples / "act-so101.artifact.yaml",
+        robot_profile=examples / "so101.robot.yaml",
+        execution_profile=examples / "act-so101-30hz.profile.yaml",
+        robots=["r1"],
+    )
+    config = GatewayConfig(
+        listen="127.0.0.1:0",
+        status_listen=None,
+        devices=[DeviceConfig(robot_id="r1", token_sha256=token_digest("token-r1"))],
+        deployments=[deployment],
+        serving=ServingConfig(backend="simulated"),
+    )
+    server = GatewayServer(config)
+    try:
+        robot = Robot(load_binding(deployment), "r1")
+        session_id = robot.open(server.core, GW0).accepted.session_id
+        stream: asyncio.Queue[dataplane_pb2.GatewayMessage] = asyncio.Queue()
+        server.bind_stream(session_id, stream)
+        assert server.reload(config.model_copy(update=change)) == [session_id]
+        message = stream.get_nowait()
+        assert message.rejected.reason.code == told.value
+        robot.client.on_gateway_message(message, robot.now)
+        assert not robot.client.connected  # the robot stops using the session
+    finally:
+        await server.stop()

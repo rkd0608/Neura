@@ -24,12 +24,12 @@ import {
 import { Dialog } from "../components/Dialog";
 import { useToasts } from "../components/Toasts";
 import { BotIcon, CubeIcon, PlusIcon, SlidersIcon } from "../components/Icons";
+import { Field } from "../components/Field";
 import {
   Badge,
   Card,
   Empty,
   ErrorState,
-  Field,
   KeyValue,
   Loading,
   PageHeader,
@@ -85,7 +85,7 @@ export function Models() {
   const artifacts = useArtifacts(projectId);
   const robots = useRobotProfiles(projectId);
   const profiles = useExecutionProfiles(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [registering, setRegistering] = useState<Kind | null>(null);
   const tabs: TabSpec[] = [
     { id: "artifacts", label: "Model artifacts", count: artifacts.data?.length ?? null },
@@ -295,7 +295,7 @@ function Signed({ signatures }: { signatures: Signature[] }) {
 
 function Signatures({ artifact, projectId }: { artifact: Artifact; projectId: string }) {
   const { orgId } = useScope();
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const toasts = useToasts();
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
@@ -374,11 +374,9 @@ function Signatures({ artifact, projectId }: { artifact: Artifact; projectId: st
           <div className="dialog-body">
             <Field id="signature-text" label="Signature" error={error}>
               <textarea
-                id="signature-text"
                 value={text}
                 spellCheck={false}
                 rows={6}
-                aria-invalid={error ? true : undefined}
                 onChange={(event) => {
                   setText(event.target.value);
                   setError(null);

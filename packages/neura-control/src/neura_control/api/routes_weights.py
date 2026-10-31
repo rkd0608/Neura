@@ -29,7 +29,7 @@ from neura_control.clock import iso
 from neura_control.db.models import SealedWeights
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
-from neura_control.services.sealed_weights import SealedUploadError, SealedWeightsStore
+from neura_control.services.sealed_weights import SealedUploadError, SealedWeightsStore, place
 
 router = APIRouter()
 
@@ -105,7 +105,7 @@ async def upload_sealed_weights(
                 .returning(SealedWeights.digest)
             )
             created = inserted.first() is not None
-            # The row lock orders concurrent uploads of one digest: file and row always agree.
+            # The row lock orders concurrent uploads' records; each file follows its record.
             row = await session.get(
                 SealedWeights, (project_id, digest), with_for_update=True, populate_existing=True
             )
@@ -117,11 +117,12 @@ async def upload_sealed_weights(
             row.created_by = principal.subject
             if not created:
                 row.version += 1
-            store.commit(staged)
             await ctx.record(session, project, "sealed_weights.upload", digest)
             await session.flush()
             await session.refresh(row)
             body = serialize(row)
+        async with transaction(request) as session:
+            await place(session, store, project_id, digest, staged)
     finally:
         store.discard(staged)  # a no-op once committed
     location = f"/v1/projects/{project_id}/sealed-weights/{digest}"
@@ -174,8 +175,7 @@ async def delete_sealed_weights(
             raise ProblemError(ReasonCode.API_NOT_FOUND)
         check_version(row.version, expected)
         await session.delete(row)
-        # Under the row lock, like uploads: a concurrent upload of this digest waits for this
-        # transaction and then writes its own file, which this delete can no longer remove.
-        store.delete(project_id, digest)
         await ctx.record(session, project, "sealed_weights.delete", digest)
+    async with transaction(request) as session:
+        await place(session, store, project_id, digest)  # gone, unless uploaded again meanwhile
     return Response(status_code=204)

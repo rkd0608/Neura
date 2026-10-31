@@ -18,6 +18,7 @@ import pytest
 
 from neura_contracts import FaultResponse, ReasonCode
 from neura_runtime.runtime import RuntimeState
+from neura_server.admission import SessionDemand
 from neura_server.scheduler import Policy
 from neura_sim.network import LinkModel, Window
 from neura_sim.site import MS, SECOND, SimRobot, SimSite, SiteConfig, WorkerFaults
@@ -95,8 +96,9 @@ def test_simulation_is_deterministic(config: SiteConfig) -> None:
 
 def test_admission_refuses_sessions_it_cannot_serve(config: SiteConfig) -> None:
     # With the example's 100 ms dispatch-freshness limit, a request that arrives just after a
-    # 45 ms batch started must be dispatched within the next batch, so one worker admits only as
-    # many sessions as fit in one batch behind a running one.
+    # 45 ms batch started must be dispatched within 100 ms less its uplink. Planned with the links
+    # robots measure (about 1 ms here), two batches of sessions fit behind a running one; with the
+    # 20 ms default a robot is admitted with before it has measured, only one did (design §8).
     config.robots = 40
     site = SimSite(config)
     report = run(site, 10)
@@ -104,10 +106,15 @@ def test_admission_refuses_sessions_it_cannot_serve(config: SiteConfig) -> None:
     refused = [
         r for r in site.robots if r.client.last_rejection is ReasonCode.ADMISSION_CAPACITY_EXCEEDED
     ]
-    assert len(running) == config.max_batch
-    assert len(refused) == 40 - config.max_batch
+    measured = max(s["rtt_p99_us"] for s in site.core.status()["sessions"])
+    (group,) = site.core.groups.values()
+    capacity = group.admission.capacity_estimate(
+        SessionDemand.from_binding("planned", config.binding, rtt_p99_us=measured)
+    )
+    assert len(running) == capacity == 2 * config.max_batch
+    assert len(refused) == 40 - capacity
     for robot in running:
-        assert report.robots[robot.name].starvations == 0
+        assert report.robots[robot.name].starvations == 0  # every admitted robot is served
 
 
 # --- network -----------------------------------------------------------------------------------

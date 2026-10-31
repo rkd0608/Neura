@@ -381,7 +381,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
                 if self.connected[server_id] <= 0:
                     del self.connected[server_id]
                     with contextlib.suppress(asyncio.CancelledError):
-                        await self._shielded(self._disconnected(site_id, agent_version["value"]))
+                        await self._shielded(self._disconnected(server, agent_version["value"]))
         finally:
             self._streams -= 1
             if self._streams == 0:
@@ -439,14 +439,14 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             )
         )
 
-    async def _disconnected(self, site_id: str, agent_version: str | None) -> None:
+    async def _disconnected(self, server: Server, agent_version: str | None) -> None:
         try:
             async with self._sessions.begin() as session:
                 await site_reports.report_site(
-                    session, site_id, connected=False, agent_version=agent_version
+                    session, server.site_id, server.id, connected=False, agent_version=agent_version
                 )
         except Exception:
-            log.exception("failed to record that site %s disconnected", site_id)
+            log.exception("failed to record that server %s disconnected", server.id)
 
     async def _read(
         self,
@@ -503,9 +503,9 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
         kind = message.WhichOneof("body")
         async with self._sessions.begin() as session:
             if kind == "hello":
-                agent_version["value"] = message.hello.agent_version[:64]
+                version = agent_version["value"] = message.hello.agent_version[:64]
                 await site_reports.report_site(
-                    session, site_id, connected=True, agent_version=agent_version["value"]
+                    session, site_id, server_id, connected=True, agent_version=version
                 )
             elif kind == "ack":
                 await self._ack(session, site_id, message.ack)
@@ -518,7 +518,7 @@ class SiteControlService(site_pb2_grpc.SiteControlServicer):  # type: ignore[mis
             elif kind == "telemetry":
                 await self._telemetry(session, site_id, message.telemetry)
             elif kind == "inventory":
-                await inventory.report(session, site_id, message.inventory)
+                await inventory.report(session, site_id, server_id, message.inventory)
 
     async def _ack(
         self, session: AsyncSession, site_id: str, ack: site_pb2.Acknowledgement

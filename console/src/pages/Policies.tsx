@@ -13,7 +13,8 @@ import {
 } from "../api/queries";
 import { Dialog } from "../components/Dialog";
 import { CubeIcon, RocketIcon } from "../components/Icons";
-import { Badge, Card, Empty, ErrorState, Field, Loading, PageHeader, Time } from "../components/ui";
+import { Field } from "../components/Field";
+import { Badge, Card, Empty, ErrorState, Loading, PageHeader, Time } from "../components/ui";
 import { usePermissions, useScope } from "../lib/context";
 import { plural } from "../lib/format";
 
@@ -98,7 +99,7 @@ export function PolicyPage() {
   const policy = usePolicy(projectId, policyId);
   const versions = usePolicyVersions(projectId, policyId);
   const robots = useRobots(projectId);
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const [deploying, setDeploying] = useState<Version | null>(null);
   if (policy.isPending || versions.isPending) return <Loading />;
   if (policy.isError) return <ErrorState error={policy.error} />;
@@ -270,7 +271,7 @@ function Deploy({ version, onClose }: { version: Version; onClose: () => void })
           );
         })}
         <Field id={shadowId} label="Shadow test">
-          <select id={shadowId} value={shadow} onChange={(e) => setShadow(Number(e.target.value))}>
+          <select value={shadow} onChange={(e) => setShadow(Number(e.target.value))}>
             {SHADOW_CHOICES.map(([text], i) => (
               <option key={text} value={i}>
                 {text}
@@ -279,7 +280,7 @@ function Deploy({ version, onClose }: { version: Version; onClose: () => void })
           </select>
         </Field>
         <Field id={noteId} label="Why (for the history)">
-          <input id={noteId} value={note} onChange={(e) => setNote(e.target.value)} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         {create.isError ? <ErrorState error={create.error} /> : null}
         <div className="row" style={{ justifyContent: "flex-end" }}>

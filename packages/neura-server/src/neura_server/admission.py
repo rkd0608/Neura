@@ -181,6 +181,13 @@ class AdmissionController:
             self._admitted[demand.session_id] = demand
         return decision
 
+    def update(self, demand: SessionDemand) -> None:
+        """Replace an admitted session's demand with a better-measured one (its link, from its
+        heartbeats). The session stays admitted whatever it now needs: admission refuses new load
+        and never evicts (design §9.3). Later admissions plan with this demand."""
+        if demand.session_id in self._admitted:
+            self._admitted[demand.session_id] = demand
+
     def remove(self, session_id: str) -> None:
         self._admitted.pop(session_id, None)
 

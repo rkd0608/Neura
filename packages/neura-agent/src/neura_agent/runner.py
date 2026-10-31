@@ -133,6 +133,7 @@ class AgentRuntime:
         self._tasks.clear()
         if self.core is not None:
             await self.core.robots.stop()
+            await self.core.jobs.stop()  # before the gateway (shadows) and the episode store
         await self.gateway.stop()
         if self.core is not None:
             await self.core.capture.stop()

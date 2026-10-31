@@ -17,6 +17,7 @@ import httpx
 from neura_sdk._operations import Operations
 from neura_sdk.models import Event, Operation, SealedWeights
 
+# For a response without a problem body (a proxy's error page): the statuses worth repeating.
 RETRYABLE_STATUS = frozenset({429, 503})
 TERMINAL_OPERATION_STATES = frozenset({"Succeeded", "Failed", "Cancelled"})
 
@@ -30,7 +31,7 @@ class NeuraApiError(Exception):
         self.reason: str = str(problem.get("reason", "UNKNOWN"))
         self.title: str = str(problem.get("title", ""))
         self.detail: str = str(problem.get("detail", ""))
-        self.retryable = bool(problem.get("retryable", False))
+        self.retryable = _retryable(status, problem)
         self.errors: list[dict[str, Any]] = list(problem.get("errors", []))
         super().__init__(f"{status} {self.reason}: {self.detail or self.title}")
 
@@ -109,17 +110,13 @@ class Client(Operations):
             response = self._http.request(
                 method, path, params=params, content=content, headers=headers
             )
-            if response.status_code in RETRYABLE_STATUS and attempt < self._max_retries:
-                attempt += 1
-                self._sleep(_retry_delay(response, attempt))
-                continue
-            break
-        if response.status_code >= 400:
-            try:
-                problem = response.json()
-            except ValueError:
-                problem = {"reason": "UNKNOWN", "detail": response.text[:500]}
-            raise NeuraApiError(response.status_code, problem)
+            if response.status_code < 400:
+                break
+            error = NeuraApiError(response.status_code, _problem(response))
+            if not error.retryable or attempt >= self._max_retries:
+                raise error
+            attempt += 1
+            self._sleep(_retry_delay(response, attempt))
         if response.status_code == 204 or not response.content:
             return None
         return response.json()
@@ -168,7 +165,7 @@ class Client(Operations):
             with self._http.stream("GET", path, headers=headers, timeout=None) as response:
                 if response.status_code >= 400:
                     response.read()
-                    raise NeuraApiError(response.status_code, response.json())
+                    raise NeuraApiError(response.status_code, _problem(response))
                 for item in _parse_sse(response.iter_lines()):
                     if isinstance(item, str):
                         cursor = item
@@ -191,9 +188,26 @@ class Client(Operations):
                 timeout=None,
             )
         if response.status_code >= 400:
-            raise NeuraApiError(response.status_code, response.json())
+            raise NeuraApiError(response.status_code, _problem(response))
         result: SealedWeights = response.json()
         return result
+
+
+def _problem(response: httpx.Response) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        return body
+    return {"reason": "UNKNOWN", "detail": response.text[:500]}
+
+
+def _retryable(status: int, problem: dict[str, Any]) -> bool:
+    """Whether the same request may succeed if repeated: what the problem says (its
+    ``retryable`` flag, from the reason-code catalog), or by status when it says nothing."""
+    flag = problem.get("retryable")
+    return flag if isinstance(flag, bool) else status in RETRYABLE_STATUS
 
 
 def _retry_delay(response: httpx.Response, attempt: int) -> float:

@@ -6,7 +6,8 @@ one CPU core. A seeded fault campaign injects every fault the simulator can mode
 §7 fault suite, at random times and on random robots, while an operator stand-in does what people
 do on a floor: finishes tasks, takes over, and resets latched faults after a while. The
 independent ``InvariantMonitor`` watches everything; the soak also tracks resource use and, after
-a fault-free cooldown, requires every robot to be running again.
+a cooldown free of faults, in which operators let tasks run, requires every robot to be running
+again.
 
 A run is reproducible from its seed. Exit status 1 means a violation or a robot that did not
 recover; the JSON report names each one with its simulated time.
@@ -156,7 +157,9 @@ class Soak:
             if state is RuntimeState.RUNNING:
                 if op.task_ends_at is None:
                     op.task_ends_at = now + self._uniform_us(self.config.task_s)
-                elif now >= op.task_ends_at:
+                elif op.task_ends_at <= now < self._faults_until:
+                    # In the cooldown, tasks run on: a robot whose operator ended its task as
+                    # the soak ended was counted as not recovered.
                     op.task_ends_at = None
                     with contextlib.suppress(TransitionError):
                         runtime.complete_task(robot.now())
@@ -296,8 +299,10 @@ class Soak:
         return self.rng.choice(self.site.robots)
 
     def _window(self, low_s: float, high_s: float) -> Window:
+        """A fault's window: from now, for a random time, ending by the cooldown, which is free
+        of faults (a degraded network injected late lasted up to a minute into it)."""
         now = self.site.loop.now_us
-        return Window(now, now + self._uniform_us((low_s, high_s)))
+        return Window(now, min(now + self._uniform_us((low_s, high_s)), self._faults_until))
 
     def _later(self, window: Window, action: Callable[[], None]) -> None:
         self.site.at(window.end_us, action)

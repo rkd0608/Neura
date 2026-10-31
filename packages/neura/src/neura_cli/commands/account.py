@@ -44,14 +44,15 @@ def run_login(args: argparse.Namespace, ctx: Context) -> int:
     config, out = ctx.config, ctx.out
     if args.api:
         config.api_url = args.api.rstrip("/")
+    approved: str | None = None
     if args.with_token:
         token = sys.stdin.readline().strip()
         if not token:
             raise CliError("No token on stdin.", "echo $NEURA_TOKEN | neura login --with-token")
     else:
-        token = _browser_login(ctx, open_browser=not args.no_browser)
+        token, approved = _browser_login(ctx, open_browser=not args.no_browser)
     config.token = token
-    config.organization_id = args.workspace
+    config.organization_id = args.workspace or approved
     config.project_id = None
     try:
         session = ctx.session()
@@ -69,18 +70,23 @@ def run_login(args: argparse.Namespace, ctx: Context) -> int:
     return 0
 
 
-def _browser_login(ctx: Context, *, open_browser: bool) -> str:
-    with public_client(ctx.config) as client:
-        return _wait_for_approval(ctx, client, open_browser=open_browser)
+def _browser_login(ctx: Context, *, open_browser: bool) -> tuple[str, str]:
+    # This loop asks again, at the pace the control plane sets (interval_s), while the answer is
+    # a retryable problem (API_LOGIN_PENDING until approved), so its client does not repeat.
+    with public_client(ctx.config) as client, public_client(ctx.config, max_retries=0) as poll:
+        return _wait_for_approval(ctx, client, poll, open_browser=open_browser)
 
 
-def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> str:
+def _wait_for_approval(
+    ctx: Context, client: Client, poll: Client, *, open_browser: bool
+) -> tuple[str, str]:
+    """The token issued once the person approves, and the workspace they approved it for."""
     out = ctx.out
     started = client.create_login_session(body={"client_name": _client_name()})
     url = started["verification_url"]
     out.header("Sign in to Neura")
     out.line(f"  Open    {url}")
-    out.line(f"  Check   the page shows {out.s.bold(started['user_code'])}, then approve")
+    out.line(f"  Type    {out.s.bold(started['user_code'])} on that page, then approve")
     out.line()
     if open_browser and sys.stdout.isatty():
         webbrowser.open(url)
@@ -88,17 +94,14 @@ def _wait_for_approval(ctx: Context, client: Client, *, open_browser: bool) -> s
     while time.time() < deadline:
         time.sleep(max(1, started["interval_s"]))
         try:
-            granted = client.exchange_login_session(
-                started["id"], body={"secret": started["secret"]}
-            )
+            granted = poll.exchange_login_session(started["id"], body={"secret": started["secret"]})
         except NeuraApiError as error:
-            if error.reason == "API_LOGIN_PENDING":
+            if error.retryable:
                 continue
             raise CliError(
                 "The sign-in expired before it was approved.", "Run: neura login"
             ) from error
-        ctx.config.organization_id = granted["organization_id"]
-        return granted["token"]
+        return granted["token"], granted["organization_id"]
     raise CliError("The sign-in expired before it was approved.", "Run: neura login")
 
 

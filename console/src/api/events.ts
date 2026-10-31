@@ -2,7 +2,8 @@
 // carry the Authorization header (EventSource cannot). Events say what changed; the console
 // re-reads by invalidating the cached queries of that project. The stream resumes from the last
 // id the server sent, including the starting position it sends first, so nothing is missed
-// across reconnects.
+// across reconnects; a position the server no longer keeps (410) starts again from now, and the
+// screen is re-read.
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
@@ -113,6 +114,13 @@ export function useProjectEvents(projectId: string | undefined): LiveState {
             headers,
             signal: controller.signal,
           });
+          if (response.status === 410 && lastId !== null) {
+            // The cursor is older than the events the server keeps (API_CURSOR_EXPIRED): what
+            // changed since is unknown. Start again from now, and re-read everything on screen.
+            lastId = null;
+            void queryClient.invalidateQueries({ queryKey: ["p", projectId] });
+            continue;
+          }
           if (!response.ok || !response.body) throw new Error(`events: HTTP ${response.status}`);
           setState("live");
           backoff = 1000;

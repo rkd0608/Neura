@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from neura_contracts import ReasonCode
-from neura_control.clock import utcnow
 from neura_control.db.models import Organization, Project
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
@@ -87,9 +86,3 @@ class Ctx:
             await records.event(
                 session, project_id=project.id, type=event_type, resource=target, version=version
             )
-
-
-def touch(row: Any) -> None:
-    """Bump the optimistic-concurrency version after a change."""
-    row.version += 1
-    row.updated_at = utcnow()

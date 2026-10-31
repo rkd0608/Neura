@@ -38,11 +38,10 @@ touches end to end (code, tests, docs, how to prove it works) is in
 Over the 800-line budget (tools/check_sizes.py). Search them and read the part you
 need; when you change one, move code out of it rather than adding to it.
 
-- `console/src/components/ui.tsx` (831 lines)
-- `console/src/pages/Improve.tsx` (838 lines)
-- `console/src/pages/Release.tsx` (1128 lines)
-- `console/src/pages/Settings.tsx` (827 lines)
-- `console/src/styles/app.css` (1628 lines)
+- `console/src/pages/Improve.tsx` (823 lines)
+- `console/src/pages/Release.tsx` (1120 lines)
+- `console/src/pages/Settings.tsx` (809 lines)
+- `console/src/styles/app.css` (1617 lines)
 - `landing/src/landing.css` (865 lines)
 - `packages/neura-agent/src/neura_agent/core.py` (1221 lines)
 - `packages/neura-agent/tests/test_core.py` (1165 lines)
@@ -131,7 +130,7 @@ Under `packages/neura-agent/src/`:
 - `neura_agent/trust.py`: Publisher keys this server trusts (design §17.3, §17.4).
 - `neura_agent/upgrade.py`: Signed agent upgrades with automatic rollback (design §17.3).
 
-Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_outbound.py`, `test_preflight.py`, `test_robots.py`
+Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`, `test_core.py`, `test_episode_viewer.py`, `test_jobs.py`, `test_outbound.py`, `test_placement.py`, `test_preflight.py`, `test_robots.py`
 
 ## packages/neura-bench
 
@@ -225,7 +224,8 @@ Under `packages/neura-control/src/`:
 - `neura_control/security/tokens.py`: Secrets shown once: API tokens and enrollment tokens.
 - `neura_control/services/__init__.py`: Business logic shared by the API and site reports.
 - `neura_control/services/bootstrap.py`: Creating the first organization, memberships and tokens (CLI and development bootstrap).
-- `neura_control/services/contracts.py`: Registering contract documents from inside the control plane: the execution profiles a rollout derives and the robot profiles a site's agent reports (design §29).
+- `neura_control/services/contracts.py`: Registering contract documents (design §4, §29): found or added by digest, with publisher signatures merged one per key.
+- `neura_control/services/event_log.py`: The change-event log, read in the order its transactions wrote it (design §20.6.1).
 - `neura_control/services/inventory.py`: Robots a site's agent found (design §29.5): registered without anyone creating them.
 - `neura_control/services/manifests.py`: Desired-state manifests for sites (design §17.3, §20.8).
 - `neura_control/services/operations.py`: Starting site-dependent work: an Operation and the command its site receives (design §20.4).
@@ -239,7 +239,7 @@ Under `packages/neura-control/src/`:
 - `neura_control/settings.py`: Control-plane configuration, read from ``NEURA_CONTROL_*`` environment variables.
 - `neura_control/db/migrations/versions/`: the database migrations
 
-Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`
+Tests, under `packages/neura-control/tests/`: `conftest.py`, `spec_validator.py`, `test_api_conventions.py`, `test_app.py`, `test_contracts.py`, `test_events.py`, `test_fleet.py`, `test_improvement.py`, `test_improvement_e2e.py`, `test_members.py`, `test_metrics.py`, `test_neura_cli.py`, `test_onboarding_flow.py`, `test_sdk.py`, `test_sealed_weights.py`, `test_security.py`, `test_shadow_e2e.py`, `test_site_agent_e2e.py`, `test_site_control.py`, `test_site_servers.py`
 
 ## packages/neura-learn
 
@@ -326,7 +326,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
 
-Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_runtime.py`, `test_session.py`
+Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
 
 ## packages/neura-sdk
 
@@ -361,9 +361,11 @@ Under `packages/neura-server/src/`:
 - `neura_server/leases.py`: Robot leases: who may be served (design §6.1).
 - `neura_server/metrics.py`: Prometheus metrics for the gateway, on its status listener at ``/metrics`` (design §18.2).
 - `neura_server/profiles.py`: Inference latency profiles indexed by batch size (design §9.2, §13).
+- `neura_server/robot_service.py`: The ``RobotGateway`` gRPC service robots call: who is calling, and their messages to and from the gateway core (design §6, §11).
 - `neura_server/sandbox.py`: Running policy workers (design §12): customer model code is untrusted executable code.
 - `neura_server/scheduler.py`: Per-batch-group request scheduling (design §9.2).
 - `neura_server/shadow.py`: Shadow serving (design §28.3): a candidate model on the observations robots send the model they run, its actions compared with the running model's and never sent to a robot.
+- `neura_server/supervision.py`: How the site's processes are supervised: one source for the timeouts each supervisor waits when it stops a process (so whoever stops a process waits longer than that process takes to stop its own), …
 - `neura_server/testing.py`: Helpers for tests of the gateway core: a core with one deployment, and a robot whose runtime and session client talk to it directly (no network).
 - `neura_server/worker.py`: The policy worker process: one model on one device, serving one batch group (design §9.1, §12).
 
@@ -407,12 +409,15 @@ Under `console/`:
 - `src/components/CommandPalette.tsx`: The command palette (⌘K / Ctrl+K): jump to any page or resource of the project, or run a console action.
 - `src/components/Contracts.tsx`: Registering and showing contract documents (design §4): model artifacts, robot profiles and execution profiles.
 - `src/components/Dialog.tsx`: A modal built on the native <dialog>: focus is trapped and Escape closes it; focus returns to whatever opened it.
+- `src/components/Field.tsx`: A form field: a label, its one control, a hint and an error, wired to each other in one place, so a control is always named by its label and described by its hint and error.
 - `src/components/Icons.tsx`: Inline stroke icons (24x24 grid, 1.75 stroke): no icon font or external request, so the console's content security policy stays default-src 'self'.
 - `src/components/Layout.tsx`: The console's frame: the sidebar (organization and project switchers, navigation, docs, theme, account), the top bar (where you are, the live connection, search) and the page.
+- `src/components/SiteDialogs.tsx`: Making a site and connecting its servers (design §17.2, §29.7): one dialog for each, opened from Fleet, Sites and a site's page, with one set of defaults.
 - `src/components/Tables.tsx`: Tables shown on several pages: sessions, faults and audit records.
 - `src/components/Toasts.tsx`: Brief confirmations and failures, announced to assistive technology.
 - `src/components/nav.ts`: The console's navigation: one place for the sidebar, the command palette and the top bar.
 - `src/components/ui.tsx`: Small, accessible building blocks shared by every page.
+- `src/lib/config.ts`: Where the console's links outside itself go, set at build time (VITE_* environment variables, the names the NucleiLabs site uses for the same addresses).
 - `src/lib/context.ts`: Where the console is (the organization and project in the URL) and what the signed-in principal may do there.
 - `src/lib/fleet.ts`: The fleet's vocabulary, shared by the console's pages and the `neura` command (design §29): what a robot's state is called, what a rollout's steps and states are called, and their tones.
 - `src/lib/format.ts`: Formatting helpers.
@@ -420,7 +425,7 @@ Under `console/`:
 - `src/lib/theme.ts`: Theme: dark (the default), light, or the operating system's.
 - `src/lib/useNow.ts`: A clock for ages and countdowns.
 - `src/main.tsx`: The console's entry point: applies the remembered theme and mounts the app.
-- `src/pages/Activate.tsx`: Sign a CLI in (design §29.2): `neura login` shows a code and opens this page; a signed-in person checks the code and approves it for one of their workspaces.
+- `src/pages/Activate.tsx`: Sign a CLI in (design §29.2): `neura login` shows a code and opens this page; a signed-in person types the code their terminal shows, sees what is waiting for it, and approves it for one of their …
 - `src/pages/Fleet.tsx`: Fleet: where the robots are and what each one runs (design §29).
 - `src/pages/Home.tsx`: Overview: the project at a glance (design §19.3).
 - `src/pages/Improve.tsx`: A deployment's improvement loop (design §28): the episodes its robots recorded (counts only; episodes stay at the site), fine-tuning on them at the site, evaluations of a candidate against what the …
@@ -433,17 +438,19 @@ Under `console/`:
 - `src/pages/Rollouts.tsx`: Rollouts: every change to what robots run, step by step, as `neura deploy` shows it (design §29).
 - `src/pages/Settings.tsx`: Organization settings: members and roles, API tokens, support access, sign-in (design §19.2, §19.3, §20.7).
 - `src/pages/SignIn.tsx`: Sign in (design §20.7): with the organization's SSO when the control plane publishes one, or with an API token.
-- `src/pages/Site.tsx`: A site: its connection, offline allowance, servers with GPUs and preflight, and connecting a new server (design §17.2, §19.3).
-- `src/pages/Sites.tsx`: Sites & servers: the project's sites, their servers and connection state, and the dialog that adds a site (design §19.3).
+- `src/pages/Site.tsx`: A site: its connection, offline allowance, servers with GPUs and preflight, and adding a server (design §17.2, §19.3).
+- `src/pages/Sites.tsx`: Sites & servers: the project's sites, their servers and connection state; a new site opens on its page, ready to connect its server (design §19.3).
 - `src/pages/Start.tsx`: The entry point: choose an organization and project, or create the first project.
 - `src/styles/app.css`: The console's stylesheet.
 - `src/styles/tokens.css`: Design tokens (NucleiLabs design system, shared with the landing page).
-- `src/test/setup.ts`: Unit-test setup: unmount what each test rendered.
+- `src/test/fleet.ts`: A project's fleet for the console's unit tests: a site, its robots and rollouts, answered by the fake API the way the server answers (newest first, filtered by state, paged).
+- `src/test/render.tsx`: Unit tests render a screen as the console does, against a fake of the API.
+- `src/test/setup.ts`: Unit-test setup: unmount what each test rendered and undo its fakes of the API.
 - `vite.config.ts`: The console's build, dev server and unit tests (Vite and Vitest).
 - `src/api/schema.d.ts`: generated by openapi-typescript (pnpm run gen), from api/openapi.yaml
 - `src/generated/`: generated by tools/gen_reason_codes.py, from catalog/reason_codes.yaml
 
-Tests, under `console/`: `e2e/episodes.spec.ts`, `e2e/journey.spec.ts`, `src/api/client.test.ts`, `src/api/events.test.ts`, `src/components/Contracts.test.ts`, `src/components/ui.test.tsx`, `src/lib/fleet.test.ts`, `src/lib/format.test.ts`, `src/pages/Improve.test.tsx`
+Tests, under `console/`: `e2e/episodes.spec.ts`, `e2e/journey.spec.ts`, `src/api/client.test.ts`, `src/api/events.test.tsx`, `src/components/CommandPalette.test.tsx`, `src/components/Contracts.test.ts`, `src/components/Field.test.tsx`, `src/components/Layout.test.tsx`, `src/components/SiteDialogs.test.tsx`, `src/components/ui.test.tsx`, `src/lib/context.test.tsx`, `src/lib/fleet.test.ts`, `src/lib/format.test.ts`, `src/pages/Activate.test.tsx`, `src/pages/Fleet.test.tsx`, `src/pages/Improve.test.tsx`, `src/pages/Rollouts.test.tsx`, `src/pages/Start.test.tsx`
 
 ## landing
 
@@ -468,10 +475,11 @@ Under `site/`:
 - `docusaurus.config.ts`: NucleiLabs developer docs (design §26).
 - `scripts/csp.mjs`: After a build: the Content-Security-Policy the docs are served with (deploy/landing).
 - `sidebars.ts`: The docs' side navigation: every page, in reading order.
-- `src/components/StatusBanner.module.css`: The status label at the top of every docs page, one color per label.
+- `src/components/StatusBanner.module.css`: The status label at the top of every docs page, one color per label: the design tokens' status colors (tokens.css), so the label reads in both themes.
 - `src/components/StatusBanner.tsx`: The status label every page carries (design §26.2), shown above the page's content.
 - `src/components/SupportedTable.tsx`: The Supported combinations table (design §26.5): rendered from data/supported.json, which only qualification runs write, so nobody can add a supported combination by hand.
 - `src/css/custom.css`: The docs in the NucleiLabs design: the console's and the site's tokens (tokens.css, loaded first), mapped onto Docusaurus's theme variables, with the site's navigation, type and footer.
+- `src/prism.ts`: The code blocks' colours: the design tokens' (console/src/styles/tokens.css), so one theme serves both modes and every colour meets WCAG 2.1 AA on the block's background in each, as the tokens do.
 - `src/theme/DocItem/Content/index.tsx`: Wraps every docs page's content with its status banner, read from the page's front matter.
 - `src/theme/Footer/index.tsx`: The site's footer on every docs page: the same columns as the NucleiLabs home page.
 
@@ -523,4 +531,4 @@ Under `tools/`:
 
 Tests that span packages: the API spec, integration and the tools.
 
-Tests, under `tests/`: `api/test_openapi.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_shutdown.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`
+Tests, under `tests/`: `api/test_openapi.py`, `integration/conftest.py`, `integration/faulty_worker.py`, `integration/test_act_worker.py`, `integration/test_capture.py`, `integration/test_chaos.py`, `integration/test_console_proxy.py`, `integration/test_gateway_mtls.py`, `integration/test_grpc_site.py`, `integration/test_install_upgrade.py`, `integration/test_observability.py`, `integration/test_shadow_worker.py`, `integration/test_shutdown.py`, `integration/test_worker_sandbox.py`, `integration/test_workers.py`, `tools/test_docs.py`, `tools/test_generators.py`, `tools/test_harness.py`, `tools/test_supply_chain.py`, `tools/test_web_build_urls.py`

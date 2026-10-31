@@ -37,7 +37,7 @@ from neura_control.api.schemas import (
     RevisionCreate,
     RollbackCreate,
 )
-from neura_control.api.scope import Ctx, touch
+from neura_control.api.scope import Ctx
 from neura_control.db.models import (
     ActivationRequest,
     Deployment,
@@ -47,12 +47,12 @@ from neura_control.db.models import (
     Robot,
     Server,
     Site,
-    SiteCommand,
 )
 from neura_control.ids import Kind, new_id
 from neura_control.problems import ProblemError
 from neura_control.security.principal import Permission, Principal
 from neura_control.services import operations, release_gates
+from neura_control.services.records import touch
 from neura_control.services.revisions import report_json, revision_digest
 from neura_control.services.site_reports import update_operation
 
@@ -603,14 +603,7 @@ async def cancel_operation(
         )
         if row.state not in ("Pending", "Running"):
             raise ProblemError(ReasonCode.API_CONFLICT, f"the operation already {row.state}")
-        session.add(
-            SiteCommand(
-                site_id=row.site_id,
-                command_id=new_id(Kind.OPERATION).replace("op_", "cmd_", 1),
-                operation_id=row.id,
-                command={"kind": "cancel", "operation_id": row.id},
-            )
-        )
+        session.add(operations.cancel_command(row))
         operation = await update_operation(
             session, row.id, "Cancelled", message=f"cancelled by {principal.subject}"
         )

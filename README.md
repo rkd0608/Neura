@@ -264,7 +264,7 @@ make shots            # the website and docs in Chromium; fails on any error, ke
 make dev-report       # what is running here and what went wrong, errors first
 make console-check    # the console: format, lint, types, unit tests
 make console-e2e      # the console's journeys in Chromium, against the real backend
-make docs             # the docs on http://127.0.0.1:3000/docs/
+make docs             # the docs on http://127.0.0.1:5175/docs/
 make landing-dev      # the website on http://127.0.0.1:5174
 make models-setup     # PyTorch and LeRobot (about 5 GB), for real models
 make test-models      # adapters, real workers, the benchmark, the SO-101 integration

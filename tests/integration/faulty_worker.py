@@ -1,7 +1,8 @@
 """A policy worker whose mock policy hangs, exits or fails on demand (tests only).
 
 Run as the gateway's worker command. The fault is read from the file named by
-NEURA_TEST_WORKER_FAULT before every batch: "hang", "exit" (once) or "error".
+NEURA_TEST_WORKER_FAULT before every batch: "hang", "exit" (once) or "error"; and before loading:
+"slow-load" takes a minute to load, after writing the worker's pid to that file + ".loading".
 """
 
 from __future__ import annotations
@@ -38,6 +39,9 @@ class FaultyPolicy(MockPolicy):
 
 
 def load(*, binding: ExecutionBinding, **_: Any) -> FaultyPolicy:
+    if FAULT.exists() and FAULT.read_text().strip() == "slow-load":
+        FAULT.with_suffix(".loading").write_text(str(os.getpid()))
+        time.sleep(60)
     return FaultyPolicy(binding)
 
 

@@ -41,6 +41,17 @@ Sign in, sites, robots, policies, deploy, try, rollback, status, logs, approve, 
   `packages/neura/tests/test_cli_offline.py`
 - Docs: `site/docs/deploy-a-policy.md`, `site/docs/troubleshooting.md`
 
+### Signing the CLI in through the browser (§29.2)
+
+`neura login` shows a code; a person types it in the console, sees what waits for it, approves.
+
+- Code: `packages/neura-control/src/neura_control/api/routes_login.py`,
+  `packages/neura/src/neura_cli/commands/account.py`, `console/src/pages/Activate.tsx`
+- Tests: `packages/neura-control/tests/test_fleet.py::test_the_cli_signs_in_through_the_browser`,
+  `packages/neura-control/tests/test_fleet.py::test_a_person_sees_what_a_code_signs_in_before_approving_it`,
+  `console/src/pages/Activate.test.tsx`, and the journey's sign-in test (`console/e2e/journey.spec.ts`:
+  a person signed in with the e2e stack's test SSO issuer approves, the CLI gets its token)
+
 ### Rollouts: fits, at the site, shadow, approval, switch (§29.4, §28.3)
 
 One change to what robots run, and every step it goes through; rollbacks.
@@ -50,7 +61,8 @@ One change to what robots run, and every step it goes through; rollbacks.
   `packages/neura-control/src/neura_control/api/routes_fleet.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_deploy_on_a_bench_from_check_to_live`,
   `packages/neura-control/tests/test_fleet.py::test_a_second_version_is_shadowed_then_rolled_back`,
-  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`
+  `packages/neura-control/tests/test_fleet.py::test_an_inferior_shadow_stops_the_rollout`,
+  `packages/neura-control/tests/test_fleet.py::test_concurrent_deploys_start_one_rollout_per_robot`
 - Docs: `site/docs/deploy-a-policy.md`; the console's Rollouts page (`console/src/pages/Rollouts.tsx`)
 
 ### The control plane and its API (§13, §20)
@@ -61,7 +73,9 @@ The public management API (spec first), auth, audit, change events, and the site
   reference docs), `packages/neura-control/src/neura_control/api/`,
   `packages/neura-control/src/neura_control/grpc_site.py` (the site side; large)
 - Tests: `tests/api/test_openapi.py`, `packages/neura-control/tests/test_api_conventions.py`,
-  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`
+  `packages/neura-control/tests/test_security.py`, `packages/neura-control/tests/test_sdk.py`,
+  `packages/neura-control/tests/test_site_servers.py` (sites with several servers),
+  `packages/neura-control/tests/test_events.py` (the change-event stream)
 - Docs: `site/docs/reference/api.md` (generated), `site/docs/architecture.md`
 - Needs Postgres: `NEURA_TEST_DATABASE_URL` (`make verify` sets it when Postgres answers)
 
@@ -81,7 +95,10 @@ signed upgrades, and the local site API.
 - Code: `packages/neura-control/src/neura_control/installer.py`, `deploy/install/install.sh`,
   `tools/build_agent_release.py`, `packages/neura-agent/src/neura_agent/releases.py`
 - Tests: `packages/neura-control/tests/test_fleet.py::test_production_servers_install_with_one_line`,
-  `tests/integration/test_install_upgrade.py`
+  `tests/integration/test_install_upgrade.py`; installing as root, in a container (needs Docker):
+  `tests/integration/test_install_upgrade.py::test_installing_as_root_runs_nothing_as_root_from_the_agents_own_directories`;
+  `/install.sh` (and every other route the API serves) through the console's nginx:
+  `tests/integration/test_console_proxy.py` (needs Docker)
 - Docs: `site/docs/deploy-a-policy.md` ("A production server")
 
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
@@ -90,9 +107,13 @@ signed upgrades, and the local site API.
   `packages/neura-server/src/neura_server/scheduler.py`,
   `packages/neura-server/src/neura_server/admission.py`,
   `packages/neura-server/src/neura_server/worker.py`,
-  `packages/neura-server/src/neura_server/sandbox.py`
+  `packages/neura-server/src/neura_server/backends.py` (supervising workers),
+  `packages/neura-server/src/neura_server/sandbox.py`,
+  `packages/neura-server/src/neura_server/robot_service.py` (the gRPC service robots call)
 - Tests: `packages/neura-server/tests/test_gateway.py`, `packages/neura-server/tests/test_scheduler.py`,
-  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py`,
+  `packages/neura-server/tests/test_sandbox.py` (each run may write only a directory of its own),
+  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py` (needs Docker
+  and a worker image: a worker sees only its own socket),
   `tests/integration/test_shutdown.py` (stopped with SIGTERM, it stops its workers and leaves
   nothing behind)
 - Model adapters: `packages/neura-adapters/src/neura_adapters/` (LeRobot, Python classes, LoRA
@@ -106,6 +127,8 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-runtime/src/neura_runtime/action_queue.py`,
   `packages/neura-runtime/src/neura_runtime/session.py`
 - Tests: `packages/neura-runtime/tests/test_runtime.py`, `packages/neura-runtime/tests/test_action_queue.py`,
+  `packages/neura-runtime/tests/test_session.py` (which rejections end a session),
+  `packages/neura-runtime/tests/test_tensors.py`,
   `packages/neura-sim/tests/test_fault_suite.py` (every fault in §7, with an independent
   invariant monitor: `packages/neura-sim/src/neura_sim/invariants.py`)
 - Docs: `site/docs/fault-suite.md`, `site/docs/architecture.md`
@@ -141,7 +164,11 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-server/src/neura_server/capture/` (at the site), `packages/neura-learn/src/neura_learn/`,
   `packages/neura-server/src/neura_server/shadow.py`, `packages/neura-agent/src/neura_agent/jobs.py`
 - Tests: `tests/integration/test_capture.py`, `packages/neura-learn/tests/test_learn.py`,
-  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`
+  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`,
+  `packages/neura-agent/tests/test_jobs.py` (a job writes only its own output, what it prints
+  stays at the site, and it never outlives the agent),
+  `packages/neura-learn/tests/test_site_jobs.py` (evaluation and fine-tuning at the site, end to
+  end; needs the models group)
 - Docs: `site/docs/improvement-loop.md`; the console: `console/src/pages/Improve.tsx`
 
 ## Benchmarks: sharing a GPU (§9.5, §10)
@@ -160,7 +187,8 @@ ledger and its allowlist.
   `packages/neura-contracts/src/neura_contracts/sealing.py`, `catalog/outbound.yaml` (the
   allowlist; `make gen`), `packages/neura-agent/src/neura_agent/ledger.py`
 - Tests: `packages/neura-contracts/tests/test_signing.py`, `packages/neura-contracts/tests/test_sealing.py`,
-  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`
+  `packages/neura-agent/tests/test_outbound.py`, `tests/integration/test_gateway_mtls.py`,
+  `packages/neura-control/tests/test_sealed_weights.py` (Neura's registry of sealed weights)
 - Docs: `site/docs/privacy-and-access.md`, `SECURITY.md`
 
 ## Interfaces people use
@@ -169,7 +197,8 @@ ledger and its allowlist.
 
 Fleet, Policies, Rollouts and Settings, on the public API only.
 
-- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts; large),
+- Code: `console/src/pages/`, `console/src/components/ui.tsx` (shared parts),
+  `console/src/components/Field.tsx` (a form field wired to its label, hint and error),
   `console/src/styles/app.css` (large), `console/src/styles/tokens.css` (shared with the site
   and docs)
 - Tests: `console/src/lib/fleet.test.ts` and the other unit tests (`make console-check`);
@@ -181,7 +210,9 @@ Fleet, Policies, Rollouts and Settings, on the public API only.
 
 - Code: `landing/src/`, `site/docs/`, `site/src/`, `site/docusaurus.config.ts`;
   served together by `deploy/landing/default.conf` (the docs at /docs/)
-- Tests: `tools/check_docs.py` (labels, wording; `make docs-check`), `tests/tools/test_docs.py`
+- Tests: `tools/check_docs.py` (labels, wording; `make docs-check`), `tests/tools/test_docs.py`;
+  `tests/tools/test_web_build_urls.py` (the addresses the site, the docs and the console read at
+  build time are declared in their Dockerfile stages and passed by every build for deployment)
 - See it: `make shots` opens every page in Chromium with production's headers and fails on any
   error; screenshots in `.verify/shots`
 

@@ -8,7 +8,6 @@ import hashlib
 import json
 import logging
 import signal
-import time
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -21,9 +20,9 @@ from neura_agent.site_pki import GatewayTls, unexpired
 from neura_agent.state import AgentState
 from neura_server.config import GatewayConfig, SandboxConfig
 from neura_server.grpc_server import GatewayServer
+from neura_server.supervision import GATEWAY_STOP_TIMEOUT_S, RestartBackoff
 
 log = logging.getLogger("neura.agent.gateway")
-HEALTHY_RUN_S = 30.0
 
 
 def revision_documents(manifest: dict[str, Any], revision_id: str) -> dict[str, Any] | None:
@@ -217,10 +216,18 @@ class GatewayRunner(Protocol):
 
 
 class SubprocessGateway:
-    """Runs ``neura-gateway`` as a supervised child process; restarts it if it exits."""
+    """Runs ``neura-gateway`` as a supervised child process; restarts it if it exits. Stopping
+    waits as long as a gateway may take to stop its workers before it is killed."""
 
-    def __init__(self, command: list[str], status_listen: str) -> None:
+    def __init__(
+        self,
+        command: list[str],
+        status_listen: str,
+        *,
+        stop_timeout_s: float = GATEWAY_STOP_TIMEOUT_S,
+    ) -> None:
         self._command = command
+        self._stop_timeout_s = stop_timeout_s
         host, _, port = status_listen.rpartition(":")
         host = "127.0.0.1" if host in ("0.0.0.0", "") else host  # noqa: S104 - client side
         self._status_url = f"http://{host}:{port}/v1/local/dataplane"
@@ -245,23 +252,21 @@ class SubprocessGateway:
         return self._stopping
 
     async def _supervise(self) -> None:
-        backoff = 0.5
+        backoff = RestartBackoff(first_s=0.5, max_s=10.0)
         while not self._stop_requested():
             assert self._config is not None
             self._process = await asyncio.create_subprocess_exec(
                 *self._command, "--config", str(self._config)
             )
             log.info("gateway started (pid %s)", self._process.pid)
-            started = time.monotonic()
+            backoff.started()
             code = await self._process.wait()
             if self._stop_requested():  # stop() may have run while we waited
                 return
-            if time.monotonic() - started > HEALTHY_RUN_S:
-                backoff = 0.5  # it ran fine for a while: this is a new failure, not a crash loop
-            log.warning("gateway exited with %s; restarting in %.1fs", code, backoff)
+            delay = backoff.exited()
+            log.warning("gateway exited with %s; restarting in %.1fs", code, delay)
             self.restarts += 1
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 10.0)
+            await asyncio.sleep(delay)
 
     async def reload(self) -> None:
         if self.running:
@@ -274,9 +279,11 @@ class SubprocessGateway:
             assert self._process is not None
             self._process.terminate()
             try:
-                await asyncio.wait_for(self._process.wait(), timeout=5)
+                await asyncio.wait_for(self._process.wait(), timeout=self._stop_timeout_s)
             except TimeoutError:
+                log.error("gateway did not stop in %.0f s; killing it", self._stop_timeout_s)
                 self._process.kill()
+                await self._process.wait()
         if self._supervisor is not None:
             self._supervisor.cancel()
             with contextlib.suppress(asyncio.CancelledError):

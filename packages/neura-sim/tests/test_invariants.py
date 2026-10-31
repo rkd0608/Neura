@@ -223,7 +223,10 @@ def test_short_soak_with_dense_faults_passes(make_binding: Any) -> None:
     assert report["faults_total"] > 100
     assert len(report["faults_injected"]) >= 15  # most of the catalog was exercised
     assert report["recoveries"] > 0
-    assert report["invariants"]["checked"]["chunks_accepted"] > 300
+    # Enough chunks were checked for the invariants to mean something. Faults, resets and
+    # robots' timing share one random stream, so any change in behavior gives another trajectory:
+    # across seeds 1-40 this soak accepts 270 to 540 chunks.
+    assert report["invariants"]["checked"]["chunks_accepted"] > 250
 
 
 def test_soak_is_reproducible_from_its_seed(make_binding: Any) -> None:

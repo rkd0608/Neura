@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 
 import { useProjectEvents, type LiveState } from "../api/events";
-import { useFaults, useMe, useProjects } from "../api/queries";
+import { useMe, useProjects } from "../api/queries";
 import { useAuth } from "../auth/AuthProvider";
-import { useScope } from "../lib/context";
+import { DOCS_URL } from "../lib/config";
+import { usePermissions, useScope } from "../lib/context";
 import { setTheme, useTheme, type Theme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import {
@@ -25,9 +26,6 @@ import {
 } from "./Icons";
 import { MORE, NAV, sectionOf } from "./nav";
 import { MenuButton } from "./ui";
-
-export const DOCS_URL: string =
-  (import.meta.env.VITE_NEURA_DOCS_URL as string | undefined) ?? "https://rkd0608.github.io/neura/";
 
 function initials(text: string): string {
   const words = text.trim().split(/\s+/).filter(Boolean);
@@ -49,9 +47,7 @@ function useShortcut(open: () => void) {
 
 export function Layout() {
   const { orgId, projectId, base } = useScope();
-  const faults = useFaults(projectId);
   const live = useProjectEvents(projectId);
-  const latched = (faults.data ?? []).filter((f) => f.latched && !f.cleared_at).length;
   const [palette, setPalette] = useState(false);
   const openPalette = useCallback(() => setPalette(true), []);
   const closePalette = useCallback(() => setPalette(false), []);
@@ -84,11 +80,6 @@ export function Layout() {
                 >
                   <link.icon />
                   {link.label}
-                  {link.to === "faults" && latched > 0 ? (
-                    <span className="nav-count" aria-label={`${latched} latched`}>
-                      {latched}
-                    </span>
-                  ) : null}
                 </NavLink>
               ))}
             </div>
@@ -163,6 +154,7 @@ function OrgSwitcher({ orgId }: { orgId: string }) {
 
 function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: string }) {
   const projects = useProjects(orgId);
+  const can = usePermissions(orgId);
   const navigate = useNavigate();
   const project = projects.data?.find((p) => p.metadata.id === projectId);
   const name = project?.spec.display_name ?? (projectId ? "Project" : "Choose a project");
@@ -203,7 +195,15 @@ function ProjectSwitcher({ orgId, projectId }: { orgId: string; projectId: strin
           ))}
           <div className="menu-sep" />
           <Link className="menu-item" to={`/o/${orgId}/projects`} onClick={close}>
-            <PlusIcon /> New project
+            {can.admin ? (
+              <>
+                <PlusIcon /> New project
+              </>
+            ) : (
+              <>
+                <FolderIcon /> All projects
+              </>
+            )}
           </Link>
         </>
       )}

@@ -7,9 +7,13 @@ api/openapi.yaml by the conformance client.
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
 from test_onboarding_flow import site_ack
 
@@ -223,6 +227,31 @@ def test_versions_number_themselves_and_a_repush_is_the_same_version(bench: Flee
     assert policy["status"] == {"versions": 2, "latest_version": 2}
 
 
+def test_a_repush_signed_by_another_key_adds_its_signature_audited(bench: Fleet) -> None:
+    first = bench.push("v1", "a")
+    artifact_id = first["spec"]["model_artifact_id"]
+    before = bench.c.get(f"/v1/model-artifacts/{artifact_id}").json()
+    bench.key = signing.load_private_key(signing.generate_key())
+    again = bench.push("v1", "a")
+    assert again["metadata"]["id"] == first["metadata"]["id"]  # still the same version
+    after = bench.c.get(f"/v1/model-artifacts/{artifact_id}").json()
+    assert len(after["signatures"]) == 2
+    assert after["metadata"]["version"] == "2"
+    assert datetime.fromisoformat(after["metadata"]["updated_at"]) > datetime.fromisoformat(
+        before["metadata"]["updated_at"]
+    )
+    audit = bench.c.get(
+        f"/v1/projects/{bench.project}/audit-records", params={"page_size": 200}
+    ).json()["items"]
+    assert [r["target"] for r in audit if r["action"] == "model_artifact.sign"] == [artifact_id]
+    with psycopg.connect(bench.db) as conn:
+        events = conn.execute(
+            "SELECT type, resource_version FROM events WHERE resource = %s ORDER BY cursor",
+            (artifact_id,),
+        ).fetchall()
+    assert events == [("resource.created", "1"), ("resource.updated", "2")]
+
+
 def test_a_versions_source_must_match_its_adapter(bench: Fleet) -> None:
     response = bench.c.post(
         f"/v1/policies/{bench.policy}/versions",
@@ -409,6 +438,42 @@ def test_one_rollout_at_a_time_and_cancel(bench: Fleet) -> None:
     assert again.status_code == 409
 
 
+def test_concurrent_deploys_start_one_rollout_per_robot(bench: Fleet) -> None:
+    version = bench.push("v1", "a")["metadata"]["id"]
+
+    def at_once(robot_sets: list[list[str]]) -> list[Any]:
+        barrier = threading.Barrier(len(robot_sets))
+
+        def deploy(robots: list[str]) -> Any:
+            barrier.wait()
+            return bench.c.post(
+                f"/v1/projects/{bench.project}/rollouts",
+                {"spec": {"robot_ids": robots, "policy_version_id": version}},
+            )
+
+        with ThreadPoolExecutor(len(robot_sets)) as pool:
+            return list(pool.map(deploy, robot_sets))
+
+    # The site's first deploys, at the same moment, to different robots: each gets a deployment.
+    first = at_once([[bench.robots[0]], [bench.robots[1]]])
+    assert [r.status_code for r in first] == [201, 201], [r.text for r in first]
+    deployments = {r.json()["status"]["deployment_id"] for r in first}
+    assert len(deployments) == 2
+    # Deploys to the same robot of a deployment, at the same moment: one starts, the others are
+    # told why not.
+    earlier = bench.deploy(version, bench.robots[2:])["metadata"]["id"]
+    assert bench.c.post(f"/v1/rollouts/{earlier}/cancel", {}).status_code == 200
+    clashing = at_once([[bench.robots[2]]] * 4)
+    assert sorted(r.status_code for r in clashing) == [201, 409, 409, 409], [
+        r.text for r in clashing
+    ]
+    active = bench.c.get(
+        f"/v1/projects/{bench.project}/rollouts",
+        params={"robot_id": bench.robots[2], "state": "active"},
+    ).json()["items"]
+    assert len(active) == 1
+
+
 def test_try_is_for_bench_sites_only(production: Fleet) -> None:
     version = production.push("v1", "a")["metadata"]["id"]
     response = production.c.post(
@@ -515,7 +580,40 @@ def test_the_cli_signs_in_through_the_browser(make_api: AppFactory) -> None:
     assert anonymous.post(exchange, {"secret": login["secret"]}).status_code == 404  # once
 
 
-def report_inventory(database_url: str, site_id: str, robots: list[dict[str, Any]]) -> None:
+def test_a_person_sees_what_a_code_signs_in_before_approving_it(make_api: AppFactory) -> None:
+    """Anyone can start a sign-in and send its link: the console shows what is waiting for the
+    code (what started it and when) before a person approves it."""
+    issuer = OidcIssuer()
+    client, _ = make_api(oidc_verifier=issuer.verifier, memberships={ADMIN: Role.ADMIN})
+    anonymous = client.as_token(None)
+    login = anonymous.post("/v1/login-sessions", {"client_name": "neura CLI on eve@far-away"})
+    assert login.status_code == 201, login.text
+    code = login.json()["user_code"]
+    lookup = f"/v1/login-codes/{code}"
+
+    assert anonymous.get(lookup).status_code == 401
+    # Only people approve codes, so only people look them up.
+    assert client.get(lookup).status_code == 403
+    ada = client.as_token(issuer.token("ada"))
+    found = ada.get(f"/v1/login-codes/{code.replace('-', '').lower()}")
+    assert found.status_code == 200, found.text
+    waiting = found.json()
+    assert waiting["user_code"] == code
+    assert waiting["client_name"] == "neura CLI on eve@far-away"
+    assert waiting["created_at"] < waiting["expires_at"] == login.json()["expires_at"]
+    assert "secret" not in waiting
+
+    assert ada.get("/v1/login-codes/BCDF-2345").status_code == 404
+    assert ada.post("/v1/login-approvals", {"user_code": code}).status_code == 200
+    assert ada.get(lookup).status_code == 404  # approved: nothing waits for it any more
+
+
+def report_inventory(
+    database_url: str,
+    site_id: str,
+    robots: list[dict[str, Any]],
+    server_id: str = "srv_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+) -> None:
     """What a site's agent sends: the robots its server drives."""
     import asyncio
     import json
@@ -537,7 +635,7 @@ def report_inventory(database_url: str, site_id: str, robots: list[dict[str, Any
         engine = create_engine(database_url, pool_size=1)
         try:
             async with session_factory(engine).begin() as session:
-                await inventory.report(session, site_id, message)
+                await inventory.report(session, site_id, server_id, message)
         finally:
             await engine.dispose()
 
@@ -601,6 +699,15 @@ def test_robots_a_site_finds_are_registered_and_kept(bench: Fleet) -> None:
     ]
     assert "sim-2 is no longer connected to plant-1's server" in summaries
     assert "plant-1 found a simulated so101-follower: sim-1" in summaries
+
+    # One that comes back is present again, and said to be.
+    report_inventory(bench.db, bench.site, found)
+    back = bench.c.get(f"/v1/robots/{discovered['sim-2']['metadata']['id']}").json()["status"]
+    assert (back["present"], back["phase"]) == (True, "Ready")
+    summaries = [
+        a["summary"] for a in bench.c.get(f"/v1/projects/{bench.project}/activity").json()["items"]
+    ]
+    assert "sim-2 is connected to plant-1 again" in summaries
 
     # Another site's sim-1 does not take this one's name.
     other = bench.c.post(

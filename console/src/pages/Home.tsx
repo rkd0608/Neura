@@ -52,7 +52,7 @@ interface Step {
 
 export function Home() {
   const { orgId, projectId, base } = useScope();
-  const can = usePermissions(orgId);
+  const can = usePermissions(orgId, projectId);
   const project = useProject(projectId);
   const sites = useSites(projectId);
   const robots = useRobots(projectId);
@@ -141,7 +141,7 @@ export function Home() {
       text: "Run one command on the server. It dials out to Neura; no inbound ports.",
       done: serverCount > 0,
       to: siteList[0] ? `${base}/sites/${siteList[0].metadata.id}?connect=1` : `${base}/sites`,
-      action: "Connect a server",
+      action: "Add a server",
     },
     {
       title: "Register your model and robot",

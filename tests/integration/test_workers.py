@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import os
 import sys
@@ -17,7 +18,8 @@ from typing import Any
 import pytest
 
 from neura_runtime.runtime import RuntimeState
-from neura_server import worker
+from neura_server import grpc_server, worker
+from neura_server.backends import WorkerBackend, WorkerSpec
 from neura_server.config import (
     DeploymentConfig,
     DeviceConfig,
@@ -26,6 +28,7 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
+from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, launcher_for
 from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
@@ -88,6 +91,12 @@ class Site:
                 assert robot.runtime.fault.reason.value == "STARVATION_GRACE_EXHAUSTED"
                 robot.runtime.reset(time.monotonic_ns() // 1000, revalidated=True)
 
+    def served_since(self, chunks: int) -> bool:
+        """Robots are served again. A robot still waiting when the worker came back can run out
+        of grace a moment later (design §7): its operator resets it whenever it stops."""
+        self.reset_faulted_robots()
+        return self.chunks() > chunks
+
 
 @contextlib.asynccontextmanager
 async def running(cfg: GatewayConfig) -> AsyncIterator[Site]:
@@ -139,9 +148,8 @@ async def test_a_crashed_worker_fails_its_batch_and_is_restarted(tmp_path: Path)
         fault.write_text("exit")
         await until("a restart", lambda: site.group()["worker"]["restarts"] == 1)
         await until("the worker again", lambda: site.group()["worker"]["state"] == "ready")
-        site.reset_faulted_robots()
         before = site.chunks()
-        await until("chunks after the restart", lambda: site.chunks() > before)
+        await until("chunks after the restart", lambda: site.served_since(before))
         status = site.group()["worker"]
     assert status["pid"] != first_pid
     # The batch in flight when the worker died never got a result from any worker.
@@ -159,9 +167,8 @@ async def test_a_hung_worker_is_killed_and_its_batch_fails(tmp_path: Path) -> No
         fault.write_text("")
         await until("a restart", lambda: site.group()["worker"]["restarts"] >= 1)
         await until("the worker again", lambda: site.group()["worker"]["state"] == "ready")
-        site.reset_faulted_robots()
         before = site.chunks()
-        await until("chunks after recovery", lambda: site.chunks() > before)
+        await until("chunks after recovery", lambda: site.served_since(before))
 
 
 async def test_a_policy_error_is_a_typed_rejection(tmp_path: Path) -> None:
@@ -193,6 +200,84 @@ async def test_reloading_without_the_deployment_stops_its_worker() -> None:
         site.server.reload(cfg.model_copy(update={"deployments": []}))
         await until("the group to go", lambda: not site.server.status()["groups"])
         await until("the process to exit", lambda: not _alive(pid))
+
+
+class SlowToRemove:
+    """The real worker, and a container runtime slow to remove what the worker ran in."""
+
+    def __init__(self, launcher: Launcher) -> None:
+        self.launcher = launcher
+        self.removed: list[str] = []
+
+    def command(self, name: str, invocation: Invocation) -> list[str]:
+        return self.launcher.command(name, invocation)
+
+    async def remove(self, name: str) -> None:
+        await asyncio.sleep(1.0)
+        self.removed.append(name)
+
+
+async def test_a_gateway_stopped_while_it_retires_a_group_finishes_retiring_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launchers: list[SlowToRemove] = []
+
+    def slow(*args: Any) -> SlowToRemove:
+        launchers.append(SlowToRemove(launcher_for(*args)))
+        return launchers[-1]
+
+    monkeypatch.setattr(grpc_server, "launcher_for", slow)
+    cfg = config(["robot-0"])
+    server = GatewayServer(cfg)
+    await server.start()
+    try:
+        await until(
+            "the worker",
+            lambda: next(iter(server.status()["groups"].values()))["worker"]["state"] == "ready",
+        )
+        pid = next(iter(server.status()["groups"].values()))["worker"]["pid"]
+        server.reload(cfg.model_copy(update={"deployments": []}))  # its group is retired
+        await asyncio.sleep(0.2)
+    finally:
+        await server.stop()
+    # Cancelled, the retirement left its worker's container to nobody.
+    (launcher,) = launchers
+    assert launcher.removed == ["g1-1"]
+    assert not _alive(pid)
+
+
+class Impostor:
+    """Runs a real worker that loads another model than the one it was asked for."""
+
+    def __init__(self) -> None:
+        self._launcher = ProcessLauncher([sys.executable, "-m", "neura_server.worker"])
+
+    def command(self, name: str, invocation: Invocation) -> list[str]:
+        other = [
+            ("--artifact", EXAMPLES / "smolvla-so101.artifact.yaml"),
+            ("--robot-profile", ROBOT),
+            ("--execution-profile", EXAMPLES / "smolvla-so101-30hz.profile.yaml"),
+        ]
+        return self._launcher.command(name, dataclasses.replace(invocation, inputs=other))
+
+    async def remove(self, name: str) -> None:
+        del name
+
+
+async def test_a_worker_whose_socket_answers_for_another_model_is_not_used(tmp_path: Path) -> None:
+    spec = WorkerSpec(ARTIFACT, ROBOT, PROFILE, device="cpu", adapter="mock")
+    backend = WorkerBackend(
+        "g1", spec, socket_dir=tmp_path, start_timeout_s=60, launcher=Impostor()
+    )
+    await backend.start()
+    try:
+        await until("the refusal", lambda: backend.last_error is not None, timeout=60)
+        assert backend.last_error is not None
+        assert backend.last_error["code"] == "WORKER_LOAD_FAILED"
+        assert "answers for artifact" in backend.last_error["message"]
+        assert not backend.ready.is_set()
+    finally:
+        await backend.stop()
 
 
 def _alive(pid: int) -> bool:

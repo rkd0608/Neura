@@ -7,6 +7,10 @@ server at 127.0.0.1:55432), migrates it, and serves the control plane with a dev
 bootstrap admin token. Writes the endpoints and token to --state, prints READY, and runs until
 terminated (SIGTERM or Ctrl-C); then drops the database. The tests start the site agent and
 robots themselves, with the commands the console shows.
+
+Some things only a person may do (approve a CLI's sign-in): the control plane also trusts a test
+SSO issuer whose key lives in this process, and --state holds a person's access token from it.
+That person signs up on first use and gets a workspace of their own.
 """
 
 from __future__ import annotations
@@ -18,14 +22,36 @@ import os
 import signal
 import sys
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+import jwt
 import psycopg
 import uvicorn
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from neura_control.db.migrate import upgrade
+from neura_control.security.oidc import OidcVerifier
 from neura_control.services.bootstrap import generate_token_value
+
+ISSUER = "https://sso.e2e.invalid"
+AUDIENCE = "neura"
+
+
+def person_token(key: rsa.RSAPrivateKey) -> str:
+    """An access token from the test issuer for a person, valid for the run."""
+    now = datetime.now(UTC)
+    claims = {
+        "iss": ISSUER,
+        "sub": "ada",
+        "aud": AUDIENCE,
+        "iat": now,
+        "exp": now + timedelta(hours=2),
+        "email": "ada@e2e.example",
+        "email_verified": True,
+    }
+    return jwt.encode(claims, key, algorithm="RS256")
 
 
 def with_database(url: str, name: str) -> str:
@@ -54,6 +80,7 @@ def main() -> int:
     database = with_database(admin, name)
     upgrade(database)
     token = generate_token_value()
+    sso = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     env = {
         **os.environ,
         "NEURA_CONTROL_ENVIRONMENT": "development",
@@ -65,6 +92,7 @@ def main() -> int:
         "NEURA_CONTROL_AGENT_ENDPOINT": f"127.0.0.1:{args.agent_port}",
         "NEURA_CONTROL_AGENT_POLL_INTERVAL_S": "0.3",
         "NEURA_CONTROL_LOG_LEVEL": "warning",
+        "NEURA_CONTROL_SELF_SIGNUP": "true",
     }
     os.environ.update(env)
     args.state.write_text(
@@ -73,6 +101,7 @@ def main() -> int:
                 "api_url": f"http://127.0.0.1:{args.api_port}",
                 "agent_endpoint": f"127.0.0.1:{args.agent_port}",
                 "token": token,
+                "person_token": person_token(sso),
                 "database": name,
             }
         )
@@ -81,8 +110,11 @@ def main() -> int:
     from neura_control.app import create_app
     from neura_control.settings import ControlPlaneSettings
 
+    verifier = OidcVerifier(
+        issuer=ISSUER, audience=AUDIENCE, key_resolver=lambda _: sso.public_key()
+    )
     config = uvicorn.Config(
-        create_app(ControlPlaneSettings()),
+        create_app(ControlPlaneSettings(), oidc_verifier=verifier),
         host="127.0.0.1",
         port=args.api_port,
         log_level="warning",

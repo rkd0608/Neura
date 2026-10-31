@@ -1,4 +1,5 @@
-/* The status label at the top of every docs page, one color per label. */
+/* The status label at the top of every docs page, one color per label: the design tokens' status
+   colors (tokens.css), so the label reads in both themes. */
 .banner {
   border-left: 4px solid var(--status-color);
   background: var(--status-background);
@@ -8,22 +9,29 @@
   font-size: 0.9rem;
 }
 
+/* Its link is told from the text by more than colour (WCAG 1.4.1). */
+.banner a {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+
 .proposed {
-  --status-color: #8a6d00;
-  --status-background: rgba(255, 196, 0, 0.12);
+  --status-color: var(--warn);
+  --status-background: var(--warn-soft);
 }
 
 .experimental {
-  --status-color: #1f4f8b;
-  --status-background: rgba(31, 79, 139, 0.1);
+  --status-color: var(--info);
+  --status-background: var(--info-soft);
 }
 
 .supported {
-  --status-color: #1d7a3a;
-  --status-background: rgba(29, 122, 58, 0.1);
+  --status-color: var(--ok);
+  --status-background: var(--ok-soft);
 }
 
 .deprecated {
-  --status-color: #a12b2b;
-  --status-background: rgba(161, 43, 43, 0.1);
+  --status-color: var(--danger);
+  --status-background: var(--danger-soft);
 }

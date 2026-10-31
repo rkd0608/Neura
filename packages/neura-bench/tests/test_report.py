@@ -26,7 +26,8 @@ def test_the_report_states_capacity_crossovers_and_its_limits() -> None:
     ):
         assert heading in markdown
     for case in data["capacity"]:
-        assert f"**{report.CASE_NAMES[case]}:**" in markdown  # a crossover statement per case
+        assert f"**{report.case_name(case, data['config'])}:**" in markdown  # one per case
+    assert "**2 different full fine-tunes" in markdown  # how many, from the run's config
     assert "SmolVLA" not in markdown  # a case whose model was not measured has no table
     assert "Parity with each adapter merged" in markdown
 

@@ -27,7 +27,7 @@ CONFIG_NAMES = {
 CASE_NAMES = {
     suite.SAME_WEIGHTS: "Same weights on every robot",
     suite.MULTI_ADAPTER: "Per-robot LoRA adapters of one base model",
-    suite.CO_LOCATED: "Different full fine-tunes of one architecture",
+    suite.CO_LOCATED: "{fine_tunes} different full fine-tunes of one architecture",
     suite.DIFFERENT: "Different architectures (ACT and Diffusion Policy)",
     suite.VLA_CASES["smolvla"]: "Same weights on every robot: SmolVLA",
     suite.VLA_CASES["pi0"]: "Same weights on every robot: pi0",
@@ -38,6 +38,13 @@ MODEL_NAMES = {
     "smolvla": "SmolVLA",
     "pi0": "pi0",
 }
+
+
+def case_name(case: str, config: dict[str, Any]) -> str:
+    """A case's title, with the run's own counts (its configuration in results.json)."""
+    return CASE_NAMES[case].format(fine_tunes=config["fine_tunes"])
+
+
 WORKLOAD_NAMES = {
     suite.PHASED: "phased arrivals",
     suite.SYNCHRONIZED: "synchronized (bursty) arrivals",
@@ -190,7 +197,7 @@ def markdown(data: dict[str, Any]) -> str:
     for case, workloads in capacity.items():
         for workload, configurations in workloads.items():
             best = _best_neura(configurations)
-            row = [CASE_NAMES[case], WORKLOAD_NAMES[workload]]
+            row = [case_name(case, config), WORKLOAD_NAMES[workload]]
             for configuration in (suite.DEDICATED, suite.DEDICATED_SHARED):
                 entry = configurations.get(configuration)
                 row.append(_capacity_cell(entry))
@@ -202,7 +209,7 @@ def markdown(data: dict[str, Any]) -> str:
         ["Case", "Workload", "One device per robot", "One process per robot", "Best Neura"],
         rows,
     )
-    out += ["", *_crossovers(capacity), ""]
+    out += ["", *_crossovers(capacity, config), ""]
 
     out += ["## Measurements on the device", ""]
     measured = data["measurements"]
@@ -357,7 +364,7 @@ def markdown(data: dict[str, Any]) -> str:
                 )
             if not rows:
                 continue  # a case whose model was not measured
-            out += [f"### {CASE_NAMES[case]}: {WORKLOAD_NAMES[workload]}", ""]
+            out += [f"### {case_name(case, config)}: {WORKLOAD_NAMES[workload]}", ""]
             out += _table(
                 [
                     "Configuration",
@@ -391,7 +398,7 @@ def markdown(data: dict[str, Any]) -> str:
         real, sim = v["real"]["result"], v["simulated"]
         rows.append(
             [
-                f"{CASE_NAMES[v['case']]}: {WORKLOAD_NAMES[v['workload']]}",
+                f"{case_name(v['case'], config)}: {WORKLOAD_NAMES[v['workload']]}",
                 CONFIG_NAMES[v["configuration"]],
                 str(v["robots"]),
                 f"{real['requests']} / {sim['requests']}",
@@ -510,7 +517,7 @@ def _best_neura(configurations: dict[str, dict[str, Any]]) -> str | None:
     )
 
 
-def _crossovers(capacity: dict[str, Any]) -> list[str]:
+def _crossovers(capacity: dict[str, Any], config: dict[str, Any]) -> list[str]:
     lines = []
     for case, workloads in capacity.items():
         configurations = workloads.get(suite.PHASED) or next(iter(workloads.values()))
@@ -535,13 +542,14 @@ def _crossovers(capacity: dict[str, Any]) -> list[str]:
                 "co-location"
             )
             lines.append(
-                f"- **{CASE_NAMES[case]}:** {verdict}. {CONFIG_NAMES[best]} serves {n} robots "
+                f"- **{case_name(case, config)}:** {verdict}. {CONFIG_NAMES[best]} serves "
+                f"{n} robots "
                 f"per device ({1 / n:.3f} device-hours per robot-hour, against 1 with a device "
                 f"per robot){beyond}."
             )
         else:
             lines.append(
-                f"- **{CASE_NAMES[case]}:** sharing does not pay on this device: "
+                f"- **{case_name(case, config)}:** sharing does not pay on this device: "
                 f"{CONFIG_NAMES[best]} serves {n} robot(s) at the SLO."
             )
     return lines

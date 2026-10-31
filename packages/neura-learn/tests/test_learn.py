@@ -5,6 +5,7 @@ simulated scenes, and the job entry point the agent runs."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -24,7 +25,7 @@ from neura_learn.evaluate import (
     evaluate_replay,
     replay_samples,
 )
-from neura_learn.train import Recipe, base_statistics, fine_tune
+from neura_learn.train import Recipe, _LossLog, base_statistics, fine_tune
 
 from neura_bench.deployments import DeploymentFiles, synthetic
 from neura_runtime.capture.episode import Episode
@@ -123,6 +124,21 @@ def test_a_fine_tune_produces_a_checkpoint_serving_can_load(
     before = load_file(model.checkpoint / "model.safetensors")
     after = load_file(checkpoint / "model.safetensors")
     assert any(not np.array_equal(before[k], after[k]) for k in before)  # it trained
+
+
+def test_losses_keep_their_steps_past_a_thousand() -> None:
+    """LeRobot's log rounds its step from 1000 on (1K, 2K): each logged loss is still put at
+    its own step."""
+    from lerobot.utils.logging_utils import AverageMeter, MetricsTracker
+
+    tracker = MetricsTracker(8, 1000, 10, {"loss": AverageMeter("loss", ":.3f")})
+    log = _LossLog(lambda _: None, log_every=50)
+    for step in range(1, 1501):
+        tracker.step()
+        tracker.loss = 1 / step
+        if step % 50 == 0:
+            log.emit(logging.makeLogRecord({"msg": str(tracker)}))
+    assert [step for step, _ in log.losses] == list(range(50, 1501, 50))
 
 
 def test_the_job_entry_point_runs_replay_and_training(

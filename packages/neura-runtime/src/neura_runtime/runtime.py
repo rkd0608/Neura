@@ -630,6 +630,30 @@ class RobotRuntime:
         if self.observers:
             self._notify("on_fault", self.fault)
 
+    def checkpoint(self) -> dict[str, object]:
+        """What a replay restores to start from here (``neura_runtime.incident``). Complete only
+        just after a task epoch advanced: that empties the queue, the request sequence and any
+        pending request, so these facts are the runtime's whole state."""
+        return {
+            "state": self.state.value,
+            "task_epoch": self.task_epoch,
+            "session_id": self._session_id,
+            "lease_generation": self._lease_generation,
+            "instruction": self._instruction,
+            "dispatched": self.dispatched,
+        }
+
+    def restore(self, checkpoint: dict[str, object]) -> None:
+        """Start from ``checkpoint`` (a fresh runtime, for a replay)."""
+        self.state = RuntimeState(str(checkpoint["state"]))
+        self.task_epoch = int(str(checkpoint["task_epoch"]))
+        session = checkpoint["session_id"]
+        generation = checkpoint["lease_generation"]
+        self._session_id = None if session is None else str(session)
+        self._lease_generation = None if generation is None else int(str(generation))
+        self._instruction = str(checkpoint["instruction"])
+        self.dispatched = int(str(checkpoint["dispatched"]))
+
     def snapshot(self) -> RuntimeSnapshot:
         return RuntimeSnapshot(
             state=self.state,

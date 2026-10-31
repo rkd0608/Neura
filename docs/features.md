@@ -122,6 +122,16 @@ signed upgrades, and the local site API.
   (through the gateway and through a policy)
 - See it: `neura-robot serve picker.py` serves an `@neura.policy` class on 127.0.0.1:50061
 
+### The incident record (§30.2)
+
+- Code: `packages/neura-runtime/src/neura_runtime/incident.py` (the recorder and the MCAP file),
+  `packages/neura-runtime/src/neura_runtime/replay.py` (`neura-robot replay`),
+  `RobotRuntime.checkpoint` in `packages/neura-runtime/src/neura_runtime/runtime.py`; `neura-arm`
+  records by default (`incidents_dir`, the operator's `incident`)
+- Tests: `packages/neura-runtime/tests/test_local.py::test_a_policy_drives_the_runtime_and_its_failures_stop_it`
+  (each transport's fault writes a record that replays the same; an altered one does not)
+- See it: `neura-robot replay incidents/<file>.mcap`; open the file in Foxglove
+
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
 
 - Code: `packages/neura-server/src/neura_server/gateway.py`,

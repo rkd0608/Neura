@@ -53,5 +53,9 @@ cameras:  # by camera role in the robot profile
   front: {type: opencv, index_or_path: /dev/v4l/by-id/usb-front-camera-video-index0, fps: 30}
   wrist: {type: opencv, index_or_path: /dev/v4l/by-id/usb-wrist-camera-video-index0, fps: 30}
 
+# Incident records: the last moments before a fault (or the operator's `incident`), as MCAP;
+# replay one with `neura-robot replay <file>`. Relative to this file; null keeps none.
+# incidents_dir: incidents
+
 # For language-conditioned models (SmolVLA, pi0); also settable with `instruction ...`.
 # instruction: pick up the red cube and place it in the bin

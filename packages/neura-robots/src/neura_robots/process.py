@@ -49,6 +49,7 @@ from neura_runtime.grpc_client import (
     fetch_assignment,
     monotonic_us,
 )
+from neura_runtime.incident import IncidentRecorder
 from neura_runtime.invariants import InvariantMonitor, watch_robot
 from neura_runtime.local import LocalConnection
 from neura_runtime.policy import PolicyClient
@@ -101,13 +102,25 @@ class ArmProcess:
         capture: CaptureConfig | None = None,
         capture_dir: Path | None = None,
         policy: PolicyClient | None = None,
+        incidents: Path | None = None,
     ) -> None:
         """Served by the site gateway at ``target``, or, with ``policy``, by that policy directly
-        (``neura_runtime.local``): the runtime is the same either way."""
+        (``neura_runtime.local``): the runtime is the same either way. With ``incidents``, the
+        runtime is recorded and a fault writes an incident record there
+        (``neura_runtime.incident``)."""
         self.arm = arm
         self.robot_id = robot_id
         self.revision_id = revision_id
-        self.runtime = RobotRuntime(binding, arm, arm)
+        self.incidents: IncidentRecorder | None = None
+        if incidents is not None:
+            self.incidents = IncidentRecorder(
+                incidents, robot_id=robot_id, on_written=lambda p: say(f"incident record: {p}")
+            )
+            recorder = self.incidents
+            self.runtime = RobotRuntime(binding, recorder.controller(arm), recorder.sensors(arm))
+            recorder.attach(self.runtime)
+        else:
+            self.runtime = RobotRuntime(binding, arm, arm)
         if binding.language_input is not None and instruction:
             self.runtime.set_instruction(instruction[: binding.language_max_bytes])
         self.client = SessionClient(
@@ -266,6 +279,11 @@ class ArmProcess:
                     return "outcome: success or failure"
                 episode = self.capture.label(Outcome(label), OutcomeSource.OPERATOR, note)
                 return f"labeled {episode}: {label}" if episode else "outcome: no episode yet"
+            if word == "incident":
+                if self.incidents is None:
+                    return "incident: this robot keeps no incident records"
+                self.incidents.write_soon("request")
+                return "writing an incident record of the last moments"
             if word == "status":
                 return json.dumps(self.status())
             if word == "quit":
@@ -279,7 +297,7 @@ class ArmProcess:
             return f"{word}: {exc}"
         return (
             f"unknown command {word!r} "
-            "(arm, stop, takeover, reset, instruction, outcome, status, quit)"
+            "(arm, stop, takeover, reset, instruction, outcome, incident, status, quit)"
         )
 
     def reset(self, now_us: int) -> str:

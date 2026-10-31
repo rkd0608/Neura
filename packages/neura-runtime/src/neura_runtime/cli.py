@@ -9,6 +9,9 @@ neura-robot serve POLICY [--weights DIR] [--device DEVICE] [--listen HOST:PORT]
     serve an @neura.policy class (POLICY: path/to/file.py, or file.py:Class) to robots over the
     network, on a GPU machine for example. Beyond loopback it needs a token, read from the
     environment variable NEURA_SERVE_TOKEN; robots send the same token.
+neura-robot replay RECORD
+    run an incident record (.mcap) back through a fresh runtime and say whether it decides
+    exactly as the robot did, or where it first differs.
 """
 
 from __future__ import annotations
@@ -55,12 +58,34 @@ def main(argv: list[str] | None = None) -> int:
     served.add_argument("--weights", type=Path)
     served.add_argument("--device", default="cpu")
     served.add_argument("--listen", default="127.0.0.1:50061")
+    replayed = sub.add_parser("replay", help="replay an incident record through the runtime")
+    replayed.add_argument("record", type=Path)
     args = parser.parse_args(argv)
     if args.command == "serve":
         return asyncio.run(serve(args.policy, args.weights, args.device, args.listen))
+    if args.command == "replay":
+        return replay_record(args.record)
     key_path, csr_path = keygen(args.robot_name, args.dir)
     print(f"key {key_path} (keep it on this robot), request {csr_path} (give it to the operator)")
     return 0
+
+
+def replay_record(path: Path) -> int:
+    from neura_runtime import replay
+
+    record = replay.read(path)
+    if not record.replayable:
+        print(f"{path.name}: the task ran too long for its start to be kept; not replayable")
+        return 1
+    outcome = replay.replay(record)
+    counts = ", ".join(f"{n} {kind}" for kind, n in sorted(outcome.counts.items()))
+    if outcome.matches:
+        print(f"{path.name}: replays the same ({outcome.events} events: {counts})")
+        return 0
+    print(f"{path.name}: differs at event {outcome.first_difference}")
+    print(f"  recorded: {outcome.recorded}")
+    print(f"  replayed: {outcome.replayed}")
+    return 1
 
 
 async def serve(source: str, weights: Path | None, device: str, listen: str) -> int:

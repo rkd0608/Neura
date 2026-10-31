@@ -9,6 +9,8 @@ dependencies = [
     "neura-proto",
     "numpy>=2.2",
     "grpcio>=1.84,<2",
+    # Incident records (neura_runtime.incident), as Foxglove and Rerun read them.
+    "mcap>=1.2",
 ]
 
 [project.optional-dependencies]

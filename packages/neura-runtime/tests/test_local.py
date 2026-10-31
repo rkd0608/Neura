@@ -30,9 +30,10 @@ import yaml
 
 from neura.v1 import worker_pb2
 from neura_contracts import ReasonCode
-from neura_runtime import remote
+from neura_runtime import remote, replay
 from neura_runtime.authored import AuthoredPolicy
 from neura_runtime.binding import ExecutionBinding, load_binding
+from neura_runtime.incident import IncidentRecorder
 from neura_runtime.invariants import InvariantMonitor, watch_robot
 from neura_runtime.lerobot_server import LeRobotPolicy, unpickle_actions
 from neura_runtime.local import LocalConnection
@@ -249,7 +250,11 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
         POLICY.format(chunk_length=binding.chunk_length, action_dim=binding.action_dim)
     )
     controller = FakeController()
-    runtime = RobotRuntime(binding, controller, FakeSensors(binding))
+    recorder = IncidentRecorder(tmp_path / "incidents", robot_id="arm-1")
+    runtime = RobotRuntime(
+        binding, recorder.controller(controller), recorder.sensors(FakeSensors(binding))
+    )
+    recorder.attach(runtime)
     client = SessionClient(runtime, SessionConfig(robot_id="arm-1", revision_id="rev_local"))
     async with reached(how, AuthoredPolicy.load(str(source)), binding, tmp_path) as served:
         connection = LocalConnection(client, served.policy)
@@ -281,6 +286,18 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
             stop.set()
             await serving
     assert monitor.violations == 0, monitor.summary()
+
+    # The fault wrote its incident record, and a fresh runtime given it decides the same.
+    recorder.close()
+    assert len(recorder.written) == 1
+    record = replay.read(recorder.written[0])
+    assert any(e["kind"] == "fault" for e in record.events)
+    outcome = replay.replay(record)
+    assert outcome.matches, (outcome.first_difference, outcome.recorded, outcome.replayed)
+    # A record that says one command failed where it succeeded no longer replays the same.
+    failed = next(e for e in record.events if e["kind"] == "command_result")
+    failed["ok"] = False
+    assert not replay.replay(record).matches
 
 
 @pytest.mark.skipif(not LEROBOT, reason="needs the models group: uv sync --group models")

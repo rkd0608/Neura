@@ -144,7 +144,7 @@ class LocalConnection(ConnectionLoop):
             self._reject(env, ReasonCode.WORKER_TIMED_OUT)
             return
         except PolicyError as exc:
-            log.warning("the policy failed: %s", exc)
+            log.warning("no chunk for the robot: %s", exc)
             self._reject(env, exc.reason, str(exc))
             return
         chunk = chunk_from(env, int(observation.anchor_index), output, binding, "local")

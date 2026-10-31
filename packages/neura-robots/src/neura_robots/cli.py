@@ -127,6 +127,8 @@ class RobotConfig(_Model):
     # Where the robot spools recorded episodes when its site records them (design §28.2); unset,
     # the robot never records, whatever the site asks.
     capture_dir: Path | None = None
+    # Where incident records are written (a fault, or the operator's `incident`); null for none.
+    incidents_dir: Path | None = Path("incidents")
 
     @model_validator(mode="after")
     def _one_source(self) -> RobotConfig:
@@ -190,6 +192,7 @@ class RobotConfig(_Model):
                 "credentials": credentials,
                 "arm": arm,
                 "capture_dir": rel(config.capture_dir),
+                "incidents_dir": rel(config.incidents_dir),
             }
         )
 
@@ -349,6 +352,7 @@ async def serve(
                 say=_say,
                 on_quit=stop.set,
                 policy=policy,
+                incidents=config.incidents_dir,
             )
             current.append(process)
             _say(f"{config.robot_id}: connected to the arm on {_where(arm)}; serving")
@@ -386,6 +390,9 @@ async def serve(
         await reporter
         if policy is not None:
             await policy.close()
+        for running in current:
+            if isinstance(running, ArmProcess) and running.incidents is not None:
+                running.incidents.close()  # a record a fault is waiting on is written now
         if arm is not None:
             on_exit = config.arm.on_exit
             if arm.close():

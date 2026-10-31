@@ -326,6 +326,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/capture/uploader.py`: Uploads finished episodes from the robot's spool to the site (design §28.2).
 - `neura_runtime/cli.py`: ``neura-robot``: robot-side tools.
 - `neura_runtime/grpc_client.py`: asyncio/gRPC adapter that moves ``SessionClient`` messages to and from a site gateway.
+- `neura_runtime/incident.py`: The incident record: what the robot's runtime saw, decided and did, written as MCAP when a fault latches or on request, and replayable to the same decisions (design §30.2).
 - `neura_runtime/interfaces.py`: Integration points a supported robot integration implements (design §3, §7).
 - `neura_runtime/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
 - `neura_runtime/lerobot_server.py`: A policy behind LeRobot's async inference server (``lerobot.async_inference.policy_server``, LeRobot 0.6): the robot's ``PolicyClient`` for it, unchanged on the server's side (design §30.2).
@@ -333,6 +334,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/openpi.py`: A policy behind an openpi policy server (Physical Intelligence's ``serve_policy.py``): the robot's ``PolicyClient`` for it, unchanged on the server's side (design §30.2).
 - `neura_runtime/policy.py`: What a policy takes and gives, wherever it runs: validated model inputs, the failure a robot is told about, and the client the robot-side process asks for action chunks (design §30.2).
 - `neura_runtime/remote.py`: A policy on another machine: ``neura-robot serve`` runs it behind the policy worker protocol (``neura.v1.PolicyWorker``) and ``RemotePolicy`` reaches it from the robot (design §30.2).
+- `neura_runtime/replay.py`: Replaying an incident record: a fresh runtime, given the record's contracts, starting checkpoint, inputs and the robot's recorded answers, must decide exactly what the robot's runtime decided (design …
 - `neura_runtime/runtime.py`: The robot runtime: the only execution authority in Neura (design §5-§8).
 - `neura_runtime/serving.py`: The serving side of the data-plane protocol, shared by the site gateway and the robot-side transports: observations validated against the contract and decoded into model inputs, and policy outputs …
 - `neura_runtime/session.py`: Session handshake, lease heartbeats and RTT measurement around a ``RobotRuntime``.

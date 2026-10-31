@@ -2309,11 +2309,22 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    `lerobot://` (`neura_robots.policies`). The policy is opened and checked against the
    contracts before the arm is connected: a mismatch refuses to start. `ArmProcess` then runs
    `LocalConnection` instead of the gateway's; episode capture, which the site asks for, is off.
-4. **The incident record**: a rolling buffer of observation metadata, every chunk and the
-   runtime's decision on it with its reason, operator commands and faults, written as MCAP (it
-   opens in Foxglove and Rerun) on a fault or on request. Images off by default; nothing leaves
-   the machine. `neura replay` runs a record back through the runtime and must reach the same
-   decisions, so each incident becomes a regression test.
+4. **The incident record** (done; `neura_runtime.incident`, `neura_runtime.replay`): the recorder
+   sits at the runtime's edges and keeps one ordered list of its inputs (ticks, chunks,
+   rejections, session changes, operator commands, with the robot clock's time), the robot's
+   answers (authority, command results, fault responses, sensor reads; image contents only when
+   asked for) and its decisions (actions commanded, chunks merged or refused and why, epochs,
+   faults, observations requested). The list starts at a checkpoint taken whenever a task epoch
+   advances, which empties the queue, the request sequence and any pending request, so a handful
+   of facts (`RobotRuntime.checkpoint`) is the runtime's whole state there; a record covers about
+   the last 30 s. A fault writes it, one second later so the hold is in it, as MCAP: one JSON
+   topic per kind of event for Foxglove and Rerun, and the replay data and the contracts as
+   attachments, so a file replays on its own. `neura-robot replay FILE` runs it through a fresh
+   runtime that must decide exactly the same, or names the first event that differs.
+   `neura-arm` records by default (`incidents_dir`); the operator's `incident` writes one on
+   request, and a record a fault is waiting on is written when the process ends. A task that runs
+   past 500,000 events without an epoch advancing loses its start and is marked unreplayable.
+   Nothing leaves the machine.
 5. **Robot-side platforms**: Python 3.10 to 3.13 (JetPack and ROS 2 Humble are 3.10), Linux on
    x86-64 and aarch64, installed with pip.
 6. **Extraction**: `git filter-repo` keeps the moved files' history; this repository then depends

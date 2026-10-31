@@ -3,8 +3,8 @@
 gym-aloha (Apache-2.0, the scene files in ``assets`` are its own) is what LeRobot evaluates its
 published ALOHA policies on. It needs dm_control, whose labmaze dependency cannot be installed on
 Python 3.13; dm_control's part is small (stepping, resetting, rendering), so this module does the
-same with ``mujoco`` directly. ``tests/test_aloha.py`` and ``neura-evidence fidelity`` check it
-step for step against gym-aloha itself.
+same with ``mujoco`` directly. ``tests/test_aloha.py`` and ``python -m neura_robots.aloha.fidelity``
+(the Evidence workflow) check it step for step against gym-aloha itself.
 
 What it reproduces, from gym-aloha 0.1.5 and dm_control 1.0:
 

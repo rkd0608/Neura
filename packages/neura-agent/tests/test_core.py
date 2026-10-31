@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import stat
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +18,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from neura.v1 import site_pb2
-from neura_agent import placement
-from neura_agent.artifacts import ArtifactError
 from neura_agent.core import AgentCore, LocalActionError
 from neura_agent.gateway import build_gateway_config
 from neura_agent.identity import AUDIENCE, Identity, IdentityStore, atomic_write, connection_token
@@ -35,7 +32,6 @@ from neura_contracts import (
     signing,
 )
 from neura_contracts.site_protocol import MANIFEST_API_VERSION, contact_proof_payload
-from neura_server.sandbox import ProcessLauncher
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 SITE = "sit_01J0000000000000000000000S"
@@ -1133,33 +1129,3 @@ async def test_robots_record_no_more_than_the_site_allows(
         assert summary.episodes == 0
     finally:
         await site.core.capture.stop()
-
-
-async def test_a_profiler_that_dies_says_how_and_keeps_its_output_at_the_site(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    # A worker that aborts before it can report: what it printed may quote the customer's code,
-    # so it goes to the site's log and the reason only says how it ended.
-    dies = ProcessLauncher(
-        [sys.executable, "-c", "import os, sys; print('secret line', file=sys.stderr); os.abort()"]
-    )
-    documents = {
-        name: tmp_path / f"{name}.json"
-        for name in ("model_artifact", "robot_profile", "execution_profile")
-    }
-    with pytest.raises(ArtifactError) as raised:
-        await placement.measure(
-            dies,
-            documents=documents,
-            device="cpu",
-            checkpoint=None,
-            out=tmp_path / "profile.json",
-            max_batch=1,
-            iterations=1,
-            timeout_s=30,
-        )
-    assert raised.value.code is ReasonCode.WORKER_LOAD_FAILED
-    assert "was killed by SIGABRT" in str(raised.value)
-    assert "secret line" not in str(raised.value)
-    assert "profiler: secret line" in caplog.text
-    assert placement.exit_status(3) == "exited with status 3"

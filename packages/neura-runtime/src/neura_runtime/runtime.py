@@ -46,6 +46,21 @@ class RuntimeState(StrEnum):
 
 ACTIVE_STATES = frozenset({RuntimeState.ARMED, RuntimeState.RUNNING, RuntimeState.WAITING})
 
+# Rejections that say the session itself is over, on whichever channel they arrive: its lease
+# expired or another generation holds it, the gateway does not know it (it restarted, or closed
+# it), the robot's revision is no longer served there, or its credential is not valid there. The
+# robot stops using the session and opens a new one. Any other rejection is about one request.
+SESSION_ENDING = frozenset(
+    {
+        ReasonCode.LEASE_EXPIRED,
+        ReasonCode.LEASE_GENERATION_STALE,
+        ReasonCode.SESSION_UNKNOWN,
+        ReasonCode.DEPLOYMENT_NOT_ACTIVE,
+        ReasonCode.AUTH_DEVICE_UNKNOWN,
+        ReasonCode.AUTH_DEVICE_REVOKED,
+    }
+)
+
 
 class TransitionError(RuntimeError):
     """An operation was requested in a state that does not allow it."""
@@ -525,7 +540,7 @@ class RobotRuntime:
 
     def on_rejected(self, message: dataplane_pb2.RequestRejected, now_us: int) -> None:
         env = message.envelope
-        reason = _reason(message.reason.code)
+        reason = reason_from(message.reason.code)
         if env.session_id != self._session_id:
             # A late answer addressed to an earlier session (each lease has its own session id):
             # it says nothing about this one.
@@ -538,7 +553,7 @@ class RobotRuntime:
         ):
             self._pending = None
         self._note(reason)
-        if reason in (ReasonCode.LEASE_GENERATION_STALE, ReasonCode.LEASE_EXPIRED):
+        if reason in SESSION_ENDING:
             self.detach_session(reason)
 
     # --- internals ----------------------------------------------------------------------------
@@ -638,7 +653,8 @@ class RobotRuntime:
         return self.binding.merge_mode
 
 
-def _reason(code: str) -> ReasonCode:
+def reason_from(code: str) -> ReasonCode:
+    """A reason code the gateway sent; one this release does not know is a malformed message."""
     try:
         reason = ReasonCode(code)
     except ValueError:

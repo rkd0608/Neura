@@ -107,9 +107,13 @@ signed upgrades, and the local site API.
   `packages/neura-server/src/neura_server/scheduler.py`,
   `packages/neura-server/src/neura_server/admission.py`,
   `packages/neura-server/src/neura_server/worker.py`,
-  `packages/neura-server/src/neura_server/sandbox.py`
+  `packages/neura-server/src/neura_server/backends.py` (supervising workers),
+  `packages/neura-server/src/neura_server/sandbox.py`,
+  `packages/neura-server/src/neura_server/robot_service.py` (the gRPC service robots call)
 - Tests: `packages/neura-server/tests/test_gateway.py`, `packages/neura-server/tests/test_scheduler.py`,
-  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py`,
+  `packages/neura-server/tests/test_sandbox.py` (each run may write only a directory of its own),
+  `tests/integration/test_workers.py`, `tests/integration/test_worker_sandbox.py` (needs Docker
+  and a worker image: a worker sees only its own socket),
   `tests/integration/test_shutdown.py` (stopped with SIGTERM, it stops its workers and leaves
   nothing behind)
 - Model adapters: `packages/neura-adapters/src/neura_adapters/` (LeRobot, Python classes, LoRA
@@ -123,6 +127,8 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-runtime/src/neura_runtime/action_queue.py`,
   `packages/neura-runtime/src/neura_runtime/session.py`
 - Tests: `packages/neura-runtime/tests/test_runtime.py`, `packages/neura-runtime/tests/test_action_queue.py`,
+  `packages/neura-runtime/tests/test_session.py` (which rejections end a session),
+  `packages/neura-runtime/tests/test_tensors.py`,
   `packages/neura-sim/tests/test_fault_suite.py` (every fault in §7, with an independent
   invariant monitor: `packages/neura-sim/src/neura_sim/invariants.py`)
 - Docs: `site/docs/fault-suite.md`, `site/docs/architecture.md`
@@ -158,7 +164,11 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-server/src/neura_server/capture/` (at the site), `packages/neura-learn/src/neura_learn/`,
   `packages/neura-server/src/neura_server/shadow.py`, `packages/neura-agent/src/neura_agent/jobs.py`
 - Tests: `tests/integration/test_capture.py`, `packages/neura-learn/tests/test_learn.py`,
-  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`
+  `packages/neura-control/tests/test_improvement.py`, `packages/neura-server/tests/test_shadow.py`,
+  `packages/neura-agent/tests/test_jobs.py` (a job writes only its own output, what it prints
+  stays at the site, and it never outlives the agent),
+  `packages/neura-learn/tests/test_site_jobs.py` (evaluation and fine-tuning at the site, end to
+  end; needs the models group)
 - Docs: `site/docs/improvement-loop.md`; the console: `console/src/pages/Improve.tsx`
 
 ## Benchmarks: sharing a GPU (§9.5, §10)

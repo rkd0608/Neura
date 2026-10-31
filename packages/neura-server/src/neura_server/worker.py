@@ -3,7 +3,9 @@
 ``neura-worker serve`` loads the artifact's adapter, verifies its checkpoint, warms it up and then
 serves `neura.v1.PolicyWorker` on a Unix domain socket. Its first line on stdout says whether it
 is ready (``{"ready": {...}}``) or why it could not start (``{"error": {"code", "message"}}``);
-logs go to stderr. It exits when its stdin closes, so a worker never outlives its gateway.
+logs go to stderr. It watches its stdin from the moment it starts: when the gateway closes it, or
+exits, a worker still loading exits at once and one serving stops its server, so a worker never
+outlives its gateway.
 
 ``neura-worker profile`` loads and warms up the same way, measures latency per batch size and
 peak memory on the device, and prints the profile as JSON. The site agent runs it at prepare, so
@@ -19,9 +21,11 @@ import json
 import logging
 import os
 import resource
+import stat
 import sys
+import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -225,16 +229,48 @@ def _release_cached_memory() -> None:
         torch.cuda.empty_cache()
 
 
-async def _stdin_closed() -> None:
-    """Returns when the parent closes our stdin (or exits)."""
-    loop = asyncio.get_running_loop()
-    reader = asyncio.StreamReader()
-    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
-    while await reader.read(4096):
-        pass
+class _Gateway:
+    """The gateway that started this worker, watched on stdin from the moment the worker starts:
+    it closes stdin, or exits, to stop the worker. While the worker loads (which can take
+    minutes), it then exits at once: there is nothing of its to finish. Once it serves, it stops
+    its server first. A worker whose stdin is not a pipe was not started by a gateway (a person
+    or a test runs it): it only stops serving."""
+
+    def __init__(self) -> None:
+        try:
+            mode = os.fstat(0).st_mode
+        except OSError:
+            mode = 0
+        self._piped = stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode)
+        self._lock = threading.Lock()
+        self._gone = False
+        self._stop: Callable[[], None] | None = None
+        threading.Thread(target=self._watch, name="gateway", daemon=True).start()
+
+    def _watch(self) -> None:
+        with contextlib.suppress(OSError):
+            while os.read(0, 4096):
+                pass
+        with self._lock:
+            self._gone = True
+            stop = self._stop
+        if stop is not None:
+            stop()
+        elif self._piped:
+            os._exit(0)  # still loading
+
+    def on_gone(self, stop: Callable[[], None]) -> None:
+        """Call ``stop`` (from the watching thread) when the gateway goes; at once if it has."""
+        with self._lock:
+            self._stop = stop
+            gone = self._gone
+        if gone:
+            stop()
 
 
-async def serve(adapter: Adapter, binding: ExecutionBinding, socket: Path) -> None:
+async def serve(
+    adapter: Adapter, binding: ExecutionBinding, socket: Path, gateway: _Gateway
+) -> None:
     server = grpc.aio.server(
         options=[
             ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
@@ -248,9 +284,17 @@ async def serve(adapter: Adapter, binding: ExecutionBinding, socket: Path) -> No
     server.add_insecure_port(f"unix://{socket}")
     await server.start()
     os.chmod(socket, 0o600)
+    loop = asyncio.get_running_loop()
+    gone = asyncio.Event()
+
+    def stop() -> None:
+        with contextlib.suppress(RuntimeError):  # the loop has closed: serving is over anyway
+            loop.call_soon_threadsafe(gone.set)
+
+    gateway.on_gone(stop)
     _announce({"ready": _description_json(servicer)})
     try:
-        await _stdin_closed()
+        await gone.wait()
         log.info("gateway went away; stopping after %d batches", servicer.batches)
     finally:
         await server.stop(grace=1.0)
@@ -309,6 +353,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=args.log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    gateway = _Gateway() if args.mode == "serve" else None  # profiling has no gateway
     try:
         adapter, binding = load(args)
     except LoadError as exc:
@@ -328,8 +373,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
         _announce({"profile": result})
         return 0
+    assert gateway is not None
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(serve(adapter, binding, args.socket))
+        asyncio.run(serve(adapter, binding, args.socket, gateway))
     return 0
 
 

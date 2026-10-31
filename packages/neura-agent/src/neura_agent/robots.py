@@ -10,7 +10,8 @@
 - **Run.** Once a found robot is in the site's signed manifest, the agent gives it credentials
   from the site CA (its key never leaves this server) and runs its runtime process: a simulated
   arm, ``neura-arm`` for an SO-101, or a customer's own driver command. A process that exits is
-  restarted with backoff; one that is no longer wanted is stopped.
+  restarted with backoff, as gateways and workers are (``neura_server.supervision``); one that is
+  no longer wanted is stopped.
 
 The robots file (YAML)::
 
@@ -37,7 +38,8 @@ import json
 import logging
 import os
 import sys
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,7 @@ from typing import Any
 import yaml
 
 from neura.v1 import site_pb2
+from neura_server.supervision import RestartBackoff
 
 log = logging.getLogger("neura.agent.robots")
 
@@ -53,7 +56,6 @@ SO101_PROFILE = PROFILES / "so101-follower.robot.yaml"
 # USB-to-serial bridges the SO-101's servo bus boards use (QinHeng CH340/CH343).
 SO101_SERIAL_MARKERS = ("1a86",)
 SERIAL_BY_ID = Path("/dev/serial/by-id")
-RESTART_BACKOFF_S = (1.0, 2.0, 5.0, 10.0, 30.0)
 
 
 class RobotsFileError(ValueError):
@@ -284,11 +286,13 @@ def launch_for(
 class RobotSupervisor:
     """Runs the robots it is given and keeps them running; stops the ones taken away."""
 
-    def __init__(self, log_dir: Path) -> None:
+    def __init__(self, log_dir: Path, *, clock: Callable[[], float] = time.monotonic) -> None:
         self.log_dir = log_dir
+        self._clock = clock
         self._wanted: dict[str, Launch] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
-        self._failures: dict[str, int] = {}
+        self._failures: dict[str, int] = {}  # restarts, as status shows them
+        self._backoffs: dict[str, RestartBackoff] = {}
         self._restart_at: dict[str, float] = {}
 
     @property
@@ -316,22 +320,21 @@ class RobotSupervisor:
 
     async def tick(self) -> None:
         """Start what should run and is not, after its backoff."""
-        loop = asyncio.get_running_loop()
         for name, launch in self._wanted.items():
             process = self._processes.get(name)
             if process is not None and process.returncode is None:
                 continue
+            backoff = self._backoffs.setdefault(name, RestartBackoff(1.0, 30.0, self._clock))
             if process is not None:  # it exited: count it and back off
-                failures = self._failures.get(name, 0) + 1
-                self._failures[name] = failures
-                delay = RESTART_BACKOFF_S[min(failures, len(RESTART_BACKOFF_S)) - 1]
-                self._restart_at[name] = loop.time() + delay
+                self._failures[name] = self._failures.get(name, 0) + 1
+                delay = backoff.exited()
+                self._restart_at[name] = self._clock() + delay
                 del self._processes[name]
                 log.warning(
                     "robot %s exited (%s); restarting in %ss", name, process.returncode, delay
                 )
                 continue
-            if loop.time() < self._restart_at.get(name, 0.0):
+            if self._clock() < self._restart_at.get(name, 0.0):
                 continue
             self.log_dir.mkdir(parents=True, exist_ok=True)
             output = (self.log_dir / f"{name}.log").open("ab")
@@ -343,9 +346,10 @@ class RobotSupervisor:
                     stderr=output,
                     env={**os.environ, **launch.env},
                 )
+                backoff.started()
             except OSError as error:
                 log.error("cannot start robot %s: %s", name, error)
-                self._restart_at[name] = loop.time() + RESTART_BACKOFF_S[-1]
+                self._restart_at[name] = self._clock() + backoff.max_s
             finally:
                 output.close()
 

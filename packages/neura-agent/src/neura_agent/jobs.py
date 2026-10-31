@@ -7,7 +7,8 @@ The control plane asks; the agent runs the job here, on the site's own data and 
 - recorded episodes are snapshotted into a dataset (so a job names exactly what it used), and
   hard-linked into the job's directory with the site's labels;
 - the job runs ``neura-learn`` in the worker sandbox (no network, inputs read-only, one output
-  directory), one job at a time, on a device no worker serves on: a job never slows a robot;
+  directory), one job at a time, on a device no worker serves on: a job never slows a robot; its
+  process ends with the job however it ends, and jobs stop when the agent does;
 - an evaluation's result is its report; a training job's result is a new artifact, signed with
   the site's training key, with its lineage, whose weights go to the site's artifact store and
   never leave it;
@@ -41,7 +42,7 @@ from neura_agent.identity import atomic_write
 from neura_contracts import ModelArtifact, ReasonCode, parse_document, signing
 from neura_runtime.binding import ExecutionBinding
 from neura_server.capture.store import EpisodeFilter, StoreError
-from neura_server.sandbox import Invocation, launcher_for
+from neura_server.sandbox import Invocation, failed_run, launcher_for, private_directory
 from neura_server.shadow import ShadowSuite, comparable, shadow_verdict
 
 if TYPE_CHECKING:
@@ -49,6 +50,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("neura.agent.jobs")
 PROGRESS_INTERVAL_S = 2.0
+# What a job writes: its --out, which it creates (LeRobot refuses one that exists), inside the
+# directory made for its run, the only one it may write.
+OUTPUT = "result"
 TRAINING_KEY = "training-key.pem"
 
 
@@ -109,6 +113,7 @@ class SiteJobs:
         self._turn = asyncio.Lock()
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
+        self._cancelled: dict[str, str] = {}  # operation -> why it was cancelled
         self.counters: dict[str, int] = {}
         # Candidates shadowing a served revision now: revision -> the gateway's shadow entry.
         self.shadows: dict[str, dict[str, Any]] = {}
@@ -145,22 +150,22 @@ class SiteJobs:
             "counters": dict(self.counters),
         }
 
-    async def cancel(self, operation_id: str) -> bool:
+    async def cancel(
+        self, operation_id: str, why: str = "cancelled from the control plane"
+    ) -> bool:
         task = self._tasks.get(operation_id)
         if task is None:
             return False
-        process = self._processes.get(operation_id)
-        if process is not None and process.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                process.kill()
-        task.cancel()
+        self._cancelled[operation_id] = why
+        task.cancel()  # its process is killed on the way out
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await task
         return True
 
     async def stop(self) -> None:
+        """Cancel every job, queued or running, and wait for their processes to end."""
         for operation_id in list(self._tasks):
-            await self.cancel(operation_id)
+            await self.cancel(operation_id, "the agent stopped")
 
     def _start(
         self, command_id: str, operation_id: str, work: Callable[[], Awaitable[None]]
@@ -179,12 +184,8 @@ class SiteJobs:
                     command_id, operation_id, "Failed", reason=exc.code, message=str(exc)
                 )
             except asyncio.CancelledError:
-                self.core._report(
-                    command_id,
-                    operation_id,
-                    "Cancelled",
-                    message="cancelled from the control plane",
-                )
+                why = self._cancelled.get(operation_id, "cancelled")
+                self.core._report(command_id, operation_id, "Cancelled", message=why)
                 raise
             except Exception as exc:
                 log.exception("job %s failed", operation_id)
@@ -199,6 +200,7 @@ class SiteJobs:
             finally:
                 self._tasks.pop(operation_id, None)
                 self._processes.pop(operation_id, None)
+                self._cancelled.pop(operation_id, None)
 
         self._tasks[operation_id] = asyncio.create_task(run(), name=f"job-{operation_id}")
 
@@ -297,7 +299,7 @@ class SiteJobs:
         artifact, signature = await asyncio.to_thread(
             self._register,
             base,
-            work / "out" / "checkpoint",
+            work / "out" / OUTPUT / "checkpoint",
             name=message.artifact_name or base.binding.artifact.metadata.name,
             version=message.artifact_version or f"{base.binding.artifact.metadata.version}-ft",
             dataset=dataset,
@@ -546,12 +548,15 @@ class SiteJobs:
     ) -> dict[str, Any]:
         spec_path = work / "spec.json"
         spec_path.write_text(json.dumps(spec), encoding="utf-8")
-        out = work / "out"
+        # Only its output is writable: the spec and the episodes (hard links into the site's
+        # store) are inputs, read-only.
+        out = private_directory(work / "out")
         invocation = Invocation(
             subcommand=subcommand,
             device=spec["device"],
             inputs=[("--spec", spec_path), *inputs],
-            outputs=[("--out", out)],
+            output_dir=out,
+            outputs=[("--out", OUTPUT)],
         )
         from neura_agent.gateway import sandbox_config
 
@@ -607,21 +612,25 @@ class SiteJobs:
                         )
                 code = await process.wait()
         except TimeoutError as exc:
-            with contextlib.suppress(ProcessLookupError):
-                process.kill()
-            await process.wait()
             raise JobError(
                 ReasonCode.AGENT_JOB_TIMED_OUT,
                 f"{subcommand} ran longer than {self.settings.job_timeout_s} s",
             ) from exc
         finally:
+            if process.returncode is None:  # timed out or cancelled: it ends with the job
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+                await process.wait()
             await launcher.remove(f"job-{work.name}")
             with contextlib.suppress(asyncio.CancelledError):
                 await reader
-        if code != 0:
-            detail = failure or "\n".join(stderr_tail[-5:]) or f"exit status {code}"
-            raise JobError(ReasonCode.AGENT_JOB_FAILED, f"{subcommand} failed: {detail}"[:2000])
-        result: dict[str, Any] = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        if code != 0:  # its own account of why, and its stderr, stay at the site
+            output = [*([f"failed: {failure}"] if failure else []), *stderr_tail]
+            raise JobError(
+                ReasonCode.AGENT_JOB_FAILED, failed_run(f"the {subcommand} job", code, output, log)
+            )
+        report = out / OUTPUT / "report.json"
+        result: dict[str, Any] = json.loads(report.read_text(encoding="utf-8"))
         return result
 
     def training_key(self) -> Ed25519PrivateKey:

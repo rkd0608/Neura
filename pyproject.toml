@@ -150,3 +150,9 @@ module = [
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# ROS 2's Python (rclpy and its message packages) exists only in a ROS environment, where the relay
+# node runs.
+[[tool.mypy.overrides]]
+module = ["rclpy", "rclpy.*", "sensor_msgs", "sensor_msgs.*", "std_msgs", "std_msgs.*"]
+ignore_missing_imports = true

@@ -2207,7 +2207,41 @@ Four pages in the sidebar, over the same objects as the CLI:
 (overview, deployments, robots, sites and servers, sessions, faults, models, capacity, activity)
 are one link away and in the command palette (⌘K), not in the sidebar.
 
-### 29.8 Tests, and what is not built
+### 29.8 ROS 2 robots
+
+A robot driven through ROS 2 is served like any arm: `neura-arm` with `arm: type: ros2`
+(`examples/robots/ros2-arm.yaml`), the same runtime, session and gateway. Two processes, because
+the robot's ROS Python (Humble's 3.10, Jazzy's 3.12) is not Neura's 3.13:
+
+- the relay node (`neura_robots/ros2/relay.py`) runs in the robot's ROS environment, with rclpy and
+  the standard library only. It subscribes to the joint states and camera images, publishes
+  position commands as `Float64MultiArray` for ros2_control's forward position controller, and
+  serves them over a local Unix socket: a 4-byte length, a JSON header, then raw bytes;
+- `Ros2Arm` (`neura_robots/ros2/arm.py`) is the arm `ArmProcess` drives. It maps ROS joints to the
+  robot profile's (`profile = ros * scale + offset`) and back, and delivers images in the profile's
+  declared color order.
+
+The runtime stays the execution authority. The relay stamps each reading on arrival with the
+robot computer's monotonic clock, the one the runtime judges freshness by. The arm has authority
+only while the relay is connected and its joint states are younger than `state_timeout_ms`
+(100 ms). Older, and the runtime faults (`ACTUATOR_LOCK_LOST`) and sends nothing: a hold sent on
+stale states would hold a position the robot may have left. Holding commands the positions last
+read, which a position controller keeps; commands are published reliable with depth 1, so a lost
+command is retransmitted and one that waited behind a newer one is dropped. A fault stays latched
+when the states come back: driving again takes the operator's `reset` and `arm`.
+
+`test_ros2.py` runs the simulated arm in a ROS 2 Jazzy container and its cameras with the relay in
+another, with `neura-arm`'s process on the host. Nothing moves until it is armed. The policy moves
+the arm. With a fifth of the packets dropped each way on the arm's link, it is still driven: the
+joint states arrive at about 80 a second instead of 100, with no gap longer than about 60 ms. Cut
+the link and the runtime faults within the timeout and sends nothing more; restore it, and it
+drives again only after `reset` and `arm`. The invariant monitor sees no violation. The drops
+are nftables rules in the arm's container (`numgen random`), which need no netem module.
+
+Not covered: DDS security (SROS 2), action interfaces (`FollowJointTrajectory`), and robots whose
+controllers take velocity or effort commands.
+
+### 29.9 Tests, and what is not built
 
 Tests:
 - The quickstart runs end to end against a live control plane and a real agent started by the CLI
@@ -2222,9 +2256,9 @@ Tests:
 - The console's four pages, end to end in a browser: a production site with a simulated arm, a
   version pushed with the CLI, deployed from Policies, approved at the site, and live.
 
-Not built yet:
-- stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED);
-- a ROS 2 bridge.
+- A ROS 2 arm through the relay, under packet loss and a cut link (§29.8).
+
+Not built yet: stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED).
 
 ---
 

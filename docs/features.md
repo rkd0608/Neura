@@ -145,6 +145,16 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-robots/tests/test_qualify.py`; on the emulated arm: `make qualify-emulated`
 - Docs: `site/docs/hardware-qualification.md`
 
+### ROS 2 robots through the relay node (§29.8)
+
+- Code: `packages/neura-robots/src/neura_robots/ros2/` (`relay.py` runs in the robot's ROS
+  environment; `arm.py` is the arm `neura-arm` drives), `arm: type: ros2` in
+  `packages/neura-robots/src/neura_robots/cli.py`
+- Tests: `packages/neura-robots/tests/test_ros2.py::test_a_ros2_arm_is_driven_safely_over_a_lossy_link`
+  (ROS 2 Jazzy in Docker, packet loss and a cut link): build `packages/neura-robots/tests/ros2/`
+  as `neura-ros2-test:dev` and set `NEURA_TEST_ROS2_IMAGE`
+- Docs: `site/docs/ros2.md`; example: `examples/robots/ros2-arm.yaml`
+
 ### The simulated ALOHA, the site kit and closed-loop evidence (§10.1, §20.11)
 
 - Code: `packages/neura-robots/src/neura_robots/aloha/`, `packages/neura-robots/src/neura_robots/evidence/`,

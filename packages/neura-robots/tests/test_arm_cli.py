@@ -48,7 +48,7 @@ def test_relative_paths_are_relative_to_the_file(tmp_path: Path) -> None:
     config = RobotConfig.load(path)
     assert config.revision is not None
     assert config.revision.artifact == tmp_path / "contracts" / "a.yaml"
-    assert config.arm.calibration_dir == tmp_path / "calibration"
+    assert config.so101().calibration_dir == tmp_path / "calibration"
 
 
 def test_check_on_the_emulated_arm(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -235,3 +235,7 @@ jobs:
         run: |
           docker build -f deploy/docker/Dockerfile --target neura-worker -t neura-worker:dev .
           NEURA_TEST_WORKER_IMAGE=neura-worker:dev uv run pytest tests/integration/test_worker_sandbox.py
+      - name: A ROS 2 robot through the relay, under packet loss
+        run: |
+          docker build -t neura-ros2-test:dev packages/neura-robots/tests/ros2
+          NEURA_TEST_ROS2_IMAGE=neura-ros2-test:dev uv run pytest packages/neura-robots/tests/test_ros2.py

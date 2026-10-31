@@ -1,0 +1,44 @@
+# neura-arm configuration for a robot driven through ROS 2 (design §29.8): an SO-101 under
+# ros2_control here, served with the SO-101 contracts.
+#
+# On the robot computer, in its ROS environment (Humble or newer), start the relay node:
+#
+#   python3 relay.py --socket /run/neura/ros2.sock \
+#       --joint-states /joint_states --command-topic /forward_position_controller/commands \
+#       --joints shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper \
+#       --camera front=/camera/front/image_raw --camera wrist=/camera/wrist/image_raw
+#
+# (relay.py is packages/neura-robots/src/neura_robots/ros2/relay.py: copy it there; it needs only
+# rclpy.) Then, as for any arm:
+#
+#   neura-arm check ros2-arm.yaml --robot-profile ../contracts/so101.robot.yaml
+#   neura-arm run ros2-arm.yaml
+#
+# Relative paths are relative to this file.
+
+robot_id: so101-ros
+gateway: gateway.site.internal:50051
+
+credentials:
+  cert_dir: /etc/neura/robot
+  # token: dev-token-so101-ros   # instead of cert_dir, development gateways only
+
+arm:
+  type: ros2
+  socket: /run/neura/ros2.sock   # the relay's --socket
+  # Every command the robot profile names, in the relay's --joints order: the ROS joint, the
+  # profile's name, and profile = ros * scale + offset (radians to degrees: 57.29577951308232).
+  joints:
+    - {ros: shoulder_pan, name: shoulder_pan.pos, scale: 57.29577951308232}
+    - {ros: shoulder_lift, name: shoulder_lift.pos, scale: 57.29577951308232}
+    - {ros: elbow_flex, name: elbow_flex.pos, scale: 57.29577951308232}
+    - {ros: wrist_flex, name: wrist_flex.pos, scale: 57.29577951308232}
+    - {ros: wrist_roll, name: wrist_roll.pos, scale: 57.29577951308232}
+    - {ros: gripper, name: gripper.pos, scale: 100.0}   # the controller's 0 to 1, the profile's 0 to 100
+  # Joint states older than this and the robot is not driven: commands are refused and the
+  # runtime holds. Keep it a few joint-state periods.
+  state_timeout_ms: 100
+
+cameras:  # by camera role in the robot profile; the relay's --camera topics
+  front: {type: ros2}
+  wrist: {type: ros2}

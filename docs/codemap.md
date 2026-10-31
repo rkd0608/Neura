@@ -300,9 +300,12 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/qualify/protocol.py`: The qualification protocol's defaults (design §7.1): what ``neura-qualify`` runs with unless told otherwise, and the limits ``promote`` holds a run to.
 - `neura_robots/qualify/reference.py`: The policy as LeRobot runs it on its own: the reference for parity (design §10).
 - `neura_robots/qualify/site.py`: The site a robot connects to during qualification and the evidence runs: the site's gateway process, with its real policy workers, behind the TCP fault proxy, on this machine (design §7.1).
+- `neura_robots/ros2/__init__.py`: ROS 2 robots: a relay node on the robot's ROS side, and the arm Neura's robot-side process drives through it (design §29.8).
+- `neura_robots/ros2/arm.py`: A ROS 2 robot as an arm Neura's robot-side process drives (``arm.Arm``), through the relay node running in the robot's ROS environment (``ros2.relay``).
+- `neura_robots/ros2/relay.py`: The ROS 2 side of the bridge: a node that relays a robot's joint states and camera images to Neura's robot-side process, and its position commands back, over a local Unix socket.
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
-Tests, under `packages/neura-robots/tests/`: `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_evidence.py`, `test_process.py`, `test_qualify.py`, `test_so101.py`
+Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_evidence.py`, `test_process.py`, `test_qualify.py`, `test_ros2.py`, `test_so101.py`
 
 ## packages/neura-runtime
 

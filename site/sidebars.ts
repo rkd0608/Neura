@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
         "quickstart",
         "fault-suite",
         "hardware-qualification",
+        "ros2",
         "troubleshooting",
       ],
     },

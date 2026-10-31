@@ -36,7 +36,7 @@ dev = [
     "neura-proto",
     "neura-control",
     "neura-agent",
-    "neura-runtime",
+    "neura-runtime[openpi]",
     "neura-server",
     "neura-sim",
     "neura-sdk",
@@ -160,4 +160,10 @@ follow_imports = "skip"
 # node runs.
 [[tool.mypy.overrides]]
 module = ["rclpy", "rclpy.*", "sensor_msgs", "sensor_msgs.*", "std_msgs", "std_msgs.*"]
+ignore_missing_imports = true
+
+# msgpack ships no type information (the openpi transport's wire); openpi's client and server
+# exist only in the openpi test image (packages/neura-runtime/tests/openpi).
+[[tool.mypy.overrides]]
+module = ["msgpack", "msgpack.*", "openpi_client", "openpi_client.*", "websocket_policy_server"]
 ignore_missing_imports = true

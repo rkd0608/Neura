@@ -11,6 +11,10 @@ dependencies = [
     "grpcio>=1.84,<2",
 ]
 
+[project.optional-dependencies]
+# Policies behind an openpi policy server (neura_runtime.openpi): its websocket and msgpack wire.
+openpi = ["msgpack>=1.1", "websockets>=13"]
+
 [project.scripts]
 neura-robot = "neura_runtime.cli:main"
 

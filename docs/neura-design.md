@@ -2295,7 +2295,9 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
    against its contracts first. Over a network the server requires a token and refuses to listen
    beyond loopback without one; traffic is not encrypted, so TLS in front of it is the operator's
    for now. Then adapters for servers teams already run, each a thin translator held to the same
-   suite: openpi's websocket server, then LeRobot's async gRPC server (its replies are pickled:
+   suite: openpi's websocket server (done: `OpenPIKeys` maps Neura's inputs to the policy's names;
+   openpi's wire has no request ids, so a request given up on drops the connection rather than
+   let its answer be taken for the next one's), then LeRobot's async gRPC server (its replies are pickled:
    unpickled only as the types it sends, and only from servers the robot's owner trusts). Hosted
    APIs when their protocols are public.
 3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile

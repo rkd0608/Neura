@@ -1,10 +1,19 @@
-"""The runtime without a gateway: an ``@neura.policy`` class served through ``LocalConnection``,
-in this process and over the network (``neura-robot serve``)."""
+"""The runtime without a gateway, through ``LocalConnection``: an ``@neura.policy`` class in this
+process and over the network (``neura-robot serve``), and a policy behind openpi's own server.
+
+The openpi case needs Docker and its image: build it with
+``docker build -t neura-openpi-test:dev packages/neura-runtime/tests/openpi`` and set
+``NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev``; it is skipped otherwise.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import subprocess
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,12 +27,22 @@ from neura_runtime.authored import AuthoredPolicy
 from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.invariants import InvariantMonitor, watch_robot
 from neura_runtime.local import LocalConnection
-from neura_runtime.policy import InProcessPolicy, PolicyClient
+from neura_runtime.openpi import OpenPIKeys, OpenPIPolicy, StateKey
+from neura_runtime.policy import InProcessPolicy, PolicyClient, PolicyError
 from neura_runtime.runtime import RobotRuntime, RuntimeState
 from neura_runtime.session import SessionClient, SessionConfig
 from neura_runtime.testing import FakeController, FakeSensors
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
+OPENPI_IMAGE = os.environ.get("NEURA_TEST_OPENPI_IMAGE", "")
+
+
+def openpi_image_present() -> bool:
+    if not OPENPI_IMAGE or shutil.which("docker") is None:
+        return False
+    found = subprocess.run(["docker", "image", "inspect", OPENPI_IMAGE], capture_output=True)
+    return found.returncode == 0  # no Docker daemon, or no image: the case is skipped
+
 
 # Holds still until a file named "fail" appears beside it, then fails every call.
 POLICY = """
@@ -54,11 +73,54 @@ async def until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
 
 
 @asynccontextmanager
+async def openpi_server(binding: ExecutionBinding, work: Path) -> AsyncIterator[OpenPIPolicy]:
+    """openpi's own server in a container, serving tests/openpi/serve_still.py."""
+    layout = binding.state_layouts[0]
+    name = f"neura-openpi-{uuid.uuid4().hex[:8]}"
+    sizes = [binding.chunk_length, binding.action_dim, len(layout.feature_names)]
+    subprocess.run(
+        ["docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::8000",
+         "-v", f"{work}:/work:ro", "-v", f"{Path(__file__).parent / 'openpi'}:/opt/test:ro",
+         OPENPI_IMAGE, "python", "/opt/test/serve_still.py", *map(str, sizes)],
+        check=True, capture_output=True, timeout=60,
+    )  # fmt: skip
+    try:
+        port = (
+            subprocess.run(
+                ["docker", "port", name, "8000"], check=True, capture_output=True, text=True
+            )
+            .stdout.split(":")[-1]
+            .strip()
+        )
+        keys = OpenPIKeys(
+            state=[StateKey("observation/state", layout.input_name)],
+            images={"observation/image": "front", "observation/wrist_image": "wrist"},
+        )
+        client = OpenPIPolicy(f"ws://127.0.0.1:{port}", keys)
+        deadline = time.monotonic() + 30
+        while True:  # the server takes a moment to listen
+            try:
+                assert (await client.connect()) == {"policy": "still"}
+                break
+            except PolicyError:
+                assert time.monotonic() < deadline, "openpi's server did not start"
+                await asyncio.sleep(0.2)
+        yield client
+        await client.close()
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)
+
+
+@asynccontextmanager
 async def reached(
-    how: str, policy: AuthoredPolicy, binding: ExecutionBinding
+    how: str, policy: AuthoredPolicy, binding: ExecutionBinding, work: Path
 ) -> AsyncIterator[PolicyClient]:
     if how == "in-process":
         yield InProcessPolicy(policy)
+        return
+    if how == "openpi":
+        async with openpi_server(binding, work) as openpi:
+            yield openpi
         return
     description = worker_pb2.WorkerDescription(chunk_length=policy.declaration.chunk_length)
     server, port = await remote.serve(
@@ -73,7 +135,20 @@ async def reached(
         await server.stop(grace=None)
 
 
-@pytest.mark.parametrize("how", ["in-process", "served"])
+@pytest.mark.parametrize(
+    "how",
+    [
+        "in-process",
+        "served",
+        pytest.param(
+            "openpi",
+            marks=pytest.mark.skipif(
+                not openpi_image_present(),
+                reason="needs Docker and NEURA_TEST_OPENPI_IMAGE (tests/openpi/Dockerfile)",
+            ),
+        ),
+    ],
+)
 async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     how: str, tmp_path: Path
 ) -> None:
@@ -89,7 +164,7 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     controller = FakeController()
     runtime = RobotRuntime(binding, controller, FakeSensors(binding))
     client = SessionClient(runtime, SessionConfig(robot_id="arm-1", revision_id="rev_local"))
-    async with reached(how, AuthoredPolicy.load(str(source)), binding) as policy:
+    async with reached(how, AuthoredPolicy.load(str(source)), binding, tmp_path) as policy:
         connection = LocalConnection(client, policy)
         monitor = InvariantMonitor(clock=now_us, gateway_observed=False)
         watch_robot(

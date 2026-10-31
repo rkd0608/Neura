@@ -58,10 +58,10 @@ def docker(*args: str, stdin: str | None = None) -> str:
 def image_present() -> bool:
     if not IMAGE or shutil.which("docker") is None:
         return False
-    try:
-        return bool(docker("image", "inspect", "--format", "{{.Id}}", IMAGE))
-    except (subprocess.SubprocessError, OSError):
-        return False
+    done = subprocess.run(
+        ["docker", "image", "inspect", IMAGE], capture_output=True, text=True, timeout=60
+    )
+    return done.returncode == 0  # no Docker daemon, or no image: the test is skipped
 
 
 pytestmark = pytest.mark.skipif(

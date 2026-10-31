@@ -25,11 +25,11 @@ from pathlib import Path
 from typing import Any
 
 from neura.v1 import dataplane_pb2
-from neura_adapters import ModelInputs
 from neura_bench.deployments import DeploymentFiles
 from neura_bench.measure import WORKER, background_command
 from neura_bench.metrics import Result, Snapshot, snapshot, summarize, window
 from neura_bench.sim import AdmitAll, LatencyModel
+from neura_runtime.policy import ModelInputs
 from neura_runtime.runtime import RuntimeState, TransitionError
 from neura_server.backends import WorkerBackend
 from neura_server.config import (

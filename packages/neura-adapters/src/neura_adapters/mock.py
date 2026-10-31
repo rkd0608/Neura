@@ -9,8 +9,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters.base import AdapterProperties, ModelInputs
+from neura_adapters.base import AdapterProperties
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs
 
 
 class MockPolicy:

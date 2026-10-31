@@ -1,6 +1,8 @@
-"""Validating observations against the active contract and decoding them into model inputs.
+"""The serving side of the data-plane protocol, shared by the site gateway and the robot-side
+transports: observations validated against the contract and decoded into model inputs, and
+policy outputs checked and encoded as action chunks.
 
-Everything a policy worker receives has passed these checks: protocol version, identity, digests,
+Everything a policy receives has passed these checks: protocol version, identity, digests,
 tensor dtype/shape/finiteness, image dimensions and byte lengths, encoding, instruction length and
 the rtc frozen prefix (design §12). Nothing is substituted or filled in.
 """
@@ -13,10 +15,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_adapters import ModelInputs
 from neura_contracts import ColorOrder, ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs
 
 _COLOR = {ColorOrder.RGB: common_pb2.COLOR_ORDER_RGB, ColorOrder.BGR: common_pb2.COLOR_ORDER_BGR}
 
@@ -102,3 +104,24 @@ def decode_observation(
         frozen = prefix.astype(np.float32)
 
     return ModelInputs(state=state, images=images, instruction=instruction, frozen_prefix=frozen)
+
+
+def chunk_from(
+    envelope: common_pb2.Envelope,
+    anchor_index: int,
+    output: NDArray[np.float32],
+    binding: ExecutionBinding,
+    trace_id: str = "",
+) -> dataplane_pb2.ActionChunk | None:
+    """The action chunk answering an observation, or None when the policy's output is not one
+    (the wrong shape, or a value that is not finite): nothing malformed is ever sent."""
+    if output.shape != (binding.chunk_length, binding.action_dim) or not np.isfinite(output).all():
+        return None
+    actions = tensors.encode(np.ascontiguousarray(output, dtype=np.float32))
+    return dataplane_pb2.ActionChunk(
+        envelope=envelope,
+        start_index=anchor_index,
+        actions=actions,
+        actions_digest=common_pb2.PayloadDigest(sha256=tensors.payload_digest(actions.data)),
+        trace_id=trace_id,
+    )

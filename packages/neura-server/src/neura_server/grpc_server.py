@@ -32,7 +32,8 @@ from numpy.typing import NDArray
 from prometheus_client import CONTENT_TYPE_LATEST
 
 from neura.v1 import capture_pb2, dataplane_pb2, dataplane_pb2_grpc
-from neura_adapters import MockPolicy, ModelInputs, PolicyBackend, PolicyError
+from neura_adapters import MockPolicy, PolicyBackend
+from neura_runtime.policy import ModelInputs, PolicyError
 from neura_server.admission import AdmissionController
 from neura_server.backends import Backend, InProcessBackend, WorkerBackend, WorkerSpec
 from neura_server.config import (

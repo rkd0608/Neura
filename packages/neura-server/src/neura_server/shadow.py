@@ -26,9 +26,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters import ModelInputs
 from neura_contracts import DeviceKind
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs
 
 # Results kept for percentiles: enough for a stable p95, bounded however long a shadow runs.
 WINDOW = 10_000

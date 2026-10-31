@@ -15,7 +15,8 @@ from typing import Any
 
 import numpy as np
 
-from neura_adapters.base import Adapter, ModelInputs, blank_inputs
+from neura_adapters.base import Adapter, blank_inputs
+from neura_runtime.policy import ModelInputs
 
 
 @dataclass(frozen=True, slots=True)

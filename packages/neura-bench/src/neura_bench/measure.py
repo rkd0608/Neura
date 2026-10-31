@@ -26,11 +26,11 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters import ModelInputs, PolicyError
 from neura_adapters.base import blank_inputs
 from neura_bench.deployments import DeploymentFiles
 from neura_bench.sim import Contention, LatencyModel
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 from neura_server.backends import WorkerBackend, WorkerSpec
 from neura_server.profiles import ProfilePoint
 

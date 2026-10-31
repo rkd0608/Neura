@@ -23,10 +23,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
-from neura_adapters import MockPolicy, PolicyBackend, PolicyError
+from neura_adapters import MockPolicy, PolicyBackend
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.invariants import InvariantMonitor
+from neura_runtime.policy import PolicyError
 from neura_runtime.runtime import RobotRuntime, RuntimeConfig, RuntimeState, TransitionError
 from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_server.admission import AdmissionController

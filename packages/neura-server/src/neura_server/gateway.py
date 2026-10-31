@@ -15,12 +15,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_adapters import ModelInputs, PolicyError
 from neura_contracts import DeviceKind, ReasonCode
-from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
+from neura_runtime.serving import InvalidObservation, chunk_from, decode_observation
 from neura_server.admission import AdmissionController, SessionDemand
-from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.leases import Lease, LeaseDenied, LeaseTable
 from neura_server.scheduler import Batch, Dropped, InferenceRequest, Scheduler
 from neura_server.shadow import ShadowDeployment, ShadowRequest, ShadowTracker
@@ -488,22 +487,14 @@ class GatewayCore:
                 continue  # only a live lease is ever served, even between sweeps (design §6.1)
             output = results[id(request)]
             binding = session.deployment.binding
-            expected = (binding.chunk_length, binding.action_dim)
-            if output.shape != expected or not np.isfinite(output).all():
+            chunk = chunk_from(
+                request.envelope, request.anchor_index, output, binding, f"batch-{batch.batch_id}"
+            )
+            if chunk is None:
                 deliveries.extend(
                     self._rejections([Dropped(request, ReasonCode.WORKER_OUTPUT_INVALID)])
                 )
                 continue
-            actions = tensors.encode(np.ascontiguousarray(output, dtype=np.float32))
-            chunk = dataplane_pb2.ActionChunk(
-                envelope=request.envelope,
-                start_index=request.anchor_index,
-                actions=actions,
-                actions_digest=common_pb2.PayloadDigest(
-                    sha256=tensors.payload_digest(actions.data)
-                ),
-                trace_id=f"batch-{batch.batch_id}",
-            )
             session.chunks += 1
             deliveries.append(
                 Delivery(request.session_id, dataplane_pb2.GatewayMessage(action_chunk=chunk))

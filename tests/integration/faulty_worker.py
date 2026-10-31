@@ -17,9 +17,10 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters import ModelInputs, base
+from neura_adapters import base
 from neura_adapters.mock import MockPolicy
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs
 from neura_server import worker
 
 FAULT = Path(os.environ["NEURA_TEST_WORKER_FAULT"])

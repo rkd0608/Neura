@@ -247,8 +247,8 @@ async def test_latency_stops_at_the_first_batch_that_does_not_fit(
 ) -> None:
     import contextlib
 
-    from neura_adapters import PolicyError
     from neura_bench import measure
+    from neura_runtime.policy import PolicyError
 
     class Backend:
         peak_memory_mib = 0

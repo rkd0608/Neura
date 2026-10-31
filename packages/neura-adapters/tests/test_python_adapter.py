@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from neura_adapters import load_adapter
-from neura_adapters.base import ModelInputs, PolicyError, blank_inputs
+from neura_adapters.base import blank_inputs
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, authoring, parse_document
 from neura_contracts.inference import (
     PolicyDeclaration,
@@ -22,6 +22,7 @@ from neura_contracts.inference import (
     derive_execution_profile,
 )
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 

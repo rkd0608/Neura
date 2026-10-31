@@ -102,6 +102,14 @@ signed upgrades, and the local site API.
   `tests/integration/test_console_proxy.py` (needs Docker)
 - Docs: `site/docs/deploy-a-policy.md` ("A production server")
 
+### Running without a gateway: policy transports (§30.2)
+
+- Code: `packages/neura-runtime/src/neura_runtime/local.py` (the gateway's part for one robot),
+  `packages/neura-runtime/src/neura_runtime/policy.py` (model inputs, `PolicyClient`, the
+  in-process policy), `packages/neura-runtime/src/neura_runtime/serving.py` (observations decoded,
+  chunks built: shared with the gateway)
+- Tests: `packages/neura-runtime/tests/test_local.py::test_an_in_process_policy_drives_the_runtime_and_its_failures_stop_it`
+
 ### Serving: gateway, leases, admission, scheduler, workers (§6, §9, §12)
 
 - Code: `packages/neura-server/src/neura_server/gateway.py`,

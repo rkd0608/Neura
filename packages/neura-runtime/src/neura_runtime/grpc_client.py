@@ -96,7 +96,47 @@ class RobotCredentials:
         return (("authorization", f"Bearer {self.token}"),) if self.token else ()
 
 
-class GatewayConnection:
+class ConnectionLoop:
+    """The control loop every connection runs: tick the session client and the runtime once per
+    control period on the robot's clock, and hand what they emit to ``dispatch``."""
+
+    def __init__(
+        self,
+        client: SessionClient,
+        on_tick: Callable[[int], None] | None,
+        clock: Callable[[], int],
+    ) -> None:
+        self.client = client
+        self._on_tick = on_tick
+        self._clock = clock
+        self.ticks = 0
+        self.late_ticks = 0
+
+    async def _control_loop(
+        self, stop: asyncio.Event, dispatch: Callable[[Outbound], None]
+    ) -> None:
+        period_s = self.client.runtime.binding.control_period_us / 1e6
+        next_tick = time.monotonic()
+        while not stop.is_set():
+            now = self._clock()
+            for item in self.client.tick(now):
+                dispatch(item)
+            if self._on_tick is not None:
+                self._on_tick(now)
+                for item in self.client.drain():
+                    dispatch(item)
+            self.ticks += 1
+            next_tick += period_s
+            delay = next_tick - time.monotonic()
+            if delay < 0:
+                self.late_ticks += 1
+                next_tick = time.monotonic()  # do not try to catch up with a burst of ticks
+                delay = 0
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=delay)
+
+
+class GatewayConnection(ConnectionLoop):
     def __init__(
         self,
         client: SessionClient,
@@ -108,7 +148,7 @@ class GatewayConnection:
         on_tick: Callable[[int], None] | None = None,
         clock: Callable[[], int] = monotonic_us,
     ) -> None:
-        self.client = client
+        super().__init__(client, on_tick, clock)
         self.target = target
         if isinstance(credentials, str):
             credentials = RobotCredentials(token=credentials)
@@ -116,12 +156,8 @@ class GatewayConnection:
         self._metadata = credentials.metadata()
         self._rpc_timeout = rpc_timeout_s
         self._max_message_bytes = max_message_bytes
-        self._on_tick = on_tick
-        self._clock = clock
         self._send = _Outbox(SEND_QUEUE)
         self._calls: set[asyncio.Task[None]] = set()
-        self.ticks = 0
-        self.late_ticks = 0
 
     async def run(self, stop: asyncio.Event) -> None:
         options = [
@@ -134,7 +170,7 @@ class GatewayConnection:
             stub = dataplane_pb2_grpc.RobotGatewayStub(channel)
             stream_task = asyncio.create_task(self._stream_forever(stub, stop))
             try:
-                await self._control_loop(stub, stop)
+                await self._control_loop(stop, lambda item: self._dispatch(stub, item))
             finally:
                 stream_task.cancel()
                 for task in list(self._calls):
@@ -147,29 +183,6 @@ class GatewayConnection:
                         await stub.Control(
                             close, timeout=self._rpc_timeout, metadata=self._metadata
                         )
-
-    async def _control_loop(
-        self, stub: dataplane_pb2_grpc.RobotGatewayStub, stop: asyncio.Event
-    ) -> None:
-        period_s = self.client.runtime.binding.control_period_us / 1e6
-        next_tick = time.monotonic()
-        while not stop.is_set():
-            now = self._clock()
-            for item in self.client.tick(now):
-                self._dispatch(stub, item)
-            if self._on_tick is not None:
-                self._on_tick(now)
-                for item in self.client.drain():
-                    self._dispatch(stub, item)
-            self.ticks += 1
-            next_tick += period_s
-            delay = next_tick - time.monotonic()
-            if delay < 0:
-                self.late_ticks += 1
-                next_tick = time.monotonic()  # do not try to catch up with a burst of ticks
-                delay = 0
-            with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=delay)
 
     def _dispatch(self, stub: dataplane_pb2_grpc.RobotGatewayStub, item: Outbound) -> None:
         if item.channel == "stream":

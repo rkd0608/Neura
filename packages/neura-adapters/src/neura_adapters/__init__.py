@@ -3,9 +3,7 @@
 from neura_adapters.base import (
     Adapter,
     AdapterProperties,
-    ModelInputs,
     PolicyBackend,
-    PolicyError,
     available_adapters,
     load_adapter,
 )
@@ -15,9 +13,7 @@ __all__ = [
     "Adapter",
     "AdapterProperties",
     "MockPolicy",
-    "ModelInputs",
     "PolicyBackend",
-    "PolicyError",
     "available_adapters",
     "load_adapter",
 ]

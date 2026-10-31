@@ -12,11 +12,12 @@ import pytest
 
 pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
 
-from neura_adapters import ModelInputs, PolicyError, load_adapter
+from neura_adapters import load_adapter
 from neura_adapters.base import blank_inputs
 from neura_adapters.synthetic import write_act_checkpoint
 from neura_contracts.inference import weights_manifest
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 
 
 def small_cameras(artifact: dict[str, Any], robot: dict[str, Any], profile: dict[str, Any]) -> None:

@@ -17,36 +17,9 @@ from typing import Literal, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_contracts import ImageInput, LanguageInput, ReasonCode, StateInput
+from neura_contracts import ImageInput, LanguageInput, StateInput
 from neura_runtime.binding import ExecutionBinding
-
-
-@dataclass(frozen=True, slots=True)
-class ModelInputs:
-    """One request's inputs, already validated against the contract (neura_server.inputs)."""
-
-    state: dict[str, NDArray[np.float32]]  # state input name -> components
-    images: dict[str, NDArray[np.uint8]]  # camera role -> H x W x 3, in the camera's color order
-    instruction: str
-    frozen_prefix: NDArray[np.float32] | None
-
-
-class PolicyError(Exception):
-    """Loading or inference failed. ``reason`` is the reason code robots receive for the
-    requests of the failed batch; it defaults from ``out_of_memory``."""
-
-    def __init__(
-        self, message: str, *, out_of_memory: bool = False, reason: ReasonCode | None = None
-    ) -> None:
-        super().__init__(message)
-        self.out_of_memory = out_of_memory
-        if reason is None:
-            reason = (
-                ReasonCode.WORKER_OUT_OF_MEMORY
-                if out_of_memory
-                else ReasonCode.WORKER_INFERENCE_FAILED
-            )
-        self.reason = reason
+from neura_runtime.policy import ModelInputs, PolicyError
 
 
 @dataclass(frozen=True, slots=True)

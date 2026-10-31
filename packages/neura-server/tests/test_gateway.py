@@ -8,9 +8,11 @@ import numpy as np
 import pytest
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_adapters import MockPolicy, ModelInputs, PolicyError
+from neura_adapters import MockPolicy
 from neura_contracts import ReasonCode
+from neura_runtime.policy import ModelInputs, PolicyError
 from neura_runtime.runtime import RobotRuntime, RuntimeState, SendObservation
+from neura_runtime.serving import InvalidObservation, decode_observation
 from neura_runtime.session import Outbound
 from neura_runtime.testing import FakeController, FakeSensors
 from neura_server.config import (
@@ -23,7 +25,6 @@ from neura_server.config import (
 )
 from neura_server.gateway import Deployment
 from neura_server.grpc_server import GatewayServer
-from neura_server.inputs import InvalidObservation, decode_observation
 from neura_server.testing import GW0, MS, R0, Robot, make_core
 
 

@@ -25,9 +25,10 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters.base import AdapterProperties, ModelInputs, PolicyError, blank_inputs
+from neura_adapters.base import AdapterProperties, blank_inputs
 from neura_contracts import ImageInput, LanguageInput, ReasonCode, StateInput
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 
 log = logging.getLogger("neura.adapters.lerobot")
 

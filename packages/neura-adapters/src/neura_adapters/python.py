@@ -26,10 +26,11 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_adapters.base import AdapterProperties, ModelInputs, PolicyError, blank_inputs
+from neura_adapters.base import AdapterProperties, blank_inputs
 from neura_contracts import ReasonCode, authoring
 from neura_contracts.inference import PolicyDeclaration
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 
 
 def _entry(checkpoint: Path | None) -> dict[str, Any]:

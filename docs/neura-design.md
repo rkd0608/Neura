@@ -2282,11 +2282,13 @@ qualification moved to the closed `neura-bench`: they drive the gateway.
 
 ### 30.2 Build, in order
 
-1. **The boundary** (this change): open packages import only each other. Their tests still use
+1. **The boundary** (done): open packages import only each other. Their tests still use
    the closed gateway as a policy source; they move to an open reference policy server in step 3.
 2. **One policy transport interface**: send an observation with a deadline, get an action chunk
    or a typed failure. Freshness, task epochs, merging and faults are the runtime's and behave the
-   same over every transport. Transports, in order: in-process (inference on the robot computer),
+   same over every transport: `LocalConnection` plays the gateway's part for one robot and a
+   `PolicyClient` reaches the policy; the observation decoder and the chunk builder are shared
+   with the gateway (`neura_runtime.serving`). Transports, in order: in-process (done; inference on the robot computer),
    openpi's websocket server, LeRobot's async gRPC server, Neura's gateway; hosted APIs when their
    protocols are public.
 3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile

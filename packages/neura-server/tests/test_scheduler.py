@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from neura.v1 import common_pb2
-from neura_adapters import ModelInputs
 from neura_contracts import ReasonCode
+from neura_runtime.policy import ModelInputs
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import InferenceRequest, Policy, Scheduler
 

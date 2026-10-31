@@ -34,11 +34,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import common_pb2, worker_pb2, worker_pb2_grpc
-from neura_adapters import Adapter, ModelInputs, PolicyError, load_adapter
+from neura_adapters import Adapter, load_adapter
 from neura_adapters.profiler import profile_adapter
 from neura_contracts import ReasonCode
 from neura_runtime import tensors
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import ModelInputs, PolicyError
 from neura_server.config import deployment_device, load_binding_files
 
 log = logging.getLogger("neura.worker")

@@ -326,12 +326,15 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/grpc_client.py`: asyncio/gRPC adapter that moves ``SessionClient`` messages to and from a site gateway.
 - `neura_runtime/interfaces.py`: Integration points a supported robot integration implements (design §3, §7).
 - `neura_runtime/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
+- `neura_runtime/local.py`: The gateway's part for one robot, in the robot-side process: sessions, heartbeats and epochs answered locally, and each observation served by a ``PolicyClient`` (design §30.2).
+- `neura_runtime/policy.py`: What a policy takes and gives, wherever it runs: validated model inputs, the failure a robot is told about, and the client the robot-side process asks for action chunks (design §30.2).
 - `neura_runtime/runtime.py`: The robot runtime: the only execution authority in Neura (design §5-§8).
+- `neura_runtime/serving.py`: The serving side of the data-plane protocol, shared by the site gateway and the robot-side transports: observations validated against the contract and decoded into model inputs, and policy outputs …
 - `neura_runtime/session.py`: Session handshake, lease heartbeats and RTT measurement around a ``RobotRuntime``.
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
 
-Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
+Tests, under `packages/neura-runtime/tests/`: `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_local.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
 
 ## packages/neura-sdk
 
@@ -362,7 +365,6 @@ Under `packages/neura-server/src/`:
 - `neura_server/config.py`: Gateway configuration file (YAML) and the objects built from it.
 - `neura_server/gateway.py`: The site gateway core (design §6, §8, §11, §12).
 - `neura_server/grpc_server.py`: The gateway process: gRPC adapter, batch dispatchers, lease sweeper and local status API.
-- `neura_server/inputs.py`: Validating observations against the active contract and decoding them into model inputs.
 - `neura_server/leases.py`: Robot leases: who may be served (design §6.1).
 - `neura_server/metrics.py`: Prometheus metrics for the gateway, on its status listener at ``/metrics`` (design §18.2).
 - `neura_server/profiles.py`: Inference latency profiles indexed by batch size (design §9.2, §13).

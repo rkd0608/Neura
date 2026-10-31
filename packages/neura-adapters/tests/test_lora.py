@@ -93,8 +93,9 @@ def test_ranks_may_differ_between_adapters(model: Any) -> None:
 def test_multi_adapter_act_matches_unbatched(tmp_path: Path, binding_factory: Any) -> None:
     pytest.importorskip("lerobot")
     from neura_adapters import load_adapter
-    from neura_adapters.base import ModelInputs, blank_inputs
+    from neura_adapters.base import blank_inputs
     from neura_adapters.synthetic import write_act_checkpoint
+    from neura_runtime.policy import ModelInputs
 
     def small(a: dict[str, Any], r: dict[str, Any], p: dict[str, Any]) -> None:
         for model_input in a["spec"]["inputs"]:

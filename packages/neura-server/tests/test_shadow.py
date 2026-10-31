@@ -10,10 +10,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
-from neura_adapters import MockPolicy, PolicyError
+from neura_adapters import MockPolicy
 from neura_adapters.base import blank_inputs
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.policy import PolicyError
 from neura_server.gateway import GatewayCore
 from neura_server.shadow import (
     ACTIVE_US,

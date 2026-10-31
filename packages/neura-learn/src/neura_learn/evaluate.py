@@ -194,7 +194,7 @@ def replay_samples(
     """(episode, outcome, model inputs, actions the robot executed next, in model units) at
     every ``stride``-th recorded frame of each episode that can be used for the model, and how
     many episodes were left out, by why (as a dataset export leaves them out)."""
-    from neura_adapters import ModelInputs
+    from neura_runtime.policy import ModelInputs
     from neura_server.capture.export import usable_frames
 
     horizon = suite.horizon or max(

@@ -14,6 +14,10 @@
 They are one distribution, `neura-robot`; each package's code is in its `src/` and its tests in
 its `tests/`. Each module's first lines say what it is for.
 
+Comments that cite `design §N` refer to sections of the design document of Neura, the project
+neura-robot comes from. That document isn't published; what matters here is in these docs, and a
+comment's own text should stand without it. If one doesn't, that's worth an issue.
+
 ## Setting up
 
 ```bash

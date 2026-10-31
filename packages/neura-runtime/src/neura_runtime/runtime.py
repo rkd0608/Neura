@@ -375,7 +375,9 @@ class RobotRuntime:
         binding = self.binding
         if snapshot is None:
             return None
-        times = [snapshot.state_time_us] + [f.capture_time_us for f in snapshot.images.values()]
+        # Skew and age over what the policy reads: a camera it ignores holds nothing back.
+        read = (snapshot.images.get(layout.camera_role) for layout in binding.image_layouts)
+        times = [snapshot.state_time_us] + [f.capture_time_us for f in read if f is not None]
         oldest, newest = min(times), max(times)
         if newest - oldest > self._config.max_sensor_skew_us:
             return None

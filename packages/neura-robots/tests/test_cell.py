@@ -4,7 +4,6 @@ page's guards."""
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -13,15 +12,15 @@ from typing import Any
 
 import pytest
 
-os.environ.setdefault("MUJOCO_GL", "egl")
+pytest.importorskip("neura_robots.sim")  # picks MuJoCo's OpenGL backend, or says what is missing
 pytest.importorskip("mujoco")
 pytest.importorskip("PIL")
 
 from neura_contracts import RobotProfile, parse_document
 from neura_robots.aloha import AlohaSim
-from neura_robots.aloha.arm import AlohaSimArm
 from neura_robots.aloha.cell import Cell, CellRobot, serve_page
 from neura_robots.aloha.contracts import robot_profile
+from neura_robots.sim.arm import SimArm
 from neura_runtime.grpc_client import RobotCredentials
 from neura_runtime.runtime import RuntimeState
 
@@ -80,7 +79,7 @@ def _robot(**kwargs: Any) -> CellRobot:
     )
     profile = parse_document(robot_profile())
     assert isinstance(profile, RobotProfile)
-    robot.arm = AlohaSimArm(robot.world, profile)
+    robot.arm = SimArm(robot.world, profile)
     robot.arm.connect()
     return robot
 

@@ -11,6 +11,8 @@ runs: in a site's policy worker (the ``python`` adapter), in a robot's process, 
 
 from __future__ import annotations
 
+import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -60,15 +62,7 @@ class AuthoredPolicy:
         """``source`` is ``path/to/file.py`` (its one ``@neura.policy`` class) or
         ``path/to/file.py:Class``. ``weights`` defaults to the class's declared ``weights``,
         relative to the file. Runs the file's code."""
-        path_text, _, class_name = source.partition(":")
-        path = Path(path_text).resolve()
-        if path.suffix != ".py" or not path.is_file():
-            raise authoring.AuthoringError(f"{path_text} is not a Python file")
-        if not class_name:
-            class_name = _only_policy_class(path)
-        policy_class = authoring.load_class(path.parent, f"{path.stem}:{class_name}")
-        marked = authoring.authored(policy_class)
-        assert marked is not None  # load_class refuses a class without the decorator
+        path, policy_class, marked = _policy_class(source)
         if weights is None:
             weights = path.parent / marked.weights if marked.weights else path.parent
         instance = authoring.instantiate(policy_class, weights=weights, device=device)
@@ -86,6 +80,69 @@ class AuthoredPolicy:
         except Exception as error:  # the policy's own code: reported to the robot as a reason
             raise PolicyError(f"the policy failed: {type(error).__name__}: {error}") from error
         return checked(result)
+
+
+def synthetic_observation(
+    declaration: PolicyDeclaration, robot: Mapping[str, Any], *, seed: int = 0
+) -> dict[str, Any]:
+    """An observation shaped as the robot sends it: state in its order, images at the sizes the
+    policy reads, and a task when it reads language."""
+    rng = np.random.default_rng(seed)
+    spec = robot["spec"]
+    observation: dict[str, Any] = {}
+    if declaration.state:
+        features = spec["state_features"]
+        observation["observation.state"] = rng.uniform(-1, 1, len(features)).astype(np.float32)
+    cameras = declaration.cameras
+    if cameras is None:
+        cameras = {c["role"]: (int(c["width"]), int(c["height"])) for c in spec.get("cameras", [])}
+    for role, (width, height) in cameras.items():
+        observation[f"observation.images.{role}"] = rng.integers(
+            0, 256, (height, width, 3), dtype=np.uint8
+        )
+    if declaration.language:
+        observation["task"] = "pick up the cube"
+    return observation
+
+
+def slowest_pass_us(
+    source: str,
+    robot: Mapping[str, Any],
+    *,
+    weights: Path | None = None,
+    device: str = "cpu",
+    runs: int = 5,
+) -> int:
+    """The slowest of ``runs`` calls of a fresh instance of the class at ``source`` on made-up
+    observations (``synthetic_observation``), in µs: how fast it runs on this machine. The
+    instance is thrown away, so a stateful policy serves from a clean start."""
+    policy = AuthoredPolicy.load(source, weights=weights, device=device)
+    slowest = 0.0
+    for seed in range(runs):
+        observation = synthetic_observation(policy.declaration, robot, seed=seed)
+        started = time.perf_counter()
+        policy.instance.act(observation)
+        slowest = max(slowest, time.perf_counter() - started)
+    return max(1, round(slowest * 1_000_000))
+
+
+def declaration(source: str) -> PolicyDeclaration:
+    """What the ``@neura.policy`` class at ``source`` declares, without instantiating it (its
+    module's code runs)."""
+    return _policy_class(source)[2].declaration
+
+
+def _policy_class(source: str) -> tuple[Path, type, authoring.Authored]:
+    path_text, _, class_name = source.partition(":")
+    path = Path(path_text).resolve()
+    if path.suffix != ".py" or not path.is_file():
+        raise authoring.AuthoringError(f"{path_text} is not a Python file")
+    if not class_name:
+        class_name = _only_policy_class(path)
+    policy_class = authoring.load_class(path.parent, f"{path.stem}:{class_name}")
+    marked = authoring.authored(policy_class)
+    assert marked is not None  # load_class refuses a class without the decorator
+    return path, policy_class, marked
 
 
 def _only_policy_class(path: Path) -> str:

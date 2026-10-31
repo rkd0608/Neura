@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import threading
 import time
 from collections.abc import AsyncIterator
@@ -22,7 +21,7 @@ from typing import Any
 import pytest
 
 pytest.importorskip("lerobot.datasets.lerobot_dataset", exc_type=ImportError)
-os.environ.setdefault("MUJOCO_GL", "egl")  # before MuJoCo is first imported
+pytest.importorskip("neura_robots.sim")  # picks MuJoCo's OpenGL backend, or says what is missing
 pytest.importorskip("mujoco")
 
 from neura_learn import jobs
@@ -43,10 +42,6 @@ from neura_server.config import (
 )
 from neura_server.grpc_server import GatewayServer
 
-pytestmark = pytest.mark.skipif(
-    os.environ["MUJOCO_GL"] == "egl" and not Path("/usr/lib/x86_64-linux-gnu/libEGL.so.1").exists(),
-    reason="no offscreen OpenGL for the simulated cell",
-)
 TOKEN = "token-aloha-0"
 ROBOT = "aloha-0"
 REVISION = "rev_aloha"

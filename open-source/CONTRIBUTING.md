@@ -24,9 +24,13 @@ Linux or macOS, Python 3.10 or newer:
 ```bash
 git clone https://github.com/rkd0608/neura-robot && cd neura-robot
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev,openpi]"
+make setup            # pip install -e ".[dev,openpi]"; make setup-all for every extra
+make doctor           # what this machine can run, and how to get the rest
 make check            # lint, types and tests, as CI runs them
 ```
+
+The README's [set-up section](README.md#set-up-your-machine) lists every prerequisite (Docker,
+OpenGL, Hugging Face) and what each unlocks.
 
 With [uv](https://docs.astral.sh/uv/): `uv venv && uv pip install -e ".[dev,openpi]"`.
 
@@ -36,7 +40,7 @@ Extras for the parts that need them:
 |---|---|---|
 | `so101` | the SO-101 arm and its emulator | LeRobot; Python 3.12+ |
 | `lerobot` | the LeRobot policy-server transport | LeRobot; Python 3.12+ |
-| `sim` | the simulated ALOHA in MuJoCo | |
+| `sim` | the simulated arms (MuJoCo Menagerie) and ALOHA, in MuJoCo | git and offscreen OpenGL |
 | `openpi` | the openpi policy-server transport | |
 
 ## Tests
@@ -50,7 +54,8 @@ pytest -k incident              # by name
 Some tests need more than Python, and skip with a reason when it is missing:
 
 - **LeRobot and the SO-101 emulator**: `pip install -e ".[so101,lerobot]"` (Python 3.12+).
-- **MuJoCo**: `pip install -e ".[sim]"`, and headless OpenGL to render its cameras (on Debian or
+- **MuJoCo**: `pip install -e ".[sim]"`, git (the simulated arms' models are fetched once; `make
+  assets`), and headless OpenGL to render its cameras (on Debian or
   Ubuntu: `sudo apt-get install libegl1 libgl1`; or set `MUJOCO_GL=osmesa` with `libosmesa6`).
 - **openpi's own policy server** (Docker):
   `docker build -t neura-openpi-test:dev packages/neura-runtime/tests/openpi` and

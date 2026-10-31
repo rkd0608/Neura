@@ -3,14 +3,13 @@
 
 from __future__ import annotations
 
-import os
 from importlib import metadata
 
 import numpy as np
 import pytest
 from packaging.requirements import Requirement
 
-os.environ.setdefault("MUJOCO_GL", "egl")  # before MuJoCo is imported: headless rendering
+pytest.importorskip("neura_robots.sim")  # picks MuJoCo's OpenGL backend, or says what is missing
 mujoco = pytest.importorskip("mujoco")
 
 from neura_robots.aloha import (  # noqa: E402

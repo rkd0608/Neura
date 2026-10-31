@@ -1,6 +1,6 @@
 """What the robot-side process (``process.ArmProcess``) needs of an arm integration: the
 runtime's Controller and SensorSource, plus recovery, revalidation and telemetry.
-``so101.So101Arm`` is the real SO-101; ``aloha.arm.AlohaSimArm`` the simulated ALOHA."""
+``so101.So101Arm`` is the real SO-101; ``sim.arm.SimArm`` the simulated ALOHA."""
 
 from __future__ import annotations
 

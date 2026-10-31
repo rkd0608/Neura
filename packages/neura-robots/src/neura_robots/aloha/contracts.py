@@ -4,9 +4,7 @@ files, as for any LeRobot checkpoint) and an execution profile that binds them.
 
 The robot's commands are the policy's actions, in the same order and units: six absolute joint
 positions in radians and a normalized gripper (0 closed, 1 open) per arm. Joint ranges are the
-position actuators' control ranges in the scene. The gripper's command range is wider than its
-travel ([-0.25, 1.25]): the actuator clamps a command to the finger's travel, so the range only
-refuses what no gripper command should be.
+position actuators' control ranges in the scene (``AlohaSim._command``).
 """
 
 from __future__ import annotations
@@ -19,75 +17,22 @@ from typing import Any
 
 from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
 from neura_contracts.inference import lerobot_artifact, read_lerobot_config, weights_manifest
-from neura_robots.aloha import DT, JOINTS, AlohaSim
+from neura_robots.aloha import DT, AlohaSim
+from neura_robots.sim.scene import robot_profile as scene_profile
 from neura_runtime.binding import ExecutionBinding
 
 API = "neura.dev/v1alpha1"
 CONTROL_PERIOD_US = round(DT * 1_000_000)
-GRIPPER_RANGE = (-0.25, 1.25)
-
-
-def command_range(sim: AlohaSim, index: int) -> tuple[str, float, float]:
-    """The unit and accepted range of command ``index`` (in ``JOINTS`` order)."""
-    if JOINTS[index].endswith("_gripper"):
-        return ("normalized", *GRIPPER_RANGE)
-    arm, joint = divmod(index, 7)  # actuators: 8 per arm, the 6 joints then the two fingers
-    low, high = (float(v) for v in sim.model.actuator_ctrlrange[arm * 8 + joint])
-    return "rad", low, high
-
-
-def _features(sim: AlohaSim) -> list[dict[str, Any]]:
-    features = []
-    for index, name in enumerate(JOINTS):
-        unit, low, high = command_range(sim, index)
-        semantics = "gripper_position" if unit == "normalized" else "absolute_joint_position"
-        features.append(
-            {
-                "name": name,
-                "unit": unit,
-                "frame": "joint_space",
-                "semantics": semantics,
-                "min": round(low, 5),
-                "max": round(high, 5),
-            }
-        )
-    return features
 
 
 def robot_profile(task: str = "transfer_cube") -> dict[str, Any]:
-    import mujoco
-
-    sim = AlohaSim(task)  # type: ignore[arg-type]
-    commands = _features(sim)
-    return {
-        "api_version": API,
-        "kind": "RobotProfile",
-        "metadata": {
-            "name": f"aloha-sim-{task.replace('_', '-')}",
-            "version": "r1",
-            "description": "ALOHA bimanual (two ViperX 300s) in MuJoCo, gym-aloha's scene, "
-            "joint position control at 50 Hz, the top camera.",
-        },
-        "spec": {
-            "controller": {"name": "mujoco-position-actuators", "revision": mujoco.__version__},
-            "control_period_us": CONTROL_PERIOD_US,
-            "command_interface": commands,
-            "state_features": [
-                {"name": c["name"], "unit": c["unit"], "frame": "joint_space"} for c in commands
-            ],
-            "cameras": [
-                {
-                    "role": "top",
-                    "width": sim.width,
-                    "height": sim.height,
-                    "color_order": "rgb",
-                    "encodings": ["raw"],
-                    "calibration_revision": "gym-aloha-0.1.5",
-                }
-            ],
-            "fault_responses": ["hold_position", "controlled_stop"],
-        },
-    }
+    return scene_profile(
+        AlohaSim(task),  # type: ignore[arg-type]
+        name=f"aloha-sim-{task.replace('_', '-')}",
+        description="ALOHA bimanual (two ViperX 300s) in MuJoCo, gym-aloha's scene, "
+        "joint position control at 50 Hz, the top camera.",
+        calibration="gym-aloha-0.1.5",
+    )
 
 
 def artifact(

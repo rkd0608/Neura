@@ -17,7 +17,7 @@ from collections.abc import Callable
 from neura_bench.evidence.policy import LocalPolicy
 from neura_bench.evidence.results import EpisodeResult
 from neura_robots.aloha import DT, AlohaSim
-from neura_robots.aloha.world import RealTimeWorld
+from neura_robots.sim.world import RealTimeWorld
 
 Progress = Callable[[str], None]
 
@@ -76,7 +76,7 @@ def run_eval_protocol(
 
 def run_realtime(
     policy: LocalPolicy,
-    world: RealTimeWorld,
+    world: RealTimeWorld[AlohaSim],
     seeds: list[int],
     *,
     max_steps: int = 400,

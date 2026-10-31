@@ -12,4 +12,5 @@ dist/
 .coverage
 htmlcov/
 incidents/
+examples/robots/calibration/
 *.mcap

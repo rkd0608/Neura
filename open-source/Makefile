@@ -10,6 +10,18 @@ help: ## List the tasks
 setup: ## Install neura-robot for development, in the active environment
 	$(PYTHON) -m pip install -e ".[dev,openpi]"
 
+.PHONY: setup-all
+setup-all: ## Everything: also LeRobot (SO-101, its server) and MuJoCo (Python 3.12+)
+	$(PYTHON) -m pip install -e ".[dev,openpi,sim,so101,lerobot]"
+
+.PHONY: assets
+assets: ## Fetch the simulated arms' models (MuJoCo Menagerie, with git, once)
+	$(PYTHON) -c "from neura_robots.sim.menagerie import fetch; print(fetch())"
+
+.PHONY: doctor
+doctor: ## Check this machine for everything the repository can use
+	$(PYTHON) scripts/doctor.py
+
 .PHONY: lint
 lint: ## Ruff: lint and formatting
 	$(PYTHON) -m ruff check .
@@ -22,7 +34,7 @@ format: ## Fix what ruff can
 
 .PHONY: typecheck
 typecheck: ## mypy, strict
-	$(PYTHON) -m mypy packages examples
+	$(PYTHON) -m mypy packages examples scripts
 
 .PHONY: test
 test: ## The tests that run here; skips say what they need

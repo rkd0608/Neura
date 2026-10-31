@@ -1,6 +1,6 @@
 """LeRobot's own remote inference (``lerobot.async_inference``, LeRobot 0.6.1) on the simulated
 ALOHA: its ``PolicyServer`` in a separate process and its ``RobotClient`` driving the robot, both
-unmodified, on the same real-time world (``aloha.world.RealTimeWorld``) and behind the same TCP
+unmodified, on the same real-time world (``sim.world.RealTimeWorld``) and behind the same TCP
 fault proxy Neura is measured with.
 
 The only substitutions: the robot is the simulated ALOHA (``AlohaSimRobot``, a LeRobot ``Robot``),
@@ -49,8 +49,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura_bench.evidence.results import EpisodeResult
-from neura_robots.aloha import JOINTS
-from neura_robots.aloha.world import RealTimeWorld
+from neura_robots.aloha import JOINTS, AlohaSim
+from neura_robots.sim.world import RealTimeWorld
 from neura_sim.chaos import FaultProxy, free_port
 
 # A chunk "arrived late" when its observation is older than this on arrival: Neura's acceptance
@@ -71,7 +71,10 @@ class _Camera:
     while it does not read."""
 
     def __init__(
-        self, world: RealTimeWorld, camera: str = "top", max_age_s: float = FRAME_MAX_AGE_S
+        self,
+        world: RealTimeWorld[AlohaSim],
+        camera: str = "top",
+        max_age_s: float = FRAME_MAX_AGE_S,
     ) -> None:
         self.world = world
         self.camera = camera
@@ -152,7 +155,7 @@ def _robot_classes() -> tuple[type, type]:
         config_class = AlohaSimRobotConfig
         name = "neura_aloha_sim"
 
-        def __init__(self, config: Any, world: RealTimeWorld, camera: _Camera) -> None:
+        def __init__(self, config: Any, world: RealTimeWorld[AlohaSim], camera: _Camera) -> None:
             super().__init__(config)
             self.world = world
             self.camera = camera
@@ -332,7 +335,7 @@ class AsyncRun:
     def __init__(
         self,
         checkpoint: Path,
-        world: RealTimeWorld,
+        world: RealTimeWorld[AlohaSim],
         *,
         workdir: Path,
         actions_per_chunk: int = 100,

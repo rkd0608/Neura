@@ -11,7 +11,9 @@ neura-arm run CONFIG [--policy URI]
     configuration's contracts instead of the gateway's.
 
 CONFIG is a YAML file: examples/robots/so101-arm.yaml for an SO-101 on its servo bus,
-examples/robots/ros2-arm.yaml for a ROS 2 robot through the relay node (``neura_robots.ros2``).
+examples/robots/ros2-arm.yaml for a ROS 2 robot through the relay node (``neura_robots.ros2``),
+examples/robots/panda-sim.yaml for a simulated arm (MuJoCo Menagerie's Panda, UR5e, Gen3, xArm7
+or SO-ARM100), whose contracts are inferred from its model and the policy.
 """
 
 from __future__ import annotations
@@ -27,18 +29,23 @@ import signal
 import sys
 import threading
 import time
+from functools import cache
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from neura_contracts import RobotProfile, load_document
 from neura_robots.lock import ActuatorBusyError
-from neura_robots.policies import PolicyConfig, describe, open_policy
+from neura_robots.policies import PolicyConfig, describe, inferred_binding, open_policy
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
 from neura_robots.ros2.arm import Ros2Arm, Ros2Config, Ros2Joint
 from neura_robots.so101 import ArmError, CameraConfig, So101Arm, So101Config
+
+if TYPE_CHECKING:
+    from neura_robots.sim.arm import SimArm
+    from neura_robots.sim.menagerie import MenagerieScene
 from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.grpc_client import RobotCredentials
 from neura_runtime.policy import PolicyClient, PolicyError
@@ -106,6 +113,24 @@ class Ros2ArmConfig(_Model):
     on_exit: Literal["hold"] = "hold"
 
 
+class MujocoArmConfig(_Model):
+    type: Literal["mujoco"]
+    # A MuJoCo Menagerie arm: franka_panda, ur5e, kinova_gen3, xarm7 or so_arm100. Its robot
+    # profile is read from the model, with its front camera.
+    model: str
+    on_exit: Literal["hold"] = "hold"
+
+    @model_validator(mode="after")
+    def _known(self) -> MujocoArmConfig:
+        try:
+            from neura_robots.sim.menagerie import MODELS
+        except ImportError as error:
+            raise ValueError(f"a simulated arm needs the sim extra and MuJoCo: {error}") from error
+        if self.model not in MODELS:
+            raise ValueError(f"model {self.model!r}: one of {', '.join(MODELS)}")
+        return self
+
+
 class CameraEntry(_Model):
     # ros2: frames from the ROS 2 relay node, which subscribes to the camera's topic
     type: Literal["opencv", "synthetic", "ros2"] = "opencv"
@@ -121,7 +146,7 @@ class RobotConfig(_Model):
     policy: PolicyConfig | None = None
     # Contracts to serve; without them, whatever revision the site assigns this robot.
     revision: RevisionConfig | None = None
-    arm: ArmConfig | Ros2ArmConfig
+    arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig
     cameras: dict[str, CameraEntry] = Field(default_factory=dict)
     instruction: str | None = None
     # Where the robot spools recorded episodes when its site records them (design §28.2); unset,
@@ -136,12 +161,15 @@ class RobotConfig(_Model):
             raise ValueError("set gateway (and credentials) or policy, not both")
         if self.gateway is not None and self.credentials is None:
             raise ValueError("a gateway needs credentials")
-        if self.policy is not None and self.revision is None:
+        simulated = isinstance(self.arm, MujocoArmConfig)
+        if self.policy is not None and self.revision is None and not simulated:
             raise ValueError("a policy without a gateway needs `revision:`, the robot's contracts")
         return self
 
     @model_validator(mode="after")
     def _cameras_match_the_arm(self) -> RobotConfig:
+        if isinstance(self.arm, MujocoArmConfig) and self.cameras:
+            raise ValueError("a simulated arm's camera is its scene's: leave `cameras:` out")
         ros2 = isinstance(self.arm, Ros2ArmConfig)
         wrong = sorted(role for role, c in self.cameras.items() if (c.type == "ros2") != ros2)
         if wrong:
@@ -176,10 +204,10 @@ class RobotConfig(_Model):
         credentials = config.credentials and config.credentials.model_copy(
             update={"cert_dir": rel(config.credentials.cert_dir)}
         )
-        arm: ArmConfig | Ros2ArmConfig
+        arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig = config.arm
         if isinstance(config.arm, Ros2ArmConfig):
             arm = config.arm.model_copy(update={"socket": rel(config.arm.socket)})
-        else:
+        elif isinstance(config.arm, ArmConfig):
             arm = config.arm.model_copy(
                 update={
                     "calibration_dir": rel(config.arm.calibration_dir),
@@ -216,9 +244,11 @@ class RobotConfig(_Model):
             lock_dir=arm.lock_dir,
         )
 
-    def open_arm(self, profile: RobotProfile) -> So101Arm | Ros2Arm:
+    def open_arm(self, profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm:
         """The configured arm, not yet connected."""
         arm = self.arm
+        if isinstance(arm, MujocoArmConfig):
+            return _simulated_arm(arm, profile)
         if not isinstance(arm, Ros2ArmConfig):
             return So101Arm(self.so101(), profile)
         joints = [Ros2Joint(j.ros, j.name, j.scale, j.offset) for j in arm.joints]
@@ -235,17 +265,48 @@ class RobotConfig(_Model):
             return dataclasses.replace(loaded, server_name=c.tls_server_name)
         return RobotCredentials(token=c.token)
 
-    def binding(self) -> ExecutionBinding | None:
+    def binding(self, base: Path = Path(".")) -> ExecutionBinding | None:
+        """The contracts: the configured revision's, or, for a simulated arm and a policy file,
+        inferred from the arm's model and what the policy declares (``base``: where a relative
+        policy file is read from)."""
         r = self.revision
-        return None if r is None else load_binding(r.artifact, r.robot_profile, r.execution_profile)
+        if r is not None:
+            return load_binding(r.artifact, r.robot_profile, r.execution_profile)
+        if isinstance(self.arm, MujocoArmConfig) and self.policy is not None:
+            return inferred_binding(self.policy, _scene(self.arm.model).profile(), base)
+        return None
+
+
+CAMERA_FPS = 15.0  # a simulated arm's camera: rendering is the costly part of a simulation
+
+
+@cache
+def _scene(model: str) -> MenagerieScene:
+    from neura_robots.sim.menagerie import MenagerieScene
+
+    return MenagerieScene(model)
+
+
+def _simulated_arm(config: MujocoArmConfig, profile: RobotProfile) -> SimArm:
+    """The Menagerie arm on its own real-time clock, from its home pose."""
+    from neura_robots.sim.arm import SimArm
+    from neura_robots.sim.world import RealTimeWorld
+
+    world = RealTimeWorld(_scene(config.model)).start()
+    world.go()
+    return SimArm(world, profile, camera_fps=CAMERA_FPS)
 
 
 def _say(line: str) -> None:
     print(line, flush=True)
 
 
-def _where(arm: So101Arm | Ros2Arm) -> str:
-    return arm.lock.device if isinstance(arm, So101Arm) else f"the relay on {arm.config.socket}"
+def _where(arm: So101Arm | Ros2Arm | SimArm) -> str:
+    if isinstance(arm, So101Arm):
+        return arm.lock.device
+    if isinstance(arm, Ros2Arm):
+        return f"the relay on {arm.config.socket}"
+    return f"MuJoCo ({arm.sim.model.nu} actuators)"
 
 
 def check(config: RobotConfig, robot_profile: Path | None) -> int:
@@ -253,6 +314,10 @@ def check(config: RobotConfig, robot_profile: Path | None) -> int:
         profile = load_document(robot_profile.read_text(encoding="utf-8"))
         if not isinstance(profile, RobotProfile):
             raise SystemExit(f"{robot_profile} is not a robot profile")
+    elif isinstance(config.arm, MujocoArmConfig):
+        loaded = load_document(json.dumps(_scene(config.arm.model).profile()))
+        assert isinstance(loaded, RobotProfile)
+        profile = loaded
     else:
         binding = config.binding()
         if binding is None:
@@ -316,9 +381,13 @@ async def serve(
             loop.add_signal_handler(sig, interrupted)
     threading.Thread(target=_read_operator, args=(inbox,), daemon=True).start()
 
-    binding = config.binding()
+    try:
+        binding = config.binding(base)
+    except PolicyError as exc:
+        print(f"cannot serve: {exc}", file=sys.stderr)
+        return 1
     credentials = config.robot_credentials() if config.gateway is not None else None
-    arm: So101Arm | Ros2Arm | None = None
+    arm: So101Arm | Ros2Arm | SimArm | None = None
     policy: PolicyClient | None = None
     current: list[Any] = []
 
@@ -359,7 +428,7 @@ async def serve(
             await process.connection.run(stop)
         else:
 
-            def open_arm(profile: RobotProfile) -> So101Arm | Ros2Arm:
+            def open_arm(profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm:
                 nonlocal arm
                 arm = config.open_arm(profile)
                 arm.connect()

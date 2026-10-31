@@ -290,11 +290,9 @@ Under `packages/neura-robots/src/`:
 
 - `neura_robots/__init__.py`: Neura robot integrations (design §3, M8).
 - `neura_robots/aloha/__init__.py`: The ALOHA bimanual tasks of gym-aloha (transfer cube, insertion) on the MuJoCo bindings alone.
-- `neura_robots/aloha/arm.py`: The simulated ALOHA as a robot integration: what ``neura-arm``'s process, the runtime and the qualification harness see of a real arm (``So101Arm``), on the MuJoCo scene.
 - `neura_robots/aloha/cell.py`: ``neura-aloha-cell``: a robot cell of simulated ALOHAs served by a Neura site, running their task back to back, and a page to watch them.
 - `neura_robots/aloha/contracts.py`: Contracts for serving an ALOHA policy to the simulated ALOHA: the robot profile (from the scene's actuators), the model artifact (inferred from the checkpoint's own configuration and files, as for …
 - `neura_robots/aloha/fidelity.py`: Step-for-step comparison of ``neura_robots.aloha`` with gym-aloha itself.
-- `neura_robots/aloha/world.py`: Time for the simulated ALOHA.
 - `neura_robots/arm.py`: What the robot-side process (``process.ArmProcess``) needs of an arm integration: the runtime's Controller and SensorSource, plus recovery, revalidation and telemetry.
 - `neura_robots/cameras.py`: Cameras for robot integrations.
 - `neura_robots/cli.py`: ``neura-arm``: serve a real arm through a site gateway.
@@ -305,9 +303,14 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/ros2/__init__.py`: ROS 2 robots: a relay node on the robot's ROS side, and the arm Neura's robot-side process drives through it (design §29.8).
 - `neura_robots/ros2/arm.py`: A ROS 2 robot as an arm Neura's robot-side process drives (``arm.Arm``), through the relay node running in the robot's ROS environment (``ros2.relay``).
 - `neura_robots/ros2/relay.py`: The ROS 2 side of the bridge: a node that relays a robot's joint states and camera images to Neura's robot-side process, and its position commands back, over a local Unix socket.
+- `neura_robots/sim/__init__.py`: Simulated robots on MuJoCo: one scene interface (``scene.Scene``), its clock (``world``) and the arm the runtime drives (``arm.SimArm``), shared by the simulated ALOHA (``neura_robots.aloha``) and …
+- `neura_robots/sim/arm.py`: A simulated robot as a robot integration: what ``neura-arm``'s process, the runtime and the qualification harness see of a real arm (``So101Arm``), on a MuJoCo scene (``scene.Scene``: the simulated …
+- `neura_robots/sim/menagerie.py`: Robot arms from MuJoCo Menagerie (Google DeepMind's collection of accurate robot models) as simulated robots: the Franka Panda, Universal Robots UR5e, Kinova Gen3, UFACTORY xArm7 and the SO-ARM100 …
+- `neura_robots/sim/scene.py`: What a simulated robot is to the rest of Neura: a MuJoCo scene with named commands, a control period and cameras (``Scene``), and the robot profile that describes it (``robot_profile``).
+- `neura_robots/sim/world.py`: Time for a simulated robot (any ``scene.Scene``).
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
-Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_process.py`, `test_ros2.py`, `test_so101.py`
+Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_menagerie.py`, `test_process.py`, `test_ros2.py`, `test_so101.py`
 
 ## packages/neura-runtime
 

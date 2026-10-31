@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -82,6 +82,58 @@ class PolicyConfig(_Model):
         return self.uri.partition("://")[2]
 
 
+def file_source(config: PolicyConfig, base: Path) -> str:
+    """An @neura.policy file's ``path.py[:Class]``, its path resolved from ``base``."""
+    path_text, sep, name = config.uri.partition(":")
+    return str((base / path_text).resolve()) + (sep + name if sep else "")
+
+
+def inferred_binding(config: PolicyConfig, robot: dict[str, Any], base: Path) -> ExecutionBinding:
+    """The contracts for running an @neura.policy file on ``robot`` (a robot profile document),
+    for a robot that describes itself (a simulated arm): inferred from what the policy declares
+    (``neura_contracts.inference``), with limits from how fast it runs here (its slowest pass on
+    made-up observations), as a site infers them. Other policies need ``revision:``."""
+    from neura_contracts import ExecutionProfile, ModelArtifact, RobotProfile, parse_document
+    from neura_contracts.inference import (
+        InferenceError,
+        Timing,
+        declared_artifact,
+        derive_execution_profile,
+        weights_manifest,
+    )
+    from neura_runtime.authored import declaration, slowest_pass_us
+
+    if config.scheme != "file":
+        raise PolicyError(f"{config.uri}: give `revision:` (the contracts) for a remote policy")
+    source = file_source(config, base)
+    declared = declaration(source)
+    code = Path(source.partition(":")[0])
+    files = weights_manifest(code.parent)
+    files = [f for f in files if f["path"] == code.name]  # the policy's code
+    if config.weights is not None:
+        files += weights_manifest((base / config.weights).resolve())
+    try:
+        model = declared_artifact(
+            declared,
+            robot,
+            name=code.stem.replace("_", "-"),
+            version="sha-" + files[0]["digest"].removeprefix("sha256:")[:12],
+            weights=files,
+        )
+        measured = slowest_pass_us(source, robot, weights=config.weights, device=config.device)
+        timing = Timing({1: measured})
+        profile, _ = derive_execution_profile(
+            model, robot, timing, device=config.device, precision="fp32"
+        )
+    except InferenceError as error:
+        raise PolicyError(f"{config.uri} cannot drive this robot: {error}") from error
+    a, r, p = (parse_document(d) for d in (model, robot, profile))
+    assert isinstance(a, ModelArtifact)
+    assert isinstance(r, RobotProfile)
+    assert isinstance(p, ExecutionProfile)
+    return ExecutionBinding(a, r, p)
+
+
 async def open_policy(config: PolicyConfig, binding: ExecutionBinding, base: Path) -> PolicyClient:
     """The policy, connected and checked against ``binding``; PolicyError if it cannot serve this
     robot. ``base`` is the directory a relative file is read from."""
@@ -90,8 +142,7 @@ async def open_policy(config: PolicyConfig, binding: ExecutionBinding, base: Pat
 
     scheme = config.scheme
     if scheme == "file":
-        path_text, sep, name = config.uri.partition(":")
-        source = str((base / path_text).resolve()) + (sep + name if sep else "")
+        source = file_source(config, base)
         authored = AuthoredPolicy.load(source, weights=config.weights, device=config.device)
         if authored.declaration.chunk_length != binding.chunk_length:
             raise PolicyError(

@@ -4,13 +4,12 @@ synthetic (random-weights) checkpoint of the published ACT checkpoints' shape.""
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-os.environ.setdefault("MUJOCO_GL", "egl")
+pytest.importorskip("neura_robots.sim")  # picks MuJoCo's OpenGL backend, or says what is missing
 pytest.importorskip("mujoco")
 
 
@@ -32,8 +31,8 @@ if not _renders():
 
 from neura_contracts import FaultResponse, RobotProfile, parse_document  # noqa: E402
 from neura_robots.aloha import JOINTS, AlohaSim  # noqa: E402
-from neura_robots.aloha.arm import AlohaSimArm  # noqa: E402
 from neura_robots.aloha.contracts import Chunking, robot_profile, write  # noqa: E402
+from neura_robots.sim.arm import SimArm  # noqa: E402
 
 
 def _robot() -> RobotProfile:
@@ -43,15 +42,15 @@ def _robot() -> RobotProfile:
 
 
 @pytest.fixture
-def arm() -> AlohaSimArm:
+def arm() -> SimArm:
     sim = AlohaSim()
     sim.reset(1000)
-    arm = AlohaSimArm(sim, _robot())
+    arm = SimArm(sim, _robot())
     arm.connect()
     return arm
 
 
-def test_the_profile_fits_the_arm(arm: AlohaSimArm) -> None:
+def test_the_profile_fits_the_arm(arm: SimArm) -> None:
     assert arm.contract_problems() == []
     document = robot_profile()
     document["spec"]["command_interface"][0]["unit"] = "deg"
@@ -65,7 +64,7 @@ def test_the_profile_fits_the_arm(arm: AlohaSimArm) -> None:
     assert any("320x480" in p for p in problems)
 
 
-def test_commands_set_targets_and_time_is_the_ticks(arm: AlohaSimArm) -> None:
+def test_commands_set_targets_and_time_is_the_ticks(arm: SimArm) -> None:
     target = arm.sim.qpos()
     target[0] += 0.2
     assert arm.command(target).ok
@@ -77,7 +76,7 @@ def test_commands_set_targets_and_time_is_the_ticks(arm: AlohaSimArm) -> None:
     assert arm.counters["commands"] == 1
 
 
-def test_hold_and_faults(arm: AlohaSimArm) -> None:
+def test_hold_and_faults(arm: SimArm) -> None:
     moving = arm.sim.qpos()
     moving[1] += 0.3
     arm.command(moving)
@@ -97,7 +96,7 @@ def test_hold_and_faults(arm: AlohaSimArm) -> None:
     assert arm.revalidate() == ["this process no longer holds the actuator: restart it"]
 
 
-def test_capture_and_camera_faults(arm: AlohaSimArm) -> None:
+def test_capture_and_camera_faults(arm: SimArm) -> None:
     snapshot = arm.capture(1_000)
     assert list(snapshot.state) == JOINTS
     frame = snapshot.images["top"]
@@ -133,7 +132,7 @@ def test_contracts_bind_to_the_checkpoint(synthetic: Path, tmp_path: Path) -> No
 def test_local_baselines_run(synthetic: Path) -> None:
     from neura_bench.evidence.local import run_eval_protocol, run_realtime
     from neura_bench.evidence.policy import LocalPolicy
-    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.sim.world import RealTimeWorld
 
     policy = LocalPolicy(synthetic)
     sim = AlohaSim()
@@ -191,7 +190,7 @@ def test_the_summary_table_says_what_a_system_was_told(capsys: pytest.CaptureFix
 
 def test_the_async_robots_camera_reads_like_lerobots() -> None:
     from neura_bench.evidence.lerobot_async import _Camera
-    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.sim.world import RealTimeWorld
 
     world = RealTimeWorld(AlohaSim()).start()
     camera = _Camera(world, max_age_s=10).start()
@@ -216,7 +215,7 @@ def test_the_async_robots_camera_reads_like_lerobots() -> None:
 
 def test_lerobots_async_inference_serves_an_episode(synthetic: Path, tmp_path: Path) -> None:
     from neura_bench.evidence.lerobot_async import AsyncRun
-    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.sim.world import RealTimeWorld
 
     world = RealTimeWorld(AlohaSim()).start()
     try:
@@ -244,7 +243,7 @@ def test_lerobots_async_inference_stops_what_it_started_when_it_cannot_start(
     import socket
 
     from neura_bench.evidence.lerobot_async import AsyncRun
-    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.sim.world import RealTimeWorld
 
     world = RealTimeWorld(AlohaSim()).start()
     try:

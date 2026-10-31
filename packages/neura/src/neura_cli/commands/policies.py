@@ -15,11 +15,11 @@ from neura_contracts import authoring, parse_document, signing
 from neura_contracts.inference import (
     NOMINAL_PASS_US,
     InferenceError,
-    PolicyDeclaration,
     Timing,
     derive_limits,
     nominal_timing,
 )
+from neura_runtime.authored import synthetic_observation
 from neura_sdk.models import ArtifactSignature, ContractDocument, PolicyVersionCreate
 
 RUNS = 5  # calls `neura check --run` makes, to time the policy
@@ -301,31 +301,6 @@ def run_check(args: argparse.Namespace, ctx: Context) -> int:
     out.line(f"  Push it:  neura policy push {args.path} --name NAME")
     out.line()
     return 0 if ok else 1
-
-
-def synthetic_observation(
-    declaration: PolicyDeclaration, robot: dict[str, Any], *, seed: int = 0
-) -> dict[str, Any]:
-    """An observation shaped as the robot sends it: state in its order, images at the sizes the
-    policy reads, and a task when it reads language."""
-    import numpy as np
-
-    rng = np.random.default_rng(seed)
-    spec = robot["spec"]
-    observation: dict[str, Any] = {}
-    if declaration.state:
-        features = spec["state_features"]
-        observation["observation.state"] = rng.uniform(-1, 1, len(features)).astype(np.float32)
-    cameras = declaration.cameras
-    if cameras is None:
-        cameras = {c["role"]: (int(c["width"]), int(c["height"])) for c in spec.get("cameras", [])}
-    for role, (width, height) in cameras.items():
-        observation[f"observation.images.{role}"] = rng.integers(
-            0, 256, (height, width, 3), dtype=np.uint8
-        )
-    if declaration.language:
-        observation["task"] = "pick up the cube"
-    return observation
 
 
 def _run_once(ctx: Context, source: sources.Source, robot: dict[str, Any]) -> int | None:

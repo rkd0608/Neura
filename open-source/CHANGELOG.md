@@ -19,6 +19,15 @@ All notable changes to neura-robot. The format follows
   request, and `neura-robot replay` to run one back through a fresh runtime.
 - The ROS 2 relay node, an SO-101 servo-bus emulator, and the ALOHA tasks in MuJoCo.
 - Python 3.10 to 3.13, on x86-64 and arm64.
+- Simulated arms from MuJoCo Menagerie (Franka Panda, UR5e, Kinova Gen3, xArm7, SO-ARM100) as
+  `neura-arm` arms (`type: mujoco`), their contracts inferred from the model and the policy.
+- `make doctor`, `make setup-all` and `make assets`: check a machine, install everything, fetch
+  the simulated arms' models.
+
+### Fixed
+
+- A camera the policy does not read no longer holds observations back when its frames lag.
+- The MuJoCo tests skip with what to install, instead of failing, when libEGL is missing.
 
 ## Roadmap
 

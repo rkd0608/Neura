@@ -48,7 +48,7 @@ openpi = ["msgpack>=1.1", "websockets>=13"]
 lerobot = ["lerobot>=0.6.1,<0.7"]
 # The SO-101 arm on its Feetech servo bus, through LeRobot (Python 3.12+).
 so101 = ["lerobot[feetech]>=0.6.1,<0.7"]
-# The ALOHA tasks in MuJoCo, and the simulated robot cell's camera page.
+# Simulated robots in MuJoCo: the MuJoCo Menagerie arms and the ALOHA tasks.
 sim = ["mujoco==3.8.1", "pillow>=11"]
 # Everything the tests, linters and type checker need.
 dev = [

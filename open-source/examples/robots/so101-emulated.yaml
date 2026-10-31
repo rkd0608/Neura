@@ -1,0 +1,36 @@
+# neura-arm configuration for an SO-101 with no hardware: LeRobot's real servo driver talking to
+# neura-arm-emulator, an emulated servo bus on a pseudo-terminal, with test-pattern cameras.
+# Needs the so101 extra (LeRobot, Python 3.12+). In one terminal:
+#
+#   neura-arm-emulator --calibration-out examples/robots/calibration/so101-a.json
+#
+# It prints the pseudo-terminal (e.g. /dev/pts/3): put it in `port:` below. In another:
+#
+#   neura-arm run examples/robots/so101-emulated.yaml
+#   neura-arm run examples/robots/so101-emulated.yaml --policy neura://127.0.0.1:50061
+#
+# (the second with `neura-robot serve examples/policies/mid_range.py` running in a third).
+# Relative paths in this file are relative to it.
+
+robot_id: so101-a
+
+revision:
+  id: local
+  artifact: ../contracts/act-so101.artifact.yaml
+  robot_profile: ../contracts/so101.robot.yaml
+  execution_profile: ../contracts/act-so101-30hz.profile.yaml
+
+policy:
+  uri: ../policies/mid_range.py
+
+arm:
+  type: so101
+  port: /dev/pts/3  # what neura-arm-emulator printed
+  calibration_id: so101-a
+  calibration_dir: calibration  # where --calibration-out wrote so101-a.json
+
+cameras:  # a moving test pattern at the profile's sizes
+  front: {type: synthetic}
+  wrist: {type: synthetic}
+
+incidents_dir: incidents

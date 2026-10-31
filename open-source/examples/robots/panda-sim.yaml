@@ -1,0 +1,22 @@
+# neura-arm configuration for a simulated arm: MuJoCo Menagerie's Franka Panda, in MuJoCo, behind
+# the same runtime and robot process as a real arm. No hardware, no GPU.
+#
+#   pip install -e ".[sim]"
+#   neura-arm run examples/robots/panda-sim.yaml --policy examples/policies/panda_wave.py
+#
+# The first run downloads the Menagerie models (about 85 MB, with git) into ~/.cache/neura-robot,
+# or uses the checkout NEURA_MENAGERIE names. Type `arm` to start, `takeover` to stop, `quit`.
+
+robot_id: panda-sim
+
+# No `revision:`: a simulated arm describes itself. Its robot profile is read from the model
+# (every actuator, its range, the front camera), and the policy's contracts are inferred from
+# what its @neura.policy declares. A remote policy (neura://, openpi://, lerobot://) needs
+# `revision:` as on a real arm.
+policy:
+  uri: ../policies/panda_wave.py
+
+arm:
+  type: mujoco
+  # franka_panda, ur5e, kinova_gen3, xarm7 or so_arm100
+  model: franka_panda

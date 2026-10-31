@@ -4,16 +4,16 @@
 
 **One safety layer between any learned policy and any robot.**
 
-Run a VLA or imitation policy on a real robot — in the robot's own process, on a GPU box down the
-hall, or behind openpi or LeRobot — with the robot deciding what it executes, and a replayable record
-of every decision when something goes wrong.
+Run a VLA or imitation policy on a real robot (in the robot's own process, on a GPU box down the
+hall, or behind openpi or LeRobot) with the robot deciding what it executes, and a replayable
+record of every decision when something goes wrong.
 
 [![CI](https://github.com/rkd0608/neura-robot/actions/workflows/ci.yml/badge.svg)](https://github.com/rkd0608/neura-robot/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](pyproject.toml)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#project-status)
 
-[Quickstart](#quickstart) · [Bring your policy](#bring-your-policy) · [Safety model](#what-the-runtime-guarantees) · [Incident records](#incident-records) · [Docs](docs/) · [Contributing](CONTRIBUTING.md)
+[Quickstart](#quickstart) · [Set up](#set-up-your-machine) · [Try it without hardware](#try-it-without-hardware) · [Bring your policy](#bring-your-policy) · [Safety model](#what-the-runtime-guarantees) · [Tests](#run-the-tests) · [Docs](docs/)
 
 </div>
 
@@ -22,13 +22,13 @@ of every decision when something goes wrong.
 ## Why
 
 Getting a trained policy to move a real robot means writing the same code every team writes: a
-policy server, a client, an action buffer, chunk blending, reconnects, timeouts — and then debugging
-it at a customer site from logs that don't say why the arm did what it did.
+policy server, a client, an action buffer, chunk blending, reconnects, timeouts. And then
+debugging it at a customer site from logs that don't say why the arm did what it did.
 
 The hard part isn't the network call. It's deciding, thirty times a second, whether an action is
 still safe to execute: is the observation it was computed from too old? Was it computed for a task
-the operator already took over? Did the policy server answer a different request? What does the arm
-do when the answers stop?
+the operator already took over? Did the policy server answer a different request? What does the
+arm do when the answers stop?
 
 **neura-robot is that decision layer, as a library.** The robot-side runtime is the execution
 authority: every action passes its checks before it reaches the controller, whatever served it.
@@ -46,9 +46,23 @@ flowchart LR
     R <-->|lerobot://| P4[LeRobot async server]
 ```
 
+## Contents
+
+- [Quickstart](#quickstart): one minute, nothing to install but Python
+- [Set up your machine](#set-up-your-machine): every prerequisite, `make doctor`, Hugging Face
+- [Try it without hardware](#try-it-without-hardware): simulated arms, the SO-101 emulator, a
+  remote policy, policy servers in Docker, ROS 2 in Docker, incident records
+- [Run a real robot](#run-a-real-robot)
+- [Bring your policy](#bring-your-policy)
+- [What the runtime guarantees](#what-the-runtime-guarantees)
+- [Run the tests](#run-the-tests)
+- [Troubleshooting](#troubleshooting)
+- [The repository](#the-repository), [Platforms](#platforms), [Status](#project-status),
+  [Documentation](#documentation), [Contributing](#contributing)
+
 ## Quickstart
 
-No robot, GPU or model download needed — just Python 3.10 or newer:
+No robot, GPU or model download needed, just Python 3.10 or newer:
 
 ```bash
 git clone https://github.com/rkd0608/neura-robot && cd neura-robot
@@ -71,22 +85,179 @@ A simulated arm runs an `@neura.policy` through the same runtime a real robot us
   709 events; replays the same: True
 ```
 
-## Run a real robot
+## Set up your machine
 
-An SO-101 arm through LeRobot's servo driver (Python 3.12+, LeRobot's requirement):
+Everything in this repository runs on one Linux or macOS machine without a robot or a GPU. Only
+the core is required; each optional piece unlocks a part of the repository.
+
+### 1. Prerequisites
+
+| What | Needed for | Install |
+|---|---|---|
+| **Python 3.10+** (3.12+ for LeRobot) | everything | [python.org](https://www.python.org/downloads/), your package manager, or `uv python install 3.12` |
+| **git** | cloning; the simulated arms' models | your package manager |
+| **OpenGL for offscreen rendering** | the simulated arms' cameras | Debian/Ubuntu: `sudo apt-get install libegl1 libgl1`; macOS: nothing |
+| **Docker** | openpi's server and ROS 2 Jazzy, in containers | [Docker Engine or Desktop](https://docs.docker.com/get-docker/) |
+| **A Hugging Face account** (optional) | gated or private models and datasets | [huggingface.co/join](https://huggingface.co/join) |
+
+[uv](https://docs.astral.sh/uv/) is optional but faster: replace `python -m venv .venv` with
+`uv venv`, and `pip install` with `uv pip install`.
+
+### 2. Install
 
 ```bash
-pip install -e ".[so101]"
+git clone https://github.com/rkd0608/neura-robot && cd neura-robot
+python3.12 -m venv .venv && . .venv/bin/activate   # 3.10 works for everything but LeRobot
+
+make setup        # the core and the development tools: pip install -e ".[dev,openpi]"
+make setup-all    # everything (Python 3.12+): adds MuJoCo, LeRobot and the SO-101 driver
+make assets       # fetch the simulated arms' models now (else on first use), about 100 MB
+```
+
+Or pick extras yourself: `pip install -e ".[dev,openpi,sim]"`.
+
+| Extra | Adds | Notes |
+|---|---|---|
+| `dev` | pytest, ruff, mypy and the type stubs | for working on the code |
+| `openpi` | the `openpi://` transport | |
+| `sim` | MuJoCo: the simulated arms and the ALOHA tasks | needs offscreen OpenGL |
+| `so101` | LeRobot's Feetech servo driver: the SO-101 and its emulator | Python 3.12+ |
+| `lerobot` | the `lerobot://` transport, and LeRobot itself | Python 3.12+ |
+
+### 3. Check it
+
+```bash
+make doctor
+```
+
+Lists every capability (Python, extras, offscreen rendering, the arm models, Docker and the test
+images, Hugging Face, network access) as ready or missing, with the command that fixes each
+missing one.
+
+### 4. Hugging Face
+
+LeRobot policies and datasets live on the [Hugging Face Hub](https://huggingface.co/lerobot). The
+`lerobot` and `so101` extras install `huggingface_hub` and its `hf` command.
+
+```bash
+hf auth login            # only for gated or private repositories; public ones need no account
+export HF_HOME=~/hf      # optional: where models and datasets are cached (~/.cache/huggingface)
+hf download lerobot/act_aloha_sim_transfer_cube_human     # e.g. fetch a public policy ahead
+```
+
+Behind a firewall or proxy, allow `huggingface.co` and `*.hf.co` (where the files are served
+from). The tests themselves never download from the Hub: they build small synthetic checkpoints.
+
+## Try it without hardware
+
+Each of these runs on a laptop. Start with the simulated arm; it shows the whole loop.
+
+### A simulated arm: Franka Panda, UR5e, Kinova Gen3, xArm7 or SO-ARM100
+
+Accurate models from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie),
+driven by `neura-arm` through the same runtime and robot process as a real arm:
+
+```bash
+pip install -e ".[sim]"
+neura-arm run examples/robots/panda-sim.yaml
+```
+
+Type `arm` and the Panda waves (`examples/policies/panda_wave.py`); `status` prints where every
+joint is; `takeover` stops the policy and holds; `quit` exits. Change `model:` to `ur5e`,
+`kinova_gen3`, `xarm7` or `so_arm100` for another arm.
+
+There are no contract files for these: the arm's robot profile is read from its model, and the
+policy's contracts are inferred from what its `@neura.policy` declares, with limits from how fast
+it runs on your machine. A policy that can't keep up, or whose chunks don't fit the arm, is
+refused before the arm moves.
+
+### An SO-101 on an emulated servo bus
+
+LeRobot's real SO-101 driver, talking to an emulator of the arm's servo bus on a pseudo-terminal
+(`so101` extra, Python 3.12+). In one terminal:
+
+```bash
+neura-arm-emulator --calibration-out examples/robots/calibration/so101-a.json
+# prints the pseudo-terminal, e.g. /dev/pts/3: put it in examples/robots/so101-emulated.yaml
+```
+
+In another:
+
+```bash
+neura-arm run examples/robots/so101-emulated.yaml
+```
+
+Same commands: `arm`, `status`, `takeover`, `incident`, `quit`.
+
+### A policy on another machine
+
+Serve any `@neura.policy` class over the network, and point a robot at it. On the GPU machine
+(here, a third terminal):
+
+```bash
+neura-robot serve examples/policies/mid_range.py                   # loopback: no token needed
+NEURA_SERVE_TOKEN=... neura-robot serve picker.py --listen 0.0.0.0:50061 --device cuda
+```
+
+On the robot (the emulated SO-101 above):
+
+```bash
+neura-arm run examples/robots/so101-emulated.yaml --policy neura://127.0.0.1:50061
+```
+
+Beyond loopback the server refuses to start without `NEURA_SERVE_TOKEN`, and robots send the same
+token from their environment.
+
+### openpi's and LeRobot's own policy servers
+
+`openpi://` and `lerobot://` talk to those projects' servers, unmodified. To run them:
+
+- **openpi**: follow [openpi's instructions](https://github.com/Physical-Intelligence/openpi) to
+  serve a checkpoint (`scripts/serve_policy.py`), then `--policy openpi://gpu-box:8000` with an
+  `openpi:` block naming its inputs ([docs/policies.md](docs/policies.md)). The test image
+  `make test-docker` builds runs openpi's own server around a stand-in policy, with no GPU.
+- **LeRobot**: `python -m lerobot.async_inference.policy_server --host=0.0.0.0 --port=8080`
+  (the `lerobot` extra), then `--policy lerobot://gpu-box:8080` with a `lerobot:` block naming the
+  policy type and checkpoint, a Hub name such as `lerobot/act_aloha_sim_transfer_cube_human`.
+
+### ROS 2, in Docker
+
+A simulated ROS 2 Jazzy arm in one container, the relay node in another, `neura-arm` on your
+machine driving it while packets are dropped and the link is cut:
+
+```bash
+make test-docker      # builds the openpi and ROS 2 images and runs both scenarios
+```
+
+To drive your own ROS 2 robot, see [docs/ros2.md](docs/ros2.md).
+
+### Incident records
+
+Every robot above keeps the last ~30 seconds of what its runtime saw, was told and decided. A
+fault, or typing `incident`, writes it to `incidents/` as [MCAP](https://mcap.dev):
+
+```bash
+neura-robot replay incidents/*.mcap      # a fresh runtime must decide exactly the same
+```
+
+Open a record in [Foxglove](https://foxglove.dev) or [Rerun](https://rerun.io) to see it. See
+[docs/incidents.md](docs/incidents.md).
+
+## Run a real robot
+
+An SO-101 through LeRobot's servo driver (`so101` extra, Python 3.12+):
+
+```bash
 neura-arm check examples/robots/so101-arm.yaml --robot-profile examples/contracts/so101.robot.yaml
 neura-arm run examples/robots/so101-arm.yaml --policy examples/policies/mid_range.py
 ```
 
 `check` connects without moving anything and prints where every joint is. `run` waits for you:
-type `arm` to start, `takeover` to stop the policy and hold, `incident` to save a record, `quit` to
-exit. No hardware? `neura-arm-emulator` emulates the arm's servo bus on a pseudo-terminal.
+type `arm` to start, `takeover` to stop the policy and hold, `incident` to save a record, `quit`
+to exit.
 
-ROS 2 robots work too, through a small relay node that runs on the robot's own ROS Python — see
-[docs/ros2.md](docs/ros2.md).
+ROS 2 robots work through a small relay node that runs on the robot's own ROS Python (Humble or
+newer): see [docs/ros2.md](docs/ros2.md). Keep a hand on the e-stop the first time.
 
 ## Bring your policy
 
@@ -100,7 +271,7 @@ for all of them, and each passes the same end-to-end test.
 | openpi's policy server | `openpi://gpu-box:8000` | Unmodified server; map input names in the config |
 | LeRobot's async server | `lerobot://gpu-box:8080` | Unmodified server; replies decoded without unsafe unpickling |
 
-An `@neura.policy` is a class with an `act` method — bring weights from anything:
+An `@neura.policy` is a class with an `act` method; bring weights from anything:
 
 ```python
 import numpy as np
@@ -117,7 +288,7 @@ class Picker:
         return self.model(observation)  # (chunk_length, action features)
 ```
 
-Before the arm is even connected, the policy is checked against the robot's contracts — a policy
+Before the arm is even connected, the policy is checked against the robot's contracts: a policy
 whose chunks don't fit the robot never gets to start. See [docs/policies.md](docs/policies.md).
 
 ## What the runtime guarantees
@@ -128,7 +299,7 @@ whose chunks don't fit the robot never gets to start. See [docs/policies.md](doc
 - **No action from a finished task executes.** Every task has an epoch; a takeover, stop or reset
   starts a new one and fences everything in flight.
 - **Answers are matched to their requests.** A late or mismatched reply is dropped, not
-  mistaken for the current one — including on openpi's and LeRobot's wires, which carry no IDs.
+  mistaken for the current one, including on openpi's and LeRobot's wires, which carry no IDs.
 - **Losing the policy is handled.** When fresh actions run out, the robot holds; past the grace
   period it faults, applies its fault response and latches until an operator resets it.
 - **Out-of-range and non-finite actions never reach the controller.**
@@ -139,38 +310,75 @@ runtime in every end-to-end test. Details: [docs/safety.md](docs/safety.md).
 > neura-robot is not a safety-rated controller. It works *inside* the robot's own certified safety
 > functions (e-stops, torque limits, safety-rated monitored stops), never instead of them.
 
-## Incident records
-
-Every robot keeps the last ~30 seconds of what its runtime saw, was told and decided. When a fault
-latches — or the operator types `incident` — that becomes an [MCAP](https://mcap.dev) file you can
-open in [Foxglove](https://foxglove.dev) or Rerun, and replay:
+## Run the tests
 
 ```bash
-neura-robot replay incidents/arm-1-20261031T120000-STARVATION_GRACE_EXHAUSTED.mcap
-# arm-1-…mcap: replays the same (709 events: 60 commanded, 1 fault, …)
+make check         # what CI runs on every Python: lint, types, tests, the quickstart
+make test          # just the tests; every skipped test says what it needs
+make test-docker   # openpi's own server and ROS 2 Jazzy under packet loss, in Docker
+make help          # every task
 ```
 
-A fresh runtime fed the record's inputs must make exactly the same decisions, so every incident in
-the field can become a regression test. Images are off by default and nothing leaves the machine.
-See [docs/incidents.md](docs/incidents.md).
+| Tests | Run when | Needs |
+|---|---|---|
+| Runtime, contracts, transports, incident records | always | the core |
+| Simulated arms and ALOHA | `sim` installed | offscreen OpenGL; git for the models |
+| SO-101 driver against the emulated bus | `so101` installed | Python 3.12+ |
+| LeRobot's own async server | `lerobot` installed | Python 3.12+ |
+| openpi's own server, ROS 2 Jazzy | `make test-docker` | Docker, with `NET_ADMIN` allowed |
+
+`pytest packages/neura-runtime` runs one package; `pytest -k incident` runs by name. Tests treat
+warnings as errors, and the timing-sensitive ones assume the machine isn't busy with something
+else. CI runs `make check` on Python 3.10 to 3.13 on x86-64 and arm64, the extras on 3.12, the
+Docker tests, and an install of the built wheel from scratch.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `MUJOCO_GL=egl, but libEGL is not installed` | `sudo apt-get install libegl1 libgl1`, or `export MUJOCO_GL=osmesa` with `libosmesa6` |
+| `fetching the Menagerie models needs git`, or the fetch fails | install git; offline, clone [mujoco_menagerie](https://github.com/google-deepmind/mujoco_menagerie) elsewhere and `export NEURA_MENAGERIE=/path/to/it` |
+| `cannot drive this robot: a pass takes ... ms` | the policy is too slow for its chunk length on this machine: longer chunks, or a faster device |
+| LeRobot won't install | it needs Python 3.12+: make the virtual environment with `python3.12` |
+| `401` or `403` from Hugging Face | `hf auth login`, and accept the model's terms on its Hub page if it is gated |
+| Hugging Face or GitHub unreachable | allow `huggingface.co`, `*.hf.co` and `github.com` through your proxy or firewall |
+| Docker tests skipped | start Docker, `make test-docker` (it builds the images and sets their variables) |
+| The ROS 2 test fails to drop packets | Docker must allow `--cap-add NET_ADMIN` (rootless Docker may not) |
+| Timing tests fail on a busy machine | run them alone; they assume the CPU isn't shared with a heavy job |
+
+Still stuck? `make doctor`, then [open an issue](https://github.com/rkd0608/neura-robot/issues/new/choose)
+with its output.
+
+## The repository
+
+| Path | What it is |
+|---|---|
+| `packages/neura-runtime` | the runtime, policy transports, incident records (`neura_runtime`) |
+| `packages/neura-robots` | robots: SO-101, ROS 2, simulated arms (`sim/`), ALOHA, the robot process |
+| `packages/neura-contracts` | contract documents and their compatibility check (`neura_contracts`) |
+| `packages/neura-proto` | the wire protocol, generated from `proto/neura/v1` |
+| `examples/` | contracts, robot configurations, example policies, the quickstart |
+| `scripts/doctor.py` | `make doctor` |
+| `docs/` | the documentation |
 
 ## Platforms
 
 | | |
 |---|---|
 | Python | 3.10, 3.11, 3.12, 3.13 (LeRobot extras: 3.12+) |
-| OS | Linux on x86-64 and arm64 (tested in CI on both; not yet on a Jetson) |
-| Robots | SO-101 (LeRobot driver), ROS 2 position-controlled arms (tested on Jazzy; the relay is written for Humble's Python 3.10 too), simulated ALOHA (MuJoCo) |
+| OS | Linux on x86-64 and arm64 (tested in CI on both; not yet on a Jetson); macOS for development |
+| Robots | SO-101 (LeRobot driver), ROS 2 position-controlled arms (tested on Jazzy; the relay is written for Humble's Python 3.10 too), simulated: Franka Panda, UR5e, Kinova Gen3, xArm7, SO-ARM100, ALOHA |
 | Policy servers | `neura-robot serve`, openpi, LeRobot async inference |
 
 ## Project status
 
 **Alpha.** The runtime's safety rules are tested end to end on emulated and simulated robots, over
 real policy servers and lossy networks. They have not yet been qualified on production hardware;
-APIs may change before 1.0. What is planned next is in [CHANGELOG.md](CHANGELOG.md#roadmap).
+APIs may change before 1.0. What's planned is in the [roadmap issue](https://github.com/rkd0608/neura-robot/issues/3)
+and [CHANGELOG.md](CHANGELOG.md#roadmap).
 
-neura-robot is the open-source core of Neura by NucleiLabs, which adds the site layer for fleets: shared GPU serving, rollouts with shadow tests and rollback, and on-site data
-capture.
+neura-robot is the open-source core of Neura by NucleiLabs, which adds the site layer for fleets:
+shared GPU serving, rollouts with shadow tests and rollback, and on-site data capture.
 
 ## Documentation
 
@@ -182,13 +390,15 @@ capture.
 | [Safety model](docs/safety.md) | What the runtime guarantees, and what it doesn't |
 | [Incident records](docs/incidents.md) | Recording, the MCAP layout, replay |
 | [ROS 2](docs/ros2.md) | The relay node and ROS 2 robots |
-| [Development](docs/development.md) | Running the tests, including Docker and hardware-free ones |
+| [Development](docs/development.md) | Working on neura-robot: layout, tests, regenerating the protocol |
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go
-privately through [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), and
+[good first issues](https://github.com/rkd0608/neura-robot/labels/good%20first%20issue) to start
+with. Security reports go privately through [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache-2.0](LICENSE). Copyright 2026 NucleiLabs.
+[Apache-2.0](LICENSE). Copyright 2026 NucleiLabs. The simulated arms' models are MuJoCo
+Menagerie's, under their own licenses (Apache-2.0 or BSD-3-Clause), fetched, never bundled.

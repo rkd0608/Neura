@@ -1,4 +1,4 @@
-"""Time for the simulated ALOHA.
+"""Time for a simulated robot (any ``scene.Scene``).
 
 ``LockstepWorld``: the physics advances one control period each time the robot's control loop
 ticks (``advance``). Deterministic; for tests.
@@ -15,17 +15,19 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
-from neura_robots.aloha import DT, AlohaSim
+from neura_robots.sim.scene import Scene
+
+S = TypeVar("S", bound=Scene)
 
 
-class LockstepWorld:
-    def __init__(self, sim: AlohaSim) -> None:
+class LockstepWorld(Generic[S]):
+    def __init__(self, sim: S) -> None:
         self.sim = sim
         self.max_steps: int | None = None
 
@@ -51,7 +53,7 @@ class LockstepWorld:
     def targets(self) -> NDArray[np.float64]:
         return self.sim.targets()
 
-    def render(self, camera: str = "top") -> NDArray[np.uint8]:
+    def render(self, camera: str) -> NDArray[np.uint8]:
         return self.sim.render(camera)
 
     @property
@@ -66,10 +68,10 @@ class LockstepWorld:
         self.sim.close()
 
 
-class RealTimeWorld:
-    def __init__(self, sim: AlohaSim, period_s: float = DT) -> None:
+class RealTimeWorld(Generic[S]):
+    def __init__(self, sim: S, period_s: float | None = None) -> None:
         self.sim = sim
-        self.period_s = period_s
+        self.period_s = sim.dt if period_s is None else period_s
         self.max_steps: int | None = None
         self.late_steps = 0
         self._lock = threading.Lock()
@@ -81,9 +83,9 @@ class RealTimeWorld:
 
     # --- the clock -------------------------------------------------------------------------------
 
-    def start(self) -> RealTimeWorld:
+    def start(self) -> RealTimeWorld[S]:
         self._running = True
-        self._thread = threading.Thread(target=self._run, name="aloha-world", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="sim-world", daemon=True)
         self._thread.start()
         return self
 
@@ -146,7 +148,7 @@ class RealTimeWorld:
         with self._lock:
             return self.sim.targets()
 
-    def render(self, camera: str = "top") -> NDArray[np.uint8]:
+    def render(self, camera: str) -> NDArray[np.uint8]:
         self.copy_state(self._shadow)
         return self.sim.render(camera, data=self._shadow)
 

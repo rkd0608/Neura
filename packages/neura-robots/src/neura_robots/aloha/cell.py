@@ -1,7 +1,7 @@
 """``neura-aloha-cell``: a robot cell of simulated ALOHAs served by a Neura site, running their
 task back to back, and a page to watch them.
 
-Every robot is the simulated ALOHA (``aloha.arm``) behind the real robot runtime and robot-side
+Every robot is the simulated ALOHA (``sim.arm``) behind the real robot runtime and robot-side
 process (``process.AssignedArm``), on its own thread as on its own computer: it connects to the
 site gateway with mutual TLS, runs the revision the site assigns it, and switches revisions
 between tasks, never during one. The cell's controller does what a cell's PLC and its operator
@@ -44,17 +44,18 @@ from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlparse
 
-os.environ.setdefault("MUJOCO_GL", "egl")
+import neura_robots.sim  # noqa: F401 - picks MuJoCo's OpenGL backend before MuJoCo loads
 
+# isort: split
 import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
 from neura_contracts import RobotProfile
 from neura_robots.aloha import AlohaSim, Task
-from neura_robots.aloha.arm import AlohaSimArm
-from neura_robots.aloha.world import RealTimeWorld
 from neura_robots.process import AssignedArm, OperatorInbox
+from neura_robots.sim.arm import SimArm
+from neura_robots.sim.world import RealTimeWorld
 from neura_runtime.capture import Outcome as EpisodeOutcome
 from neura_runtime.grpc_client import RobotCredentials
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
@@ -92,7 +93,12 @@ class Camera:
     watches. Shadows and reflections are off: the view is for people, not for the policy."""
 
     def __init__(
-        self, world: RealTimeWorld, *, fps: float = 10.0, width: int = 640, height: int = 480
+        self,
+        world: RealTimeWorld[AlohaSim],
+        *,
+        fps: float = 10.0,
+        width: int = 640,
+        height: int = 480,
     ) -> None:
         self.world = world
         self.fps = fps
@@ -179,7 +185,7 @@ class CellRobot:
         self.world = RealTimeWorld(AlohaSim(task))
         self.world.reset(first_seed)  # the scene, still, until the first task
         self.inbox = OperatorInbox()
-        self.arm: AlohaSimArm | None = None
+        self.arm: SimArm | None = None
         self.assigned = AssignedArm(
             self._open_arm,
             name,
@@ -212,8 +218,8 @@ class CellRobot:
         # The robot process's hints are for a terminal ("- type arm to start a task").
         self.lines.append((time.time(), text.split(" - type ", 1)[0]))
 
-    def _open_arm(self, profile: RobotProfile) -> AlohaSimArm:
-        arm = AlohaSimArm(self.world, profile)
+    def _open_arm(self, profile: RobotProfile) -> SimArm:
+        arm = SimArm(self.world, profile)
         arm.connect()
         self.arm = arm
         return arm

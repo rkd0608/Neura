@@ -181,7 +181,7 @@ def _run_system(
     ctx: Context, system: str, seeds: list[int], scenario: Any = None, tag: str = ""
 ) -> list[Any]:
     from neura_robots.aloha import AlohaSim
-    from neura_robots.aloha.world import RealTimeWorld
+    from neura_robots.sim.world import RealTimeWorld
 
     args = ctx.args
     if system in ("lerobot-eval", "lerobot-realtime"):

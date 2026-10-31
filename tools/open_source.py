@@ -163,7 +163,7 @@ def check(dest: Path) -> int:
             steps = [
                 ["ruff", "check", "."],
                 ["ruff", "format", "--check", "."],
-                ["mypy", "packages", "examples"],
+                ["mypy", "packages", "examples", "scripts"],
                 ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"],
                 ["python", "examples/quickstart.py"],
             ]

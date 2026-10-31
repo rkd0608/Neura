@@ -1,8 +1,9 @@
-"""The simulated ALOHA as a robot integration: what ``neura-arm``'s process, the runtime and the
-qualification harness see of a real arm (``So101Arm``), on the MuJoCo scene.
+"""A simulated robot as a robot integration: what ``neura-arm``'s process, the runtime and the
+qualification harness see of a real arm (``So101Arm``), on a MuJoCo scene (``scene.Scene``: the
+simulated ALOHA, a Menagerie arm).
 
 The runtime commands it and reads it exactly as it would a real arm. Time is the world's
-(``aloha.world``): in a ``RealTimeWorld`` the physics advances on its own clock, in a
+(``sim.world``): in a ``RealTimeWorld`` the physics advances on its own clock, in a
 ``LockstepWorld`` one control period per tick of the robot process (``advance``, a tick hook).
 Either way it advances with whatever position targets are current, as servos keep tracking
 their last goal while the policy computes, while a chunk is late and while the robot holds.
@@ -14,30 +15,40 @@ commands) and ``release_authority()`` (the actuator is taken away).
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import Counter, deque
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
 from neura_contracts import FaultResponse, RobotProfile
-from neura_robots.aloha import JOINTS, AlohaSim
-from neura_robots.aloha.contracts import command_range
-from neura_robots.aloha.world import LockstepWorld, RealTimeWorld
+from neura_robots.sim.scene import Scene
+from neura_robots.sim.world import LockstepWorld, RealTimeWorld
 from neura_robots.so101 import ArmError, Sample
 from neura_runtime.interfaces import CommandResult, ImageFrame, SensorSnapshot
 
 CameraFault = Literal["frozen", "unplugged"]
 
 
-World = LockstepWorld | RealTimeWorld
+World = LockstepWorld[Any] | RealTimeWorld[Any]
 
 
-class AlohaSimArm:
-    def __init__(self, world: World | AlohaSim, robot: RobotProfile) -> None:
-        self.world: World = LockstepWorld(world) if isinstance(world, AlohaSim) else world
+class SimArm:
+    """``camera_fps``: in a real-time world, the cameras render on their own thread at this rate,
+    as real cameras run beside the control loop, and a capture takes the latest frame. Unset, a
+    capture renders its frames (deterministic, for a lockstep world)."""
+
+    def __init__(
+        self, world: World | Scene, robot: RobotProfile, *, camera_fps: float | None = None
+    ) -> None:
+        self.world: World = LockstepWorld(world) if isinstance(world, Scene) else world
+        self.camera_fps = camera_fps if isinstance(self.world, RealTimeWorld) else None
+        self._camera: threading.Thread | None = None
+        self._latest: dict[str, ImageFrame] = {}
+        self._closing = threading.Event()
         self.sim = self.world.sim
         self._use(robot)
         self.counters: Counter[str] = Counter()
@@ -47,7 +58,7 @@ class AlohaSimArm:
         self.fail_commands = False
         self._authority = False
         self._commanded: dict[str, float] | None = None
-        self._frame: ImageFrame | None = None
+        self._frames: dict[str, ImageFrame] = {}
         self._clock: Callable[[], int] = lambda: time.monotonic_ns() // 1000
 
     def _use(self, robot: RobotProfile) -> None:
@@ -64,6 +75,9 @@ class AlohaSimArm:
         self._authority = True
         self._commanded = self._named(self.world.targets())
         self.sample()
+        if self.camera_fps and self.profile.spec.cameras and self._camera is None:
+            self._camera = threading.Thread(target=self._film, name="sim-camera", daemon=True)
+            self._camera.start()
 
     def adopt(self, robot: RobotProfile) -> None:
         problems = self.contract_problems(robot)
@@ -84,27 +98,32 @@ class AlohaSimArm:
         spec = (robot or self.profile).spec
         problems = []
         names = [c.name for c in spec.command_interface]
-        if names != JOINTS:
-            problems.append(f"commands must be the 14 ALOHA joints in order ({', '.join(JOINTS)})")
+        joints = self.sim.joints
+        if names != joints:
+            problems.append(
+                f"commands must be the scene's {len(joints)} in order ({', '.join(joints)})"
+            )
         else:
-            for index, feature in enumerate(spec.command_interface):
-                unit, low, high = command_range(self.sim, index)
-                if feature.unit != unit:
-                    problems.append(f"{feature.name}: unit {feature.unit}, the arm uses {unit}")
-                elif feature.min < low - 1e-5 or feature.max > high + 1e-5:
+            for feature, command in zip(spec.command_interface, self.sim.commands, strict=True):
+                if feature.unit != command.unit:
+                    problems.append(
+                        f"{feature.name}: unit {feature.unit}, the arm uses {command.unit}"
+                    )
+                elif feature.min < command.low - 1e-5 or feature.max > command.high + 1e-5:
                     problems.append(
                         f"{feature.name}: profile allows [{feature.min:g}, {feature.max:g}], "
-                        f"the actuator takes [{low:g}, {high:g}]"
+                        f"the actuator takes [{command.low:g}, {command.high:g}]"
                     )
         for state in spec.state_features:
-            if state.name not in JOINTS:
+            if state.name not in joints:
                 problems.append(f"{state.name}: the arm does not report it")
         for camera in spec.cameras:
-            if camera.role != "top":
-                problems.append(f"camera {camera.role}: the simulated ALOHA serves the top camera")
+            if camera.role not in self.sim.cameras:
+                served = ", ".join(self.sim.cameras) or "none"
+                problems.append(f"camera {camera.role}: the scene serves {served}")
             elif (camera.width, camera.height) != (self.sim.width, self.sim.height):
                 problems.append(
-                    f"camera top: {camera.width}x{camera.height}, the scene renders "
+                    f"camera {camera.role}: {camera.width}x{camera.height}, the scene renders "
                     f"{self.sim.width}x{self.sim.height}"
                 )
         unsupported = set(spec.fault_responses) - {
@@ -119,11 +138,16 @@ class AlohaSimArm:
         """The actuator is taken away (a test's lost-lock fault)."""
         self._authority = False
 
-    def close(self, *, hold: bool | None = None) -> None:
-        if hold is not False and self._authority:
-            self._hold()
+    def close(self, *, hold: bool | None = None) -> bool:
+        """Hold (unless ``hold`` is False), then let go and stop the world. Returns whether the
+        hold took."""
+        held = hold is not False and self._authority and self._hold()
         self._authority = False
+        self._closing.set()
+        if self._camera is not None:
+            self._camera.join(timeout=5)
         self.world.close()
+        return held
 
     # --- Controller ------------------------------------------------------------------------------
 
@@ -162,23 +186,43 @@ class AlohaSimArm:
     def capture(self, now_us: int) -> SensorSnapshot:
         positions = self.world.qpos()
         self._sample(positions, now_us)
-        state = {name: float(positions[JOINTS.index(name)]) for name in self.states}
+        joints = self.sim.joints
+        state = {name: float(positions[joints.index(name)]) for name in self.states}
         images: dict[str, ImageFrame] = {}
-        if any(c.role == "top" for c in self.profile.spec.cameras):
+        for camera in self.profile.spec.cameras:
+            role = camera.role
             if self.camera_fault == "unplugged":
-                self.counters["camera_top_no_frame"] += 1
-            elif self.camera_fault == "frozen" and self._frame is not None:
-                images["top"] = self._frame
+                self.counters[f"camera_{role}_no_frame"] += 1
+            elif self.camera_fault == "frozen" and role in self._frames:
+                images[role] = self._frames[role]
+            elif self._camera is not None:
+                if role in self._latest:
+                    images[role] = self._frames[role] = self._latest[role]
             else:
-                image = self.world.render("top")
-                self._frame = ImageFrame(
-                    width=image.shape[1],
-                    height=image.shape[0],
-                    data=np.ascontiguousarray(image, dtype=np.uint8).tobytes(),
-                    capture_time_us=now_us,
-                )
-                images["top"] = self._frame
+                images[role] = self._frames[role] = self._frame(role, now_us)
         return SensorSnapshot(state=state, state_time_us=now_us, images=images)
+
+    def _frame(self, role: str, now_us: int) -> ImageFrame:
+        image = self.world.render(role)
+        return ImageFrame(
+            width=image.shape[1],
+            height=image.shape[0],
+            data=np.ascontiguousarray(image, dtype=np.uint8).tobytes(),
+            capture_time_us=now_us,
+        )
+
+    def _film(self) -> None:
+        """The camera thread: every camera, every 1/fps, stamped when its state was taken."""
+        assert self.camera_fps is not None
+        period = 1 / self.camera_fps
+        try:
+            while not self._closing.is_set():
+                started = time.monotonic()
+                for camera in self.profile.spec.cameras:
+                    self._latest[camera.role] = self._frame(camera.role, self._clock())
+                self._closing.wait(max(0.0, period - (time.monotonic() - started)))
+        finally:
+            self.sim.release_renderer()
 
     # --- the physics and telemetry ---------------------------------------------------------------
 
@@ -196,6 +240,5 @@ class AlohaSimArm:
         at = self._clock() if now_us is None else now_us
         self.telemetry.append(Sample(at, self._named(positions), dict(self._commanded or {})))
 
-    @staticmethod
-    def _named(values: NDArray[np.float64]) -> dict[str, float]:
-        return {name: float(v) for name, v in zip(JOINTS, values, strict=True)}
+    def _named(self, values: NDArray[np.float64]) -> dict[str, float]:
+        return {name: float(v) for name, v in zip(self.sim.joints, values, strict=True)}

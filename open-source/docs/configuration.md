@@ -16,7 +16,7 @@ policy:                           # where the policy runs; --policy URI override
   uri: ../policies/mid_range.py
   timeout_s: 2.0                  # per request, for policies over the network
 
-arm: { type: so101, ... }         # or { type: ros2, ... }: see below
+arm: { type: so101, ... }         # or ros2, or mujoco (a simulated arm): see below
 cameras: { front: {...}, wrist: {...} }
 instruction: pick up the red cube # for language-conditioned policies; or type `instruction ...`
 incidents_dir: incidents          # where incident records go; null keeps none
@@ -63,6 +63,15 @@ stop path, for the `customer_stop_path` fault response), `lock_dir`.
 **ROS 2** (`type: ros2`): `socket` (the relay's), `joints` (each ROS joint mapped to the robot
 profile's name and unit: `profile = ros × scale + offset`), `state_timeout_ms` (older joint states
 mean the robot can't be driven), `connect_timeout_s`. See [ROS 2](ros2.md).
+
+**A simulated arm** (`type: mujoco`, needs the `sim` extra): `model` (`franka_panda`, `ur5e`,
+`kinova_gen3`, `xarm7` or `so_arm100`, from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)).
+It describes itself: leave out `revision:` and `cameras:`,
+and its robot profile is read from the model (every actuator in its range, a front camera), the
+policy's contracts inferred from what its `@neura.policy` declares, with limits from how fast it
+runs on this machine. A remote policy (`neura://`, `openpi://`, `lerobot://`) needs `revision:`.
+The models are fetched once with git (about 100 MB, into `~/.cache/neura-robot`), or read from
+the Menagerie checkout `NEURA_MENAGERIE` names. Example: [`panda-sim.yaml`](../examples/robots/panda-sim.yaml).
 
 ## `cameras`
 

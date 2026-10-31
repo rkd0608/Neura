@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from neura_contracts import FaultResponse, ReasonCode
+from neura_runtime.interfaces import ImageFrame, SensorSnapshot
 from neura_runtime.runtime import (
     AnnounceEpoch,
     RuntimeConfig,
@@ -317,6 +318,25 @@ def test_incomplete_sensors_send_nothing(harness: Harness, problem: str) -> None
     out = harness.tick()
     assert not [i for i in out if isinstance(i, SendObservation)]
     assert rt.counters[ReasonCode.OBSERVATION_INCOMPLETE.value] == 1
+
+
+def test_a_camera_the_policy_does_not_read_holds_nothing_back(harness: Harness) -> None:
+    rt = harness.runtime
+    rt.attach_session("ses_a", 1)
+    rt.arm(harness.now)
+    rt.outbox.clear()
+    capture = harness.sensors.capture
+
+    def with_a_stale_camera_the_policy_ignores(now_us: int) -> SensorSnapshot | None:
+        snapshot = capture(now_us)
+        assert snapshot is not None
+        stale = now_us - 10 * RuntimeConfig().max_sensor_skew_us
+        snapshot.images["overhead"] = ImageFrame(4, 4, bytes(48), stale)
+        return snapshot
+
+    harness.sensors.capture = with_a_stale_camera_the_policy_ignores  # type: ignore[method-assign]
+    out = harness.tick()
+    assert [i for i in out if isinstance(i, SendObservation)]
 
 
 def test_instruction_rules(make_binding: Any) -> None:

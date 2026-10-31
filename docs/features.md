@@ -193,9 +193,20 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   as `neura-ros2-test:dev` and set `NEURA_TEST_ROS2_IMAGE`
 - Docs: `site/docs/ros2.md`; example: `examples/robots/ros2-arm.yaml`
 
+### Simulated arms: MuJoCo Menagerie (§30.2)
+
+- Code: `packages/neura-robots/src/neura_robots/sim/` (`scene.py` the scene interface and its
+  robot profile, `world.py` its clock, `arm.py` the arm the runtime drives, `menagerie.py` the
+  Panda, UR5e, Gen3, xArm7 and SO-ARM100 fetched at a pinned commit), `arm: type: mujoco` in
+  `packages/neura-robots/src/neura_robots/cli.py`, contracts inferred from the model and the
+  policy by `neura_robots.policies.inferred_binding`
+- Tests: `packages/neura-robots/tests/test_menagerie.py` (every arm driven with inferred
+  contracts, takeover, invariants)
+- See it: `neura-arm run open-source/examples/robots/panda-sim.yaml`, then `arm` and `status`
+
 ### The simulated ALOHA, the site kit and closed-loop evidence (§10.1, §20.11)
 
-- Code: `packages/neura-robots/src/neura_robots/aloha/`, `packages/neura-bench/src/neura_bench/evidence/`,
+- Code: `packages/neura-robots/src/neura_robots/aloha/` (on the scene in `sim/`), `packages/neura-bench/src/neura_bench/evidence/`,
   `deploy/site-demo/`
 - Tests: `packages/neura-robots/tests/test_aloha.py`, `packages/neura-bench/tests/test_evidence.py`,
   `packages/neura-robots/tests/test_cell.py`

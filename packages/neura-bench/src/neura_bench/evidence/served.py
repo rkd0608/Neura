@@ -25,10 +25,10 @@ from numpy.typing import NDArray
 from neura_bench.evidence.results import EpisodeResult
 from neura_bench.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.aloha import JOINTS, AlohaSim
-from neura_robots.aloha.arm import AlohaSimArm
 from neura_robots.aloha.contracts import Deployment
-from neura_robots.aloha.world import LockstepWorld, RealTimeWorld
 from neura_robots.process import ArmProcess
+from neura_robots.sim.arm import SimArm
+from neura_robots.sim.world import LockstepWorld, RealTimeWorld
 from neura_runtime import tensors
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
 from neura_sim.chaos import FaultProxy
@@ -80,10 +80,10 @@ class ServedRun:
         self.progress = progress
         self.system = system
         self.sim = AlohaSim(task)  # type: ignore[arg-type]
-        self.world: RealTimeWorld | LockstepWorld = (
+        self.world: RealTimeWorld[AlohaSim] | LockstepWorld[AlohaSim] = (
             RealTimeWorld(self.sim) if realtime else LockstepWorld(self.sim)
         )
-        self.arm = AlohaSimArm(self.world, deployment.binding.robot)
+        self.arm = SimArm(self.world, deployment.binding.robot)
         self.process: ArmProcess | None = None
         self.site: LocalSite | None = None
         # (state, image, actions) of accepted chunks, for parity with LeRobot alone

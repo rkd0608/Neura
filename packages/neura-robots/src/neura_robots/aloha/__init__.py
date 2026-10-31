@@ -21,8 +21,6 @@ What it reproduces, from gym-aloha 0.1.5 and dm_control 1.0:
 
 from __future__ import annotations
 
-import os
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -30,11 +28,10 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-# MuJoCo picks its OpenGL backend when it is imported: headless machines render with EGL (or
-# OSMesa, if MUJOCO_GL says so).
-os.environ.setdefault("MUJOCO_GL", "egl")
+from neura_robots.sim.scene import Command, Scene
 
-import mujoco
+# isort: split
+import mujoco  # after neura_robots.sim, which picks MuJoCo's OpenGL backend
 
 ASSETS = Path(__file__).parent / "assets"
 DT = 0.02  # one control period, 50 Hz
@@ -99,8 +96,16 @@ class Step:
     success: bool
 
 
-class AlohaSim:
+# The gripper's command range is wider than its travel: the actuator clamps a command to the
+# finger's travel, so the range only refuses what no gripper command should be.
+GRIPPER_RANGE = (-0.25, 1.25)
+
+
+class AlohaSim(Scene):
     """One ALOHA scene. Not thread-safe: one thread steps, captures and renders."""
+
+    cameras = ("top",)
+    dt = DT
 
     def __init__(
         self, task: Task = "transfer_cube", *, width: int = 640, height: int = 480
@@ -108,19 +113,14 @@ class AlohaSim:
         if task not in ("transfer_cube", "insertion"):
             raise ValueError(f"unknown ALOHA task {task!r}")
         self.task: Task = task
-        self.width = width
-        self.height = height
-        self.model = mujoco.MjModel.from_xml_path(str(ASSETS / f"bimanual_viperx_{task}.xml"))
-        self.data = mujoco.MjData(self.model)
+        model = mujoco.MjModel.from_xml_path(str(ASSETS / f"bimanual_viperx_{task}.xml"))
+        super().__init__(model, width=width, height=height)
+        self.commands = [self._command(index) for index in range(len(JOINTS))]
         self.n_sub_steps = round(DT / self.model.opt.timestep)
         if abs(self.n_sub_steps * self.model.opt.timestep - DT) > 1e-8:
             raise ValueError("the control period is not a whole number of physics steps")
-        # One renderer per thread: its OpenGL context can be current on one thread only (an
-        # EGL context used from another fails with EGL_BAD_ACCESS).
-        self._renderers: dict[int, mujoco.Renderer] = {}
         self.reward = 0
         self.max_reward_seen = 0
-        self.steps = 0
         self.seed: int | None = None
         names = [
             mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, i) or ""
@@ -204,27 +204,17 @@ class AlohaSim:
     def render(
         self, camera: str = "top", *, data: mujoco.MjData | None = None
     ) -> NDArray[np.uint8]:
-        """The camera's view of the scene, or of ``data`` (a copy of its state), drawn with the
-        calling thread's own renderer."""
-        renderer = self._renderers.get(threading.get_ident())
-        if renderer is None:
-            renderer = mujoco.Renderer(self.model, self.height, self.width)
-            self._renderers[threading.get_ident()] = renderer
-        renderer.update_scene(self.data if data is None else data, camera=camera)
-        image: NDArray[np.uint8] = renderer.render()
-        return image
+        return super().render(camera, data=data)
 
-    def release_renderer(self) -> None:
-        """Frees the calling thread's renderer: a thread that draws calls it before it ends."""
-        renderer = self._renderers.pop(threading.get_ident(), None)
-        if renderer is not None:
-            renderer.close()
-
-    def close(self) -> None:
-        """Frees the calling thread's renderer; another thread's is freed when it ends (its
-        context cannot be made current here)."""
-        self.release_renderer()
-        self._renderers.clear()
+    def _command(self, index: int) -> Command:
+        """Command ``index`` (in ``JOINTS`` order): six joint positions in radians, in the
+        position actuators' control ranges, and a normalized gripper per arm."""
+        name = JOINTS[index]
+        if name.endswith("_gripper"):
+            return Command(name, "normalized", "gripper_position", *GRIPPER_RANGE)
+        arm, joint = divmod(index, 7)  # actuators: 8 per arm, the 6 joints then the two fingers
+        low, high = (float(v) for v in self.model.actuator_ctrlrange[arm * 8 + joint])
+        return Command(name, "rad", "absolute_joint_position", low, high)
 
     # --- dm_control's semantics ----------------------------------------------------------------
 

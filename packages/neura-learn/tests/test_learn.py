@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -229,13 +228,8 @@ def test_the_job_entry_point_runs_replay_and_training(
     assert any(line["event"] == "progress" for line in lines)
 
 
-@pytest.mark.skipif(
-    os.environ.get("MUJOCO_GL") is None
-    and not Path("/usr/lib/x86_64-linux-gnu/libEGL.so.1").exists(),
-    reason="no offscreen OpenGL for the simulated scenes",
-)
 def test_simulation_compares_two_models_on_the_same_scenes(tmp_path: Path) -> None:
-    os.environ.setdefault("MUJOCO_GL", "egl")
+    pytest.importorskip("neura_robots.sim")  # MuJoCo's OpenGL backend, or what is missing
     pytest.importorskip("mujoco")
     from neura_learn.evaluate import SimulationSuite, evaluate_simulation
 

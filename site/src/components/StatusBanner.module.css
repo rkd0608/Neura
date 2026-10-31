@@ -9,6 +9,13 @@
   font-size: 0.9rem;
 }
 
+/* Its link is told from the text by more than colour (WCAG 1.4.1). */
+.banner a {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+
 .proposed {
   --status-color: var(--warn);
   --status-background: var(--warn-soft);

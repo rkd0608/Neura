@@ -407,4 +407,5 @@ def test_the_screenshot_tool_fails_a_broken_page(tmp_path: Path) -> None:
     assert "wider than the screen" in problems
     # Like production's nginx, the site answers an unknown path with its page: the image is broken.
     assert "image did not load" in problems
+    assert "accessibility: image-alt" in problems  # axe: the image has no text alternative
     assert (out / "home-phone-dark.png").exists()

@@ -45,7 +45,8 @@ Anything a person sees must be looked at, not only tested.
 - The NucleiLabs site and the docs: `make shots` (verify runs it when they changed) serves the
   builds the way production's nginx does, with its headers and Content-Security-Policy, opens every
   page in Chromium on a desktop and a phone, and fails on a console error, an exception, a failed
-  or refused request, a request to another origin, a broken image or a page wider than a phone.
+  or refused request, a request to another origin, a broken image, a page wider than a phone, or
+  an accessibility violation (axe, WCAG 2.1 AA, e.g. text under the contrast minimum).
   Then open the screenshots in `.verify/shots/` (Read the PNGs) for the pages the change touched,
   at both sizes, and check they look right: layout, spacing, text, both themes.
 - The console: `make verify VERIFY=--e2e` runs `console/e2e/journey.spec.ts` (sign in to rollout,

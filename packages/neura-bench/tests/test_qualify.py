@@ -266,7 +266,9 @@ def test_closed_loop_episodes_on_the_emulated_arm(tmp_path: Path) -> None:
     episodes = report["episodes"]
     assert Counter(e["arm"] for e in episodes) == {"neura": 2, "local": 2}
     assert all(e["success"] for e in episodes)
-    assert all(e["actions"] >= 30 for e in episodes), episodes  # both at the control rate
-    assert all(e["fault"] is None for e in episodes), episodes
+    # Short enough that pytest prints it whole: a dict's fault would be cut off.
+    seen = [(e["arm"], e["actions"], e["fault"]) for e in episodes]
+    assert all(e["actions"] >= 30 for e in episodes), seen  # both at the control rate
+    assert all(e["fault"] is None for e in episodes), seen
     assert report["verdict"]["complete"]
     assert not report["verdict"]["non_inferior"]  # 2 episodes each prove nothing

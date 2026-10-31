@@ -28,7 +28,7 @@ from neura_learn.evaluate import (
 from neura_learn.train import Recipe, _LossLog, base_statistics, fine_tune
 
 from neura_bench.deployments import DeploymentFiles, synthetic
-from neura_runtime.capture.episode import Episode
+from neura_runtime.capture.episode import STEPS, Episode
 from neura_runtime.capture.testing import synthetic_episode
 
 
@@ -50,9 +50,13 @@ def episodes(directory: Path, files: DeploymentFiles, count: int = 3) -> list[Ep
 def test_replay_measures_how_far_a_model_is_from_what_robots_did(
     tmp_path: Path, model: DeploymentFiles
 ) -> None:
-    recorded = episodes(tmp_path / "eps", model)
+    recorded = episodes(tmp_path / "eps", model, count=4)
+    missing = recorded[3].steps()  # one state reading lost: the episode is left out, not the run
+    missing.state[5, 0] = np.nan
+    missing.save(recorded[3].directory / STEPS)
     suite = ReplaySuite(stride=4)
-    samples = replay_samples(recorded, model.binding, suite)
+    samples, skipped = replay_samples(recorded, model.binding, suite)
+    assert skipped == {"step 5 has a missing state reading": 1}
     assert samples
     assert {outcome for _, outcome, _, _ in samples} == {"success", "failure"}
 
@@ -80,6 +84,7 @@ def test_replay_measures_how_far_a_model_is_from_what_robots_did(
     report = evaluate_replay(recorded, perfect, model.binding, suite, baseline=perfect)
     assert report["verdict"] == "non_inferior"
     assert report["episodes"] == 3
+    assert report["skipped"] == skipped
 
     real = adapter_predict(model.binding, model.checkpoint)  # type: ignore[arg-type]
     report = evaluate_replay(recorded, real, model.binding, suite)
@@ -116,7 +121,7 @@ def test_a_fine_tune_produces_a_checkpoint_serving_can_load(
     assert report.losses[-1][0] == 3
     # Serving loads it with the base model's contracts and it produces chunks.
     predict = adapter_predict(model.binding, checkpoint)
-    samples = replay_samples(recorded, model.binding, ReplaySuite(stride=8))
+    samples, _ = replay_samples(recorded, model.binding, ReplaySuite(stride=8))
     (chunk,) = predict([samples[0][2]])
     assert chunk.shape == (model.binding.chunk_length, model.binding.action_dim)
     from safetensors.numpy import load_file

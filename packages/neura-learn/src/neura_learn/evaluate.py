@@ -16,6 +16,7 @@ Two suites, both run at the site, in the worker sandbox:
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -189,11 +190,12 @@ Sample = tuple[str, str, Any, NDArray[np.float32]]
 
 def replay_samples(
     episodes: Sequence[Episode], binding: ExecutionBinding, suite: ReplaySuite
-) -> list[Sample]:
+) -> tuple[list[Sample], dict[str, int]]:
     """(episode, outcome, model inputs, actions the robot executed next, in model units) at
-    every ``stride``-th recorded frame of each episode that fits the model."""
+    every ``stride``-th recorded frame of each episode that can be used for the model, and how
+    many episodes were left out, by why (as a dataset export leaves them out)."""
     from neura_adapters import ModelInputs
-    from neura_server.capture.export import fits, frames
+    from neura_server.capture.export import usable_frames
 
     horizon = suite.horizon or max(
         1,
@@ -201,13 +203,13 @@ def replay_samples(
         - binding.profile.spec.chunk.refill_threshold_actions,
     )
     samples: list[Sample] = []
+    skipped: Counter[str] = Counter()
     for episode in list(episodes)[: suite.max_episodes]:
-        if fits(episode, binding) is not None:
+        rows, problem = usable_frames(episode, binding)
+        if problem is not None:
+            skipped[problem] += 1
             continue
         steps = episode.steps()
-        rows = frames(episode, binding, steps)
-        if not rows:
-            continue
         offset = len(steps.t_us) - len(rows)  # rows start at the first recorded frame
         recorded = [i for i in range(len(rows)) if steps.frame[offset + i] >= 0]
         outcome = str(episode.manifest["outcome"]["label"])
@@ -227,7 +229,7 @@ def replay_samples(
             )
             executed = np.stack([rows[i + k]["action"] for k in range(horizon)])
             samples.append((episode.episode_id, outcome, inputs, executed))
-    return samples
+    return samples, dict(skipped)
 
 
 def replay_errors(
@@ -253,21 +255,22 @@ def evaluate_replay(
     baseline: Predict | None = None,
     baseline_binding: ExecutionBinding | None = None,
 ) -> dict[str, Any]:
-    samples = replay_samples(episodes, candidate_binding, suite)
+    samples, skipped = replay_samples(episodes, candidate_binding, suite)
     if not samples:
-        from neura_server.capture.export import fits
-
-        if any(fits(episode, candidate_binding) is None for episode in episodes):
+        if sum(skipped.values()) < min(len(episodes), suite.max_episodes):
             raise ValueError(
                 "the recorded episodes are shorter than the actions compared per prediction"
             )
-        raise ValueError("no recorded episode fits the candidate model")
+        raise ValueError(
+            "no recorded episode can be replayed on the candidate model: " + "; ".join(skipped)
+        )
     ranges = action_ranges(candidate_binding)
     report: dict[str, Any] = {
         "kind": "replay",
         "suite": {"kind": "replay", **_fields(suite)},
         "episodes": len({episode_id for episode_id, *_ in samples}),
         "episodes_offered": len(episodes),
+        "skipped": skipped,  # episodes left out, by why: counts, never their content
         "samples": len(samples),
         "candidate": replay_errors(candidate, samples, ranges, suite.batch_size).to_json(),
     }
@@ -275,7 +278,7 @@ def evaluate_replay(
         base_samples = (
             samples
             if baseline_binding is None or baseline_binding is candidate_binding
-            else replay_samples(episodes, baseline_binding, suite)
+            else replay_samples(episodes, baseline_binding, suite)[0]
         )
         base_ranges = ranges if baseline_binding is None else action_ranges(baseline_binding)
         report["baseline"] = replay_errors(

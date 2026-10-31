@@ -1842,7 +1842,9 @@ robots (§28.4, *Jobs at the site*). Three suites:
 - **Replay.** Both models on observations the site's robots recorded (§28.2). At every *n*-th
   recorded frame each model predicts a chunk, compared with the actions the robot then executed,
   in the model's units and normalized by each action's range. Errors are reported by episode
-  outcome. The candidate passes (`non_inferior`) when its mean error on successful episodes is at
+  outcome. An episode the model cannot use is left out and counted by why, by the same rule as
+  a dataset export (`usable_frames`: incomplete, another robot or camera, a missing state
+  reading). The candidate passes (`non_inferior`) when its mean error on successful episodes is at
   most the baseline's × (1 + 0.25) + 0.01, and is `inconclusive` without successful episodes. A
   replay is a regression check on real data: it can catch a candidate that drifts from behavior
   that worked, but it cannot show a candidate is better, since the baseline produced those actions.

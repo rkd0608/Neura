@@ -194,6 +194,13 @@ def test_a_silent_bus_fails_reads_and_commands(arm: So101Arm, emulator: SO101Emu
     assert arm.capture(time.monotonic_ns() // 1000) is None
     assert not arm.command(np.zeros(len(arm.commands))).ok  # its present position is unknown
     assert not arm.apply_response(FaultResponse.HOLD_POSITION)
+    assert arm.close() is False  # the hold is not confirmed, and the port is let go all the same
+    assert not arm.robot.bus.is_connected
+    port = os.path.realpath(emulator.port)
+    on_port = [
+        fd for fd in os.listdir("/proc/self/fd") if os.path.realpath(f"/proc/self/fd/{fd}") == port
+    ]
+    assert len(on_port) == 1  # the emulator's own end
 
 
 def test_a_profile_wider_than_the_calibration_is_refused(config: So101Config) -> None:

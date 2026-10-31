@@ -30,16 +30,16 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from neura_robots.qualify.episodes import add_parser as add_episodes_parser
-from neura_robots.qualify.episodes import run as run_episodes
-from neura_robots.qualify.harness import (
+from neura_bench.qualify.episodes import add_parser as add_episodes_parser
+from neura_bench.qualify.episodes import run as run_episodes
+from neura_bench.qualify.harness import (
     SCENARIOS,
     Qualification,
     QualifyConfig,
     required,
     write_report,
 )
-from neura_robots.qualify.protocol import HOLD_TOLERANCE, MARGIN, NOMINAL_S, PAIRS, PARITY_ATOL
+from neura_bench.qualify.protocol import HOLD_TOLERANCE, MARGIN, NOMINAL_S, PAIRS, PARITY_ATOL
 from neura_robots.so101 import CameraConfig, So101Config
 
 ROOT = Path(__file__).resolve().parents[5]

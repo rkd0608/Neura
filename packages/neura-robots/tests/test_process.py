@@ -17,6 +17,8 @@ from neura_contracts import ReasonCode, RobotProfile
 from neura_robots.emulator import SO101Emulator, write_calibration
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
 from neura_robots.so101 import CameraConfig, So101Arm, So101Config
+from neura_runtime.binding import load_binding
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
     DeploymentConfig,
@@ -26,8 +28,6 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
-from neura_sim.grpc_robots import load_binding
-from neura_sim.invariants import InvariantMonitor
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "contracts"
 FILES = (

@@ -27,9 +27,9 @@ pytest.importorskip("mujoco")
 
 from neura_learn import jobs
 
+from neura_bench.evidence.synthetic import write_checkpoint
 from neura_robots.aloha.cell import CellRobot
 from neura_robots.aloha.contracts import Chunking, write
-from neura_robots.evidence.synthetic import write_checkpoint
 from neura_server.capture.service import CaptureServer
 from neura_server.capture.store import EpisodeFilter, EpisodeStore
 from neura_server.config import (

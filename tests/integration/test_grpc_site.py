@@ -10,6 +10,7 @@ import grpc
 import pytest
 
 from neura.v1 import dataplane_pb2, dataplane_pb2_grpc
+from neura_runtime.binding import load_binding
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
     DeploymentConfig,
@@ -19,7 +20,7 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
 ARTIFACT = EXAMPLES / "act-so101.artifact.yaml"

@@ -61,6 +61,11 @@ dev = [
 # Real models (PyTorch, LeRobot): `uv sync --group models`. Not part of the default setup.
 models = ["neura-adapters[lerobot]", "neura-robots[so101,sim]", "neura-learn[models]"]
 
+# The packages published as the open-source neura-robot (Apache-2.0, design §30): they may depend
+# on and import only each other (tools/check_boundary.py).
+[tool.neura]
+open-source = ["neura-contracts", "neura-proto", "neura-runtime", "neura-robots"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py313"

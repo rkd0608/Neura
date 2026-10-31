@@ -1,12 +1,13 @@
 [project]
 name = "neura-bench"
 version = "0.1.0.dev0"
-description = "Neura GPU-sharing benchmarks: shared serving against dedicated baselines (design §9.5, §10)."
+description = "Neura benchmarks and evidence: shared serving against dedicated baselines (design §9.5, §10), the head-to-head against LeRobot async inference and hardware qualification (§7.1)."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "neura-adapters",
     "neura-contracts",
+    "neura-robots",
     "neura-runtime",
     "neura-server",
     "neura-sim",
@@ -16,6 +17,8 @@ dependencies = [
 
 [project.scripts]
 neura-bench = "neura_bench.cli:main"
+neura-qualify = "neura_bench.qualify.cli:main"
+neura-evidence = "neura_bench.evidence.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11,<0.14"]

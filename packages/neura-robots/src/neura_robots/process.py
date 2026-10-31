@@ -41,7 +41,7 @@ import grpc
 from neura_contracts import ContractError, FaultResponse, RobotProfile
 from neura_robots.arm import Arm
 from neura_robots.so101 import ArmError
-from neura_runtime.binding import ExecutionBinding
+from neura_runtime.binding import ExecutionBinding, binding_from_documents
 from neura_runtime.capture import CaptureConfig, Outcome, OutcomeSource, RobotCapture
 from neura_runtime.grpc_client import (
     GatewayConnection,
@@ -49,10 +49,9 @@ from neura_runtime.grpc_client import (
     fetch_assignment,
     monotonic_us,
 )
+from neura_runtime.invariants import InvariantMonitor, watch_robot
 from neura_runtime.runtime import ACTIVE_STATES, RobotRuntime, RuntimeState, TransitionError
 from neura_runtime.session import SessionClient, SessionConfig
-from neura_sim.grpc_robots import binding_from_documents, watch_robot
-from neura_sim.invariants import InvariantMonitor
 
 log = logging.getLogger("neura.arm")
 Say = Callable[[str], None]

@@ -1,7 +1,7 @@
 name: Evidence
 
 # Published policies on the scenes they were trained for, served by Neura and by the in-process
-# alternatives, with the same seeds (packages/neura-robots/src/neura_robots/evidence). Started by
+# alternatives, with the same seeds (packages/neura-bench/src/neura_bench/evidence). Started by
 # hand: it downloads checkpoints from the Hugging Face Hub and runs for tens of minutes on CPU.
 #
 # - reference: LeRobot's own lerobot-eval on gym-aloha (dm_control, Python 3.12), the protocol

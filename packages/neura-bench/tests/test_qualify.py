@@ -13,11 +13,11 @@ from typing import Any
 
 import pytest
 
+from neura_bench.qualify.cli import promotion_problems
+from neura_bench.qualify.episodes import Episode, Episodes, EpisodesConfig, schedule
+from neura_bench.qualify.harness import Qualification, QualifyConfig, ScenarioResult
+from neura_bench.qualify.protocol import MARGIN
 from neura_contracts.stats import difference_unpaired
-from neura_robots.qualify.cli import promotion_problems
-from neura_robots.qualify.episodes import Episode, Episodes, EpisodesConfig, schedule
-from neura_robots.qualify.harness import Qualification, QualifyConfig, ScenarioResult
-from neura_robots.qualify.protocol import MARGIN
 from neura_robots.so101 import So101Config
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -135,7 +135,7 @@ def test_a_protocol_looser_than_the_defaults_is_not_promoted() -> None:
 
 
 def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:
-    from neura_robots.qualify import cli
+    from neura_bench.qualify import cli
 
     report = _report(
         contracts={
@@ -178,7 +178,7 @@ def test_promote_writes_the_supported_entry(tmp_path: Path) -> None:
 
 
 def test_a_site_that_cannot_start_leaves_nothing_running(tmp_path: Path) -> None:
-    from neura_robots.qualify.site import LocalSite
+    from neura_bench.qualify.site import LocalSite
 
     contracts = ROOT / "examples" / "contracts"
     site = LocalSite(
@@ -220,8 +220,8 @@ FAST = (
 
 def test_the_fault_suite_and_parity_on_the_emulated_arm(tmp_path: Path) -> None:
     pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
-    from neura_robots.qualify.cli import emulated
-    from neura_robots.qualify.harness import Qualification, QualifyConfig
+    from neura_bench.qualify.cli import emulated
+    from neura_bench.qualify.harness import Qualification, QualifyConfig
 
     with emulated(tmp_path) as setup:
         config = QualifyConfig(
@@ -249,8 +249,8 @@ def test_the_fault_suite_and_parity_on_the_emulated_arm(tmp_path: Path) -> None:
 
 def test_closed_loop_episodes_on_the_emulated_arm(tmp_path: Path) -> None:
     pytest.importorskip("lerobot", reason="needs the models group: uv sync --group models")
-    from neura_robots.qualify.cli import emulated
-    from neura_robots.qualify.episodes import Episodes, EpisodesConfig
+    from neura_bench.qualify.cli import emulated
+    from neura_bench.qualify.episodes import Episodes, EpisodesConfig
 
     with emulated(tmp_path) as setup:
         setup.pop("emulator")

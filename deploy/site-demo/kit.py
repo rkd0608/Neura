@@ -81,7 +81,7 @@ def publisher_key(kit: Path) -> Any:
 def checkpoint(kit: Path, source: str) -> Path:
     """The checkpoint's files in <kit>/checkpoint, where the site imports them from: a Hub
     repository, or a local directory (your own training run)."""
-    from neura_robots.evidence.policy import checkpoint_path
+    from neura_bench.evidence.policy import checkpoint_path
 
     target = kit / "checkpoint"
     marker = kit / "checkpoint.source"

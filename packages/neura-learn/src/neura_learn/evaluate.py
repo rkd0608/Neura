@@ -92,10 +92,10 @@ def evaluate_simulation(
     progress: Progress = lambda _: None,
 ) -> dict[str, Any]:
     """Both checkpoints on the suite's scenes; the paired comparison and every scene's result."""
+    from neura_bench.evidence.local import run_eval_protocol
+    from neura_bench.evidence.policy import LocalPolicy
+    from neura_bench.evidence.results import summarize
     from neura_robots.aloha import AlohaSim
-    from neura_robots.evidence.local import run_eval_protocol
-    from neura_robots.evidence.policy import LocalPolicy
-    from neura_robots.evidence.results import summarize
 
     seeds = list(range(suite.first_seed, suite.first_seed + suite.episodes))
     sim = AlohaSim(SCENES[suite.scene])

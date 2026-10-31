@@ -37,20 +37,20 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neura.v1 import dataplane_pb2
+from neura_bench.qualify.protocol import HOLD_TOLERANCE, NOMINAL_S, PARITY_ATOL
+from neura_bench.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_contracts import ReasonCode
 from neura_robots.emulator import SO101Emulator
 from neura_robots.lock import ActuatorBusyError
 from neura_robots.process import ArmProcess
-from neura_robots.qualify.protocol import HOLD_TOLERANCE, NOMINAL_S, PARITY_ATOL
-from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.so101 import So101Arm, So101Config
 from neura_runtime import tensors
-from neura_runtime.binding import ExecutionBinding
+from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.grpc_client import monotonic_us
 from neura_runtime.interfaces import CommandResult, SensorSnapshot
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RuntimeState, TransitionError
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
-from neura_sim.invariants import InvariantMonitor
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 
 @dataclass(slots=True)
@@ -531,7 +531,7 @@ class Qualification:
         if not self.pairs:
             self.parity = {"measured": False, "reason": "no observation and chunk recorded"}
             return
-        from neura_robots.qualify.reference import LeRobotReference
+        from neura_bench.qualify.reference import LeRobotReference
 
         reference = LeRobotReference(
             self.binding.artifact,

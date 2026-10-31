@@ -55,6 +55,10 @@ find what already does it and use it, extend it or refactor it. Each fact has on
   and the CLI's are generated from it).
 - Design tokens: `console/src/styles/tokens.css`, shared by the console, the site and the docs.
 
+**The open-source boundary.** `neura-contracts`, `neura-proto`, `neura-runtime` and `neura-robots`
+are published as `neura-robot` (design §30): they import only each other
+(`tools/check_boundary.py`). Closed code may import them, never the reverse.
+
 **Generated files are never edited by hand.** Change the source and run `make gen`
 (`make examples` for the example contracts); `make check-generated` fails on anything stale. The
 edit hook says when a file you wrote is a source of generated files.

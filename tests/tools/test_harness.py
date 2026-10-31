@@ -209,7 +209,7 @@ def _plan(files: list[str], **flags: bool) -> list[str]:
 
 
 def test_a_site_change_is_looked_at_and_a_python_change_is_typed() -> None:
-    assert _plan(["landing/src/App.tsx"]) == ["sizes", "maps", "landing", "screenshots"]
+    assert _plan(["landing/src/App.tsx"]) == ["sizes", "maps", "boundary", "landing", "screenshots"]
     python = _plan(["packages/neura-sim/src/neura_sim/site.py"])
     assert {"ruff", "mypy", "generated", "pytest"} <= set(python)
     assert "screenshots" not in python

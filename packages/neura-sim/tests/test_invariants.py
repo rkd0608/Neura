@@ -14,12 +14,11 @@ import numpy as np
 import pytest
 
 from neura.v1 import common_pb2, dataplane_pb2
-from neura_runtime import tensors
+from neura_runtime import invariants, tensors
 from neura_runtime.action_queue import ActionQueue
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RobotRuntime, RuntimeState, _Pending
 from neura_server.leases import Lease, LeaseTable, MemoryGenerationStore
-from neura_sim import invariants
-from neura_sim.invariants import InvariantMonitor
 from neura_sim.network import LinkModel, Window
 from neura_sim.site import MS, SECOND, SimSite, SiteConfig
 from neura_sim.soak import Soak, SoakConfig

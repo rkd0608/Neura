@@ -15,6 +15,7 @@ from prometheus_client.parser import text_string_to_metric_families
 
 from neura_agent.metrics import EXPORTED as AGENT
 from neura_control.metrics import EXPORTED as CONTROL_PLANE
+from neura_runtime.binding import load_binding
 from neura_runtime.grpc_client import RobotCredentials
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
@@ -25,7 +26,7 @@ from neura_server.config import (
 )
 from neura_server.grpc_server import GatewayServer
 from neura_server.metrics import EXPORTED as GATEWAY
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "examples" / "contracts"

@@ -45,11 +45,12 @@ from typing import Any
 
 import yaml
 
+from neura_runtime.binding import load_binding
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import token_digest
 from neura_server.profiles import DEFAULT_HORIZON_US
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
-from neura_sim.invariants import InvariantMonitor
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 
 def free_port() -> int:

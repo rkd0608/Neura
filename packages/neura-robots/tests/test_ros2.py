@@ -26,6 +26,8 @@ from neura_robots.cli import RobotConfig, Ros2ArmConfig
 from neura_robots.process import ArmProcess
 from neura_robots.ros2 import relay
 from neura_robots.ros2.arm import Ros2Arm
+from neura_runtime.binding import load_binding
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import ACTIVE_STATES, RuntimeState
 from neura_server.config import (
     DeploymentConfig,
@@ -35,8 +37,6 @@ from neura_server.config import (
     token_digest,
 )
 from neura_server.grpc_server import GatewayServer
-from neura_sim.grpc_robots import load_binding
-from neura_sim.invariants import InvariantMonitor
 
 ROOT = Path(__file__).resolve().parents[3]
 FILES = tuple(

@@ -114,7 +114,7 @@ def test_capture_and_camera_faults(arm: AlohaSimArm) -> None:
 @pytest.fixture(scope="module")
 def synthetic(tmp_path_factory: pytest.TempPathFactory) -> Path:
     pytest.importorskip("lerobot")
-    from neura_robots.evidence.synthetic import write_checkpoint
+    from neura_bench.evidence.synthetic import write_checkpoint
 
     return write_checkpoint(tmp_path_factory.mktemp("ckpt") / "checkpoint", size="tiny")
 
@@ -131,9 +131,9 @@ def test_contracts_bind_to_the_checkpoint(synthetic: Path, tmp_path: Path) -> No
 
 
 def test_local_baselines_run(synthetic: Path) -> None:
+    from neura_bench.evidence.local import run_eval_protocol, run_realtime
+    from neura_bench.evidence.policy import LocalPolicy
     from neura_robots.aloha.world import RealTimeWorld
-    from neura_robots.evidence.local import run_eval_protocol, run_realtime
-    from neura_robots.evidence.policy import LocalPolicy
 
     policy = LocalPolicy(synthetic)
     sim = AlohaSim()
@@ -149,7 +149,7 @@ def test_local_baselines_run(synthetic: Path) -> None:
 
 
 def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
-    from neura_robots.evidence.served import ServedRun
+    from neura_bench.evidence.served import ServedRun
 
     deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")
     for realtime in (True, False):
@@ -163,7 +163,7 @@ def test_neura_serves_episodes(synthetic: Path, tmp_path: Path) -> None:
 
 
 def test_a_summary_counts_fault_reasons_and_takes_counter_medians() -> None:
-    from neura_robots.evidence.results import EpisodeResult, summarize
+    from neura_bench.evidence.results import EpisodeResult, summarize
 
     results = [
         EpisodeResult("neura", 1000, True, 4, 300, counters={"late_ticks": 2}),
@@ -177,8 +177,8 @@ def test_a_summary_counts_fault_reasons_and_takes_counter_medians() -> None:
 
 
 def test_the_summary_table_says_what_a_system_was_told(capsys: pytest.CaptureFixture[str]) -> None:
-    from neura_robots.evidence.cli import _table
-    from neura_robots.evidence.results import EpisodeResult, summarize
+    from neura_bench.evidence.cli import _table
+    from neura_bench.evidence.results import EpisodeResult, summarize
 
     refused = {"REQUEST_EXPIRED": 380, "late_ticks": 1}
     results = [EpisodeResult("neura", 1000 + i, False, 0, 400, counters=refused) for i in range(3)]
@@ -190,8 +190,8 @@ def test_the_summary_table_says_what_a_system_was_told(capsys: pytest.CaptureFix
 
 
 def test_the_async_robots_camera_reads_like_lerobots() -> None:
+    from neura_bench.evidence.lerobot_async import _Camera
     from neura_robots.aloha.world import RealTimeWorld
-    from neura_robots.evidence.lerobot_async import _Camera
 
     world = RealTimeWorld(AlohaSim()).start()
     camera = _Camera(world, max_age_s=10).start()
@@ -215,8 +215,8 @@ def test_the_async_robots_camera_reads_like_lerobots() -> None:
 
 
 def test_lerobots_async_inference_serves_an_episode(synthetic: Path, tmp_path: Path) -> None:
+    from neura_bench.evidence.lerobot_async import AsyncRun
     from neura_robots.aloha.world import RealTimeWorld
-    from neura_robots.evidence.lerobot_async import AsyncRun
 
     world = RealTimeWorld(AlohaSim()).start()
     try:
@@ -243,8 +243,8 @@ def test_lerobots_async_inference_stops_what_it_started_when_it_cannot_start(
 ) -> None:
     import socket
 
+    from neura_bench.evidence.lerobot_async import AsyncRun
     from neura_robots.aloha.world import RealTimeWorld
-    from neura_robots.evidence.lerobot_async import AsyncRun
 
     world = RealTimeWorld(AlohaSim()).start()
     try:
@@ -271,7 +271,7 @@ def test_the_site_is_given_absolute_paths(
 
     import yaml
 
-    from neura_robots.qualify.site import LocalSite
+    from neura_bench.qualify.site import LocalSite
 
     shutil.copytree(synthetic, tmp_path / "checkpoint")
     deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")
@@ -294,7 +294,7 @@ def test_the_site_is_given_absolute_paths(
 
 
 def test_lerobot_evals_outcomes_are_read_seed_by_seed() -> None:
-    from neura_robots.evidence.cli import reference_agreement, reference_outcomes
+    from neura_bench.evidence.cli import reference_agreement, reference_outcomes
 
     # LeRobot 0.6's eval_info.json: each task's successes in episode order.
     current = {
@@ -315,8 +315,8 @@ def test_lerobot_evals_outcomes_are_read_seed_by_seed() -> None:
 def test_parity_with_lerobot_alone(synthetic: Path, tmp_path: Path) -> None:
     import argparse
 
-    from neura_robots.evidence.cli import Context, parity
-    from neura_robots.evidence.served import ServedRun
+    from neura_bench.evidence.cli import Context, parity
+    from neura_bench.evidence.served import ServedRun
 
     deployment = write(tmp_path / "contracts", synthetic, name="act-aloha", source="synthetic")
     run = ServedRun(deployment, workdir=tmp_path / "site", parity_samples=3)

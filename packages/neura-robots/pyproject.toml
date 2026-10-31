@@ -1,15 +1,13 @@
 [project]
 name = "neura-robots"
 version = "0.1.0.dev0"
-description = "Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, the ALOHA tasks in physics simulation, the robot-side process for arms and the hardware qualification harness."
+description = "Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, ROS 2 robots, the ALOHA tasks in physics simulation and the robot-side process for arms."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "neura-contracts",
     "neura-proto",
     "neura-runtime",
-    "neura-server",
-    "neura-sim",
     "numpy>=2.2",
     "pyyaml>=6.0.2",
     "grpcio>=1.84,<2",
@@ -18,8 +16,6 @@ dependencies = [
 [project.scripts]
 neura-arm = "neura_robots.cli:main"
 neura-arm-emulator = "neura_robots.emulator:main"
-neura-qualify = "neura_robots.qualify.cli:main"
-neura-evidence = "neura_robots.evidence.cli:main"
 neura-aloha-cell = "neura_robots.aloha.cell:main"
 
 [project.optional-dependencies]

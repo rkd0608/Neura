@@ -33,17 +33,16 @@ from typing import Any
 
 import numpy as np
 
+from neura_bench.qualify.harness import write_report
+from neura_bench.qualify.protocol import MARGIN, PAIRS
+from neura_bench.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_contracts import FaultResponse
 from neura_contracts.stats import difference_unpaired
 from neura_robots.process import ArmProcess
-from neura_robots.qualify.harness import write_report
-from neura_robots.qualify.protocol import MARGIN, PAIRS
-from neura_robots.qualify.site import REVISION, ROBOT_ID, TOKEN, LocalSite
 from neura_robots.so101 import So101Arm, So101Config
-from neura_runtime.binding import ExecutionBinding
+from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.grpc_client import monotonic_us
 from neura_runtime.runtime import RuntimeState, TransitionError
-from neura_sim.grpc_robots import load_binding
 
 
 def schedule(pairs: int, seed: int) -> list[str]:
@@ -106,7 +105,7 @@ class Episodes:
         self.episodes: list[Episode] = []
 
     async def run(self) -> dict[str, Any]:
-        from neura_robots.qualify.reference import LeRobotReference
+        from neura_bench.qualify.reference import LeRobotReference
 
         config = self.config
         started = time.time()
@@ -309,7 +308,7 @@ def _ask(question: str) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    from neura_robots.qualify.cli import emulated
+    from neura_bench.qualify.cli import emulated
 
     with contextlib.ExitStack() as stack:
         workdir = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="ne-")))

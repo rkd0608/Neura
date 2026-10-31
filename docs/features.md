@@ -131,7 +131,7 @@ Action queue and chunk merging, fencing, the state machine, sessions.
   `packages/neura-runtime/tests/test_session.py` (which rejections end a session),
   `packages/neura-runtime/tests/test_tensors.py`,
   `packages/neura-sim/tests/test_fault_suite.py` (every fault in §7, with an independent
-  invariant monitor: `packages/neura-sim/src/neura_sim/invariants.py`)
+  invariant monitor: `packages/neura-runtime/src/neura_runtime/invariants.py`)
 - Docs: `site/docs/fault-suite.md`, `site/docs/architecture.md`
 
 ## Robots
@@ -140,9 +140,9 @@ Action queue and chunk merging, fencing, the state machine, sessions.
 
 - Code: `packages/neura-robots/src/neura_robots/so101.py`,
   `packages/neura-robots/src/neura_robots/emulator.py` (the servo bus, emulated),
-  `packages/neura-robots/src/neura_robots/qualify/` (`harness.py` is large)
+  `packages/neura-bench/src/neura_bench/qualify/` (`harness.py` is large)
 - Tests: `packages/neura-robots/tests/test_so101.py`, `packages/neura-robots/tests/test_emulator.py`,
-  `packages/neura-robots/tests/test_qualify.py`; on the emulated arm: `make qualify-emulated`
+  `packages/neura-bench/tests/test_qualify.py`; on the emulated arm: `make qualify-emulated`
 - Docs: `site/docs/hardware-qualification.md`
 
 ### ROS 2 robots through the relay node (§29.8)
@@ -157,9 +157,9 @@ Action queue and chunk merging, fencing, the state machine, sessions.
 
 ### The simulated ALOHA, the site kit and closed-loop evidence (§10.1, §20.11)
 
-- Code: `packages/neura-robots/src/neura_robots/aloha/`, `packages/neura-robots/src/neura_robots/evidence/`,
+- Code: `packages/neura-robots/src/neura_robots/aloha/`, `packages/neura-bench/src/neura_bench/evidence/`,
   `deploy/site-demo/`
-- Tests: `packages/neura-robots/tests/test_aloha.py`, `packages/neura-robots/tests/test_evidence.py`,
+- Tests: `packages/neura-robots/tests/test_aloha.py`, `packages/neura-bench/tests/test_evidence.py`,
   `packages/neura-robots/tests/test_cell.py`
 
 ### Simulation, chaos and soak (§7, §21)

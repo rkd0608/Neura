@@ -36,9 +36,8 @@ from neura_robots.lock import ActuatorBusyError
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
 from neura_robots.ros2.arm import Ros2Arm, Ros2Config, Ros2Joint
 from neura_robots.so101 import ArmError, CameraConfig, So101Arm, So101Config
-from neura_runtime.binding import ExecutionBinding
+from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.grpc_client import RobotCredentials
-from neura_sim.grpc_robots import load_binding
 
 
 class _Model(BaseModel):

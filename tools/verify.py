@@ -219,6 +219,11 @@ def plan(args: argparse.Namespace, files: list[str]) -> tuple[list[Check], list[
     checks = [
         Check("sizes", [*python, "tools/check_sizes.py"], "always: files stay readable whole"),
         Check("maps", [*python, "tools/codemap.py", "--check"], "always: the maps stay true"),
+        Check(
+            "boundary",
+            [*python, "tools/check_boundary.py"],
+            "always: the open-source packages import only each other",
+        ),
     ]
     if py:
         checks += [
@@ -420,7 +425,7 @@ def guarded(check: Check) -> None:
 def execute(checks: list[Check]) -> None:
     LOGS.mkdir(exist_ok=True)
     by_name = {c.name: c for c in checks}
-    first = [c for c in checks if c.name in ("sizes", "maps", "ruff")]
+    first = [c for c in checks if c.name in ("sizes", "maps", "boundary", "ruff")]
     for check in first:
         guarded(check)
     rest = [c for c in checks if c not in first and not c.after and not c.alone]

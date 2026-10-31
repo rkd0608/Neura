@@ -48,9 +48,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from neura_bench.evidence.results import EpisodeResult
 from neura_robots.aloha import JOINTS
 from neura_robots.aloha.world import RealTimeWorld
-from neura_robots.evidence.results import EpisodeResult
 from neura_sim.chaos import FaultProxy, free_port
 
 # A chunk "arrived late" when its observation is older than this on arrival: Neura's acceptance
@@ -239,7 +239,7 @@ class PolicyServerProcess:
         command = [
             sys.executable,
             "-m",
-            "neura_robots.evidence.lerobot_async",
+            "neura_bench.evidence.lerobot_async",
             "--port",
             str(self.port),
         ]

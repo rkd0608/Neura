@@ -5,7 +5,7 @@ Every scenario also checks the invariants that must hold no matter what happens:
     skip, no re-dispatch), and epochs never go backwards;
   - nothing out of the robot's declared ranges is ever sent (the simulated controller raises);
   - a latched fault is never cleared without an explicit reset;
-  - and everything the independent InvariantMonitor watches (neura_sim.invariants): every
+  - and everything the independent InvariantMonitor watches (neura_runtime.invariants): every
     accepted chunk was emitted under a live lease for the robot's own session, epoch and latest
     request, from a fresh observation; every dispatched action came from an accepted chunk.
 """

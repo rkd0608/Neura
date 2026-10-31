@@ -9,6 +9,7 @@ dependencies = [
     "neura-runtime",
     "neura-server",
     "neura-adapters",
+    "neura-bench",
     "neura-robots",
     "numpy>=2.2",
 ]

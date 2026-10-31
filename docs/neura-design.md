@@ -942,7 +942,7 @@ An activation for more robots than the server can serve at the revision's execut
 
 **Chaos and soak testing**
 
-- **An independent invariant monitor** (`neura_sim.invariants`) watches a site from outside. It sees:
+- **An independent invariant monitor** (`neura_runtime.invariants`) watches a site from outside. It sees:
   - what each robot sent and received;
   - what the gateway emitted and which leases it granted;
   - every command each controller was given.
@@ -2259,6 +2259,63 @@ Tests:
 - A ROS 2 arm through the relay, under packet loss and a cut link (§29.8).
 
 Not built yet: stateful policies (refused, COMPAT_STATEFUL_POLICY_UNSUPPORTED).
+
+---
+
+## 30. Stage 1: the open runtime (`neura-robot`)
+
+### 30.1 Decision
+
+Neura's wedge is the layer between a robot policy and the robot, wherever the model runs: on the
+robot computer, on a GPU server at the site, or hosted. The robot runtime (§5 to §8) is published
+as open source, Apache-2.0, as `neura-robot` on PyPI (`neura` is taken). The site layer
+(gateway and scheduler, control plane, agent, console, rollouts, shadow, capture and fine-tuning)
+stays closed and is what is sold. GPU sharing is not the lead: the L4 benchmark (§9.5) shows one
+process per robot serving as many SmolVLA robots.
+
+Open: `neura-contracts`, `neura-proto`, `neura-runtime` (with the invariant monitor, the test
+oracle for every safety claim) and `neura-robots` (SO-101, ROS 2, the ALOHA simulation, the
+robot-side process). The list is `[tool.neura] open-source` in pyproject.toml, and
+`tools/check_boundary.py` (in `make lint` and verify) fails on any import or dependency from them
+into closed code, a type-only or lazy one included. The head-to-head evidence and hardware
+qualification moved to the closed `neura-bench`: they drive the gateway.
+
+### 30.2 Build, in order
+
+1. **The boundary** (this change): open packages import only each other. Their tests still use
+   the closed gateway as a policy source; they move to an open reference policy server in step 3.
+2. **One policy transport interface**: send an observation with a deadline, get an action chunk
+   or a typed failure. Freshness, task epochs, merging and faults are the runtime's and behave the
+   same over every transport. Transports, in order: in-process (inference on the robot computer),
+   openpi's websocket server, LeRobot's async gRPC server, Neura's gateway; hosted APIs when their
+   protocols are public.
+3. **`neura run`**: one robot, one command, no control plane; it checks the robot profile
+   against what the policy server serves before anything can move.
+4. **The incident record**: a rolling buffer of observation metadata, every chunk and the
+   runtime's decision on it with its reason, operator commands and faults, written as MCAP (it
+   opens in Foxglove and Rerun) on a fault or on request. Images off by default; nothing leaves
+   the machine. `neura replay` runs a record back through the runtime and must reach the same
+   decisions, so each incident becomes a regression test.
+5. **Robot-side platforms**: Python 3.10 to 3.13 (JetPack and ROS 2 Humble are 3.10), Linux on
+   x86-64 and aarch64, installed with pip.
+6. **Extraction**: `git filter-repo` keeps the moved files' history; this repository then depends
+   on a released `neura-robot`.
+
+### 30.3 Proof before launch
+
+- One conformance suite run against every transport: nothing moves until armed; a stale chunk is
+  refused, a late one dropped; a wrong shape, NaN or out-of-range reply faults; a server crash
+  mid-task holds, faults and recovers only after reset; takeover stops commands; the invariant
+  monitor sees no violation. A transport is supported only when it passes all of it.
+- Against the real openpi and LeRobot servers in Docker with small real checkpoints, not mocks.
+- Network faults: latency, jitter, stalls, resets and blackouts on TCP and websockets; nftables
+  for UDP; swept over 40 to 200 ms per chunk.
+- Property-based tests of merging and freshness over random arrival orders and timings.
+- A 24-hour soak per transport; the head-to-head against LeRobot async under the same faults,
+  reproducible from one script and published with its method.
+- One real SO-101 through in-process, openpi and LeRobot.
+- CI: Python 3.10 to 3.13 on x86-64 and arm64; Docker conformance on every pull request; the soak
+  nightly.
 
 ---
 

@@ -56,6 +56,7 @@ lint: ## Lint, check formatting, and keep files under the size budget
 	$(UV) run ruff check .
 	$(UV) run ruff format --check .
 	$(UV) run python tools/check_sizes.py
+	$(UV) run python tools/check_boundary.py
 
 .PHONY: typecheck
 typecheck: ## Strict type checking

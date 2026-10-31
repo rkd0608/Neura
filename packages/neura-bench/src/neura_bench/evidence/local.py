@@ -14,10 +14,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
+from neura_bench.evidence.policy import LocalPolicy
+from neura_bench.evidence.results import EpisodeResult
 from neura_robots.aloha import DT, AlohaSim
 from neura_robots.aloha.world import RealTimeWorld
-from neura_robots.evidence.policy import LocalPolicy
-from neura_robots.evidence.results import EpisodeResult
 
 Progress = Callable[[str], None]
 

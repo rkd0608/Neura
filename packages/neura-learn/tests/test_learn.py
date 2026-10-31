@@ -239,7 +239,7 @@ def test_simulation_compares_two_models_on_the_same_scenes(tmp_path: Path) -> No
     pytest.importorskip("mujoco")
     from neura_learn.evaluate import SimulationSuite, evaluate_simulation
 
-    from neura_robots.evidence.synthetic import write_checkpoint
+    from neura_bench.evidence.synthetic import write_checkpoint
 
     candidate = write_checkpoint(tmp_path / "candidate", size="tiny", seed=1)
     baseline = write_checkpoint(tmp_path / "baseline", size="tiny", seed=2)

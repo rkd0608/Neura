@@ -26,6 +26,7 @@ from neura.v1 import dataplane_pb2
 from neura_adapters import MockPolicy, PolicyBackend, PolicyError
 from neura_contracts import ReasonCode
 from neura_runtime.binding import ExecutionBinding
+from neura_runtime.invariants import InvariantMonitor
 from neura_runtime.runtime import RobotRuntime, RuntimeConfig, RuntimeState, TransitionError
 from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_server.admission import AdmissionController
@@ -34,7 +35,6 @@ from neura_server.leases import GenerationStore, LeaseTable, MemoryGenerationSto
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import Batch, Policy, Scheduler
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
-from neura_sim.invariants import InvariantMonitor
 from neura_sim.network import Link, LinkModel
 
 MS = 1_000

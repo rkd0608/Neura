@@ -11,6 +11,7 @@ import grpc
 import pytest
 
 from neura_contracts import ReasonCode, pki
+from neura_runtime.binding import load_binding
 from neura_runtime.grpc_client import RobotCredentials, fetch_assignment
 from neura_runtime.runtime import RuntimeState
 from neura_server.config import (
@@ -21,7 +22,7 @@ from neura_server.config import (
     TlsConfig,
 )
 from neura_server.grpc_server import GatewayServer
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
 ARTIFACT = EXAMPLES / "act-so101.artifact.yaml"

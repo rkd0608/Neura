@@ -24,90 +24,15 @@ from typing import Any
 
 import grpc
 
-from neura.v1 import dataplane_pb2
 from neura_contracts import (
     ContractError,
-    ExecutionProfile,
-    ModelArtifact,
-    RobotProfile,
-    load_document,
-    parse_document,
 )
-from neura_runtime.binding import ExecutionBinding
+from neura_runtime.binding import ExecutionBinding, binding_from_documents, load_binding
 from neura_runtime.grpc_client import GatewayConnection, RobotCredentials, fetch_assignment
+from neura_runtime.invariants import InvariantMonitor, watch_robot
 from neura_runtime.runtime import RobotRuntime, RuntimeState, TransitionError
-from neura_runtime.session import Outbound, SessionClient, SessionConfig
+from neura_runtime.session import SessionClient, SessionConfig
 from neura_sim.arm import SimController, SimSensors, SimulatedArm
-from neura_sim.invariants import InvariantMonitor
-
-
-def load_binding(artifact: Path, robot: Path, profile: Path) -> ExecutionBinding:
-    a = load_document(artifact.read_text(encoding="utf-8"))
-    r = load_document(robot.read_text(encoding="utf-8"))
-    p = load_document(profile.read_text(encoding="utf-8"))
-    assert isinstance(a, ModelArtifact)
-    assert isinstance(r, RobotProfile)
-    assert isinstance(p, ExecutionProfile)
-    return ExecutionBinding(a, r, p)
-
-
-def watch_robot(
-    monitor: InvariantMonitor,
-    owner: object,
-    robot_id: str,
-    client: SessionClient,
-    last_command: Callable[[], Any],
-) -> Any:
-    """Wire a robot's session client and runtime to ``monitor``: every observation it sends,
-    session it is granted, chunk it receives and action it dispatches. ``last_command`` returns
-    the command vector the controller was last given. Returns the monitor's record."""
-    runtime = client.runtime
-    record = monitor.client(owner, robot_id, runtime.binding)
-    drain = client.drain
-    on_open = client.on_open_response
-    on_message = client.on_gateway_message
-
-    def watched_drain() -> list[Outbound]:
-        items = drain()  # SessionClient.tick drains through this too
-        for item in items:
-            message = item.message
-            if (
-                isinstance(message, dataplane_pb2.RobotMessage)
-                and message.WhichOneof("body") == "observation"
-            ):
-                monitor.observation_sent(record, message.observation)
-        return items
-
-    def watched_open(response: dataplane_pb2.OpenSessionResponse, now_us: int) -> None:
-        if response.WhichOneof("result") == "accepted":
-            accepted = response.accepted
-            monitor.session_granted(record, accepted.session_id, accepted.lease_generation)
-        on_open(response, now_us)
-
-    def watched_message(message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
-        if message.WhichOneof("body") != "action_chunk":
-            on_message(message, now_us)
-            return
-        arrival = monitor.chunk_arriving(
-            record,
-            message.action_chunk,
-            session_id=runtime.session_id,
-            lease_generation=runtime.lease_generation,
-            task_epoch=runtime.task_epoch,
-            state=runtime.state,
-            accepted_before=runtime.counters["chunks_accepted"],
-            now_us=now_us,
-        )
-        on_message(message, now_us)
-        monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
-
-    client.drain = watched_drain  # type: ignore[method-assign]
-    client.on_open_response = watched_open  # type: ignore[method-assign]
-    client.on_gateway_message = watched_message  # type: ignore[method-assign]
-    runtime.dispatch_listener = lambda epoch, index: monitor.dispatched(
-        record, epoch, index, last_command(), runtime.state
-    )
-    return record
 
 
 class SimulatedRobotProcess:
@@ -330,20 +255,6 @@ class AssignedRobot:
             "switches": self.switches,
             "tasks": self.process.tasks_completed,
         }
-
-
-def binding_from_documents(documents: dict[str, Any]) -> ExecutionBinding:
-    """Parse and verify contracts received from the agent; refuses incompatible ones."""
-    artifact = parse_document(documents["model_artifact"])
-    robot = parse_document(documents["robot_profile"])
-    profile = parse_document(documents["execution_profile"])
-    if not (
-        isinstance(artifact, ModelArtifact)
-        and isinstance(robot, RobotProfile)
-        and isinstance(profile, ExecutionProfile)
-    ):
-        raise ValueError("assignment documents have the wrong kinds")
-    return ExecutionBinding(artifact, robot, profile)
 
 
 async def run_robots(

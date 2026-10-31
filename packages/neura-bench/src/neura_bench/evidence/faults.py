@@ -23,8 +23,8 @@ from collections.abc import Coroutine
 from dataclasses import dataclass
 from typing import Any
 
-from neura_robots.evidence.lerobot_async import AsyncRun
-from neura_robots.evidence.served import ServedRun
+from neura_bench.evidence.lerobot_async import AsyncRun
+from neura_bench.evidence.served import ServedRun
 from neura_sim.chaos import FaultProxy
 
 FAULT_AT_S = 2.0

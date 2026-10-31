@@ -45,11 +45,11 @@ need; when you change one, move code out of it rather than adding to it.
 - `landing/src/landing.css` (865 lines)
 - `packages/neura-agent/src/neura_agent/core.py` (1221 lines)
 - `packages/neura-agent/tests/test_core.py` (1165 lines)
+- `packages/neura-bench/src/neura_bench/qualify/harness.py` (1016 lines)
 - `packages/neura-bench/src/neura_bench/suite.py` (826 lines)
 - `packages/neura-control/src/neura_control/grpc_site.py` (923 lines)
 - `packages/neura-control/src/neura_control/services/rollouts.py` (1090 lines)
 - `packages/neura-control/tests/test_site_control.py` (856 lines)
-- `packages/neura-robots/src/neura_robots/qualify/harness.py` (1016 lines)
 
 ## packages/neura
 
@@ -135,7 +135,7 @@ Tests, under `packages/neura-agent/tests/`: `test_agent.py`, `test_artifacts.py`
 
 ## packages/neura-bench
 
-Neura GPU-sharing benchmarks: shared serving against dedicated baselines (design §9.5, §10).
+Neura benchmarks and evidence: shared serving against dedicated baselines (design §9.5, §10), the head-to-head against LeRobot async inference and hardware qualification (§7.1).
 
 Under `packages/neura-bench/src/`:
 
@@ -143,14 +143,29 @@ Under `packages/neura-bench/src/`:
 - `neura_bench/background.py`: A non-policy compute job for the "concurrent GPU job" workload (design §10): matrix multiplications back to back on the device, until killed or ``--seconds`` pass.
 - `neura_bench/cli.py`: ``neura-bench``: the GPU-sharing benchmark (design §9.5, §10).
 - `neura_bench/deployments.py`: Contracts and checkpoints for benchmark and test deployments.
+- `neura_bench/evidence/__init__.py`: Evidence: published policies, on the scenes they were trained for, served by Neura and by the alternatives a robotics team would otherwise use, with the same seeds and the same faults.
+- `neura_bench/evidence/cli.py`: ``neura-evidence``: published policies on the scenes they were trained for, served by Neura and by the alternatives a robotics team would otherwise use, with the same seeds and the same faults.
+- `neura_bench/evidence/faults.py`: The same faults for every remote system, on the same real-time world and the same TCP fault proxy between the robot and whatever serves it.
+- `neura_bench/evidence/lerobot_async.py`: LeRobot's own remote inference (``lerobot.async_inference``, LeRobot 0.6.1) on the simulated ALOHA: its ``PolicyServer`` in a separate process and its ``RobotClient`` driving the robot, both …
+- `neura_bench/evidence/local.py`: The in-process baselines: the policy and the scene in one process, no Neura.
+- `neura_bench/evidence/policy.py`: A LeRobot checkpoint, run the way ``lerobot-eval`` runs it (LeRobot 0.6): the environment's observation through ``preprocess_observation``, the checkpoint's own preprocessor, ``select_action`` (which …
+- `neura_bench/evidence/results.py`: Episode results and their summaries.
+- `neura_bench/evidence/served.py`: Episodes served by Neura: the simulated ALOHA behind the robot runtime and ``neura-arm``'s process, a site gateway with its policy worker processes (``qualify.site.LocalSite``), and gRPC over TCP …
+- `neura_bench/evidence/synthetic.py`: A LeRobot ACT checkpoint shaped like the published ALOHA ones (the top camera at 640x480, the 14-value state, 14 actions, chunks of 100), with random weights: for testing the evidence pipeline where …
 - `neura_bench/measure.py`: Measurements on the benchmark device, through the same worker processes production runs.
 - `neura_bench/metrics.py`: The benchmark metrics of design §10, computed the same way for simulated and real-time runs.
+- `neura_bench/qualify/cli.py`: ``neura-qualify``: qualify a robot integration on hardware (design §7.1).
+- `neura_bench/qualify/episodes.py`: Closed-loop parity: operator-scored episodes served by Neura and by LeRobot alone (design §7.1).
+- `neura_bench/qualify/harness.py`: Hardware qualification: the fault suite and open-loop parity on a real arm (design §7.1).
+- `neura_bench/qualify/protocol.py`: The qualification protocol's defaults (design §7.1): what ``neura-qualify`` runs with unless told otherwise, and the limits ``promote`` holds a run to.
+- `neura_bench/qualify/reference.py`: The policy as LeRobot runs it on its own: the reference for parity (design §10).
+- `neura_bench/qualify/site.py`: The site a robot connects to during qualification and the evidence runs: the site's gateway process, with its real policy workers, behind the TCP fault proxy, on this machine (design §7.1).
 - `neura_bench/realtime.py`: Real-time runs: the production gateway with real policy worker processes on the device, and simulated robots running the production robot runtime over gRPC (design §10).
 - `neura_bench/report.py`: Benchmark reports: results as JSON, and the Markdown report generated from it.
 - `neura_bench/sim.py`: Discrete-event simulation of a site serving many robots from several batch groups on several devices, with latency measured on the real device (design §9.5, §10).
 - `neura_bench/suite.py`: The GPU-sharing benchmark suite (design §9.5, §10, §16 step 0).
 
-Tests, under `packages/neura-bench/tests/`: `test_report.py`, `test_sim.py`
+Tests, under `packages/neura-bench/tests/`: `test_evidence.py`, `test_qualify.py`, `test_report.py`, `test_sim.py`
 
 ## packages/neura-contracts
 
@@ -268,7 +283,7 @@ Under `packages/neura-proto/src/`:
 
 ## packages/neura-robots
 
-Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, the ALOHA tasks in physics simulation, the robot-side process for arms and the hardware qualification harness.
+Neura robot integrations: the SO-101 arm over LeRobot, a servo bus emulator, ROS 2 robots, the ALOHA tasks in physics simulation and the robot-side process for arms.
 
 Under `packages/neura-robots/src/`:
 
@@ -283,29 +298,14 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/cameras.py`: Cameras for robot integrations.
 - `neura_robots/cli.py`: ``neura-arm``: serve a real arm through a site gateway.
 - `neura_robots/emulator.py`: An emulated SO-101 servo bus: six Feetech STS3215 servos behind a pseudo-terminal.
-- `neura_robots/evidence/__init__.py`: Evidence: published policies, on the scenes they were trained for, served by Neura and by the alternatives a robotics team would otherwise use, with the same seeds and the same faults.
-- `neura_robots/evidence/cli.py`: ``neura-evidence``: published policies on the scenes they were trained for, served by Neura and by the alternatives a robotics team would otherwise use, with the same seeds and the same faults.
-- `neura_robots/evidence/faults.py`: The same faults for every remote system, on the same real-time world and the same TCP fault proxy between the robot and whatever serves it.
-- `neura_robots/evidence/lerobot_async.py`: LeRobot's own remote inference (``lerobot.async_inference``, LeRobot 0.6.1) on the simulated ALOHA: its ``PolicyServer`` in a separate process and its ``RobotClient`` driving the robot, both …
-- `neura_robots/evidence/local.py`: The in-process baselines: the policy and the scene in one process, no Neura.
-- `neura_robots/evidence/policy.py`: A LeRobot checkpoint, run the way ``lerobot-eval`` runs it (LeRobot 0.6): the environment's observation through ``preprocess_observation``, the checkpoint's own preprocessor, ``select_action`` (which …
-- `neura_robots/evidence/results.py`: Episode results and their summaries.
-- `neura_robots/evidence/served.py`: Episodes served by Neura: the simulated ALOHA behind the robot runtime and ``neura-arm``'s process, a site gateway with its policy worker processes (``qualify.site.LocalSite``), and gRPC over TCP …
-- `neura_robots/evidence/synthetic.py`: A LeRobot ACT checkpoint shaped like the published ALOHA ones (the top camera at 640x480, the 14-value state, 14 actions, chunks of 100), with random weights: for testing the evidence pipeline where …
 - `neura_robots/lock.py`: One actuator authority per robot (design §6.3).
 - `neura_robots/process.py`: The robot-side process for an arm (design §7): the runtime, the session client and the gateway connection around a connected arm (``arm.Arm``: the SO-101, or the simulated ALOHA), driven by a local …
-- `neura_robots/qualify/cli.py`: ``neura-qualify``: qualify a robot integration on hardware (design §7.1).
-- `neura_robots/qualify/episodes.py`: Closed-loop parity: operator-scored episodes served by Neura and by LeRobot alone (design §7.1).
-- `neura_robots/qualify/harness.py`: Hardware qualification: the fault suite and open-loop parity on a real arm (design §7.1).
-- `neura_robots/qualify/protocol.py`: The qualification protocol's defaults (design §7.1): what ``neura-qualify`` runs with unless told otherwise, and the limits ``promote`` holds a run to.
-- `neura_robots/qualify/reference.py`: The policy as LeRobot runs it on its own: the reference for parity (design §10).
-- `neura_robots/qualify/site.py`: The site a robot connects to during qualification and the evidence runs: the site's gateway process, with its real policy workers, behind the TCP fault proxy, on this machine (design §7.1).
 - `neura_robots/ros2/__init__.py`: ROS 2 robots: a relay node on the robot's ROS side, and the arm Neura's robot-side process drives through it (design §29.8).
 - `neura_robots/ros2/arm.py`: A ROS 2 robot as an arm Neura's robot-side process drives (``arm.Arm``), through the relay node running in the robot's ROS environment (``ros2.relay``).
 - `neura_robots/ros2/relay.py`: The ROS 2 side of the bridge: a node that relays a robot's joint states and camera images to Neura's robot-side process, and its position commands back, over a local Unix socket.
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
-Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_evidence.py`, `test_process.py`, `test_qualify.py`, `test_ros2.py`, `test_so101.py`
+Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_process.py`, `test_ros2.py`, `test_so101.py`
 
 ## packages/neura-runtime
 
@@ -325,6 +325,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/cli.py`: ``neura-robot``: robot-side tools.
 - `neura_runtime/grpc_client.py`: asyncio/gRPC adapter that moves ``SessionClient`` messages to and from a site gateway.
 - `neura_runtime/interfaces.py`: Integration points a supported robot integration implements (design §3, §7).
+- `neura_runtime/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
 - `neura_runtime/runtime.py`: The robot runtime: the only execution authority in Neura (design §5-§8).
 - `neura_runtime/session.py`: Session handshake, lease heartbeats and RTT measurement around a ``RobotRuntime``.
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
@@ -385,7 +386,6 @@ Under `packages/neura-sim/src/`:
 - `neura_sim/arm.py`: A simulated position-controlled arm, its controller and sensors, with fault injection.
 - `neura_sim/chaos.py`: Chaos against real processes: ``neura-chaos``.
 - `neura_sim/grpc_robots.py`: Run simulated robots against a live gateway over gRPC: ``neura-sim-robots``.
-- `neura_sim/invariants.py`: An independent observer of the safety invariants (design §5-§7, §21).
 - `neura_sim/network.py`: A one-way network link model for the discrete-event simulator.
 - `neura_sim/site.py`: Deterministic discrete-event simulation of a Neura site (design §7, §16 step 3).
 - `neura_sim/soak.py`: A long soak of a simulated site with randomly injected faults: ``neura-sim-soak``.
@@ -510,6 +510,7 @@ Under `tools/`:
 
 - `audit_dependencies.py`: Audit every locked dependency for known vulnerabilities (design §18.2, supply chain).
 - `build_agent_release.py`: Build and sign a site-agent release bundle (design §17.3).
+- `check_boundary.py`: Keep the open-source packages free of Neura's closed code, so they can be published alone.
 - `check_docs.py`: Checks for the developer docs site (design §26.2, §26.7).
 - `check_sizes.py`: Keep source files small enough to read whole.
 - `codemap.py`: The code map (docs/codemap.md), generated from what each file says it is for, and checks that the maps and guides an agent reads stay true.

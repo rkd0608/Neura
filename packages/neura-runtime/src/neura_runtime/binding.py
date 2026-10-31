@@ -8,6 +8,8 @@ ones the execution profile declares (design §4.3); nothing else is ever convert
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,6 +27,8 @@ from neura_contracts import (
     StateInput,
     check_compatibility,
     conversion_factor,
+    load_document,
+    parse_document,
 )
 
 FloatArray = NDArray[np.float64]
@@ -147,3 +151,27 @@ class ExecutionBinding:
                     )
                 )
         return tuple(layouts)
+
+
+def load_binding(artifact: Path, robot: Path, profile: Path) -> ExecutionBinding:
+    a = load_document(artifact.read_text(encoding="utf-8"))
+    r = load_document(robot.read_text(encoding="utf-8"))
+    p = load_document(profile.read_text(encoding="utf-8"))
+    assert isinstance(a, ModelArtifact)
+    assert isinstance(r, RobotProfile)
+    assert isinstance(p, ExecutionProfile)
+    return ExecutionBinding(a, r, p)
+
+
+def binding_from_documents(documents: dict[str, Any]) -> ExecutionBinding:
+    """Parse and verify contracts received from the agent; refuses incompatible ones."""
+    artifact = parse_document(documents["model_artifact"])
+    robot = parse_document(documents["robot_profile"])
+    profile = parse_document(documents["execution_profile"])
+    if not (
+        isinstance(artifact, ModelArtifact)
+        and isinstance(robot, RobotProfile)
+        and isinstance(profile, ExecutionProfile)
+    ):
+        raise ValueError("assignment documents have the wrong kinds")
+    return ExecutionBinding(artifact, robot, profile)

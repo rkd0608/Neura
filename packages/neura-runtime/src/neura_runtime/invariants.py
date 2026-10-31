@@ -18,8 +18,9 @@ session and epoch are kept, so the monitor can follow a multi-day soak.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,11 +30,25 @@ from neura_runtime import tensors
 from neura_runtime.action_queue import MergeKind
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.runtime import ACTIVE_STATES, FaultRecord, RuntimeState
-
-if TYPE_CHECKING:
-    from neura_server.leases import LeaseTable
+from neura_runtime.session import Outbound, SessionClient
 
 MAX_DETAILS = 200
+
+
+class Lease(Protocol):
+    """What the monitor reads of a gateway's lease (``neura_server.leases.Lease``)."""
+
+    @property
+    def robot_id(self) -> str: ...
+    @property
+    def generation(self) -> int: ...
+    @property
+    def expires_at_us(self) -> int: ...
+
+
+class Leases(Protocol):
+    def get(self, session_id: str) -> Lease | None: ...
+
 
 # Violation codes. Each names the rule that was broken.
 CHUNK_LEASE = "chunk_accepted_under_wrong_lease"
@@ -456,7 +471,7 @@ class InvariantMonitor:
         self._generations[robot_id] = max(previous, generation)
 
     def chunk_emitted(
-        self, chunk: dataplane_pb2.ActionChunk, leases: LeaseTable, gateway_now_us: int
+        self, chunk: dataplane_pb2.ActionChunk, leases: Leases, gateway_now_us: int
     ) -> None:
         self.checked["chunks_emitted"] += 1
         env = chunk.envelope
@@ -479,3 +494,62 @@ class InvariantMonitor:
             # Oldest first (dicts keep insertion order); anything this old is long since stale.
             for stale in list(self._authorized)[:25_000]:
                 del self._authorized[stale]
+
+
+def watch_robot(
+    monitor: InvariantMonitor,
+    owner: object,
+    robot_id: str,
+    client: SessionClient,
+    last_command: Callable[[], Any],
+) -> Any:
+    """Wire a robot's session client and runtime to ``monitor``: every observation it sends,
+    session it is granted, chunk it receives and action it dispatches. ``last_command`` returns
+    the command vector the controller was last given. Returns the monitor's record."""
+    runtime = client.runtime
+    record = monitor.client(owner, robot_id, runtime.binding)
+    drain = client.drain
+    on_open = client.on_open_response
+    on_message = client.on_gateway_message
+
+    def watched_drain() -> list[Outbound]:
+        items = drain()  # SessionClient.tick drains through this too
+        for item in items:
+            message = item.message
+            if (
+                isinstance(message, dataplane_pb2.RobotMessage)
+                and message.WhichOneof("body") == "observation"
+            ):
+                monitor.observation_sent(record, message.observation)
+        return items
+
+    def watched_open(response: dataplane_pb2.OpenSessionResponse, now_us: int) -> None:
+        if response.WhichOneof("result") == "accepted":
+            accepted = response.accepted
+            monitor.session_granted(record, accepted.session_id, accepted.lease_generation)
+        on_open(response, now_us)
+
+    def watched_message(message: dataplane_pb2.GatewayMessage, now_us: int) -> None:
+        if message.WhichOneof("body") != "action_chunk":
+            on_message(message, now_us)
+            return
+        arrival = monitor.chunk_arriving(
+            record,
+            message.action_chunk,
+            session_id=runtime.session_id,
+            lease_generation=runtime.lease_generation,
+            task_epoch=runtime.task_epoch,
+            state=runtime.state,
+            accepted_before=runtime.counters["chunks_accepted"],
+            now_us=now_us,
+        )
+        on_message(message, now_us)
+        monitor.chunk_handled(arrival, runtime.counters["chunks_accepted"], runtime.state)
+
+    client.drain = watched_drain  # type: ignore[method-assign]
+    client.on_open_response = watched_open  # type: ignore[method-assign]
+    client.on_gateway_message = watched_message  # type: ignore[method-assign]
+    runtime.dispatch_listener = lambda epoch, index: monitor.dispatched(
+        record, epoch, index, last_command(), runtime.state
+    )
+    return record

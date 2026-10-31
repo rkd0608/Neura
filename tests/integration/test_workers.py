@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from neura_runtime.binding import load_binding
 from neura_runtime.runtime import RuntimeState
 from neura_server import grpc_server, worker
 from neura_server.backends import WorkerBackend, WorkerSpec
@@ -29,7 +30,7 @@ from neura_server.config import (
 )
 from neura_server.grpc_server import GatewayServer
 from neura_server.sandbox import Invocation, Launcher, ProcessLauncher, launcher_for
-from neura_sim.grpc_robots import SimulatedRobotProcess, load_binding
+from neura_sim.grpc_robots import SimulatedRobotProcess
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "contracts"
 ARTIFACT = EXAMPLES / "act-so101.artifact.yaml"

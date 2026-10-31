@@ -123,12 +123,12 @@ class Context:
 
 
 def _prepare(args: argparse.Namespace, work: Path, kind: str) -> Context:
+    from neura_bench.evidence.policy import checkpoint_path
     from neura_robots.aloha.contracts import Chunking, write
-    from neura_robots.evidence.policy import checkpoint_path
 
     migrated = False
     if args.synthetic:
-        from neura_robots.evidence.synthetic import write_checkpoint
+        from neura_bench.evidence.synthetic import write_checkpoint
 
         checkpoint = write_checkpoint(work / "checkpoint", size=args.synthetic)
         source = f"synthetic ACT ({args.synthetic}), random weights"
@@ -185,8 +185,8 @@ def _run_system(
 
     args = ctx.args
     if system in ("lerobot-eval", "lerobot-realtime"):
-        from neura_robots.evidence.local import run_eval_protocol, run_realtime
-        from neura_robots.evidence.policy import LocalPolicy
+        from neura_bench.evidence.local import run_eval_protocol, run_realtime
+        from neura_bench.evidence.policy import LocalPolicy
 
         policy = LocalPolicy(ctx.checkpoint, args.device)
         if system == "lerobot-eval":
@@ -203,8 +203,8 @@ def _run_system(
         finally:
             world.close()
     if system.startswith("lerobot-async"):
-        from neura_robots.evidence.faults import async_fault
-        from neura_robots.evidence.lerobot_async import AsyncRun
+        from neura_bench.evidence.faults import async_fault
+        from neura_bench.evidence.lerobot_async import AsyncRun
 
         chunking = ctx.header["chunking"]
         world = RealTimeWorld(AlohaSim(args.task)).start()
@@ -223,8 +223,8 @@ def _run_system(
         finally:
             world.close()
     if system == "neura":
-        from neura_robots.evidence.faults import neura_fault
-        from neura_robots.evidence.served import ServedRun
+        from neura_bench.evidence.faults import neura_fault
+        from neura_bench.evidence.served import ServedRun
 
         served = ServedRun(
             ctx.deployment,
@@ -244,7 +244,7 @@ def _run_system(
 def parity(ctx: Context, pairs: list[Any]) -> dict[str, Any]:
     """The chunks Neura served against LeRobot alone (``predict_action_chunk`` with the
     checkpoint's processors) on the same inputs: the robot's state and camera frame as sent."""
-    from neura_robots.evidence.policy import LocalPolicy
+    from neura_bench.evidence.policy import LocalPolicy
 
     policy = LocalPolicy(ctx.checkpoint, ctx.args.device)
     differences = []
@@ -311,7 +311,7 @@ def _table(rows: dict[str, Any], prefix: str = "") -> None:
 
 
 def closed_loop(args: argparse.Namespace) -> int:
-    from neura_robots.evidence.results import summarize
+    from neura_bench.evidence.results import summarize
 
     systems = _systems(args.systems, SYSTEMS)
     seeds = list(range(args.first_seed, args.first_seed + args.episodes))
@@ -341,8 +341,8 @@ def closed_loop(args: argparse.Namespace) -> int:
 
 
 def faults(args: argparse.Namespace) -> int:
-    from neura_robots.evidence.faults import SCENARIOS
-    from neura_robots.evidence.results import summarize
+    from neura_bench.evidence.faults import SCENARIOS
+    from neura_bench.evidence.results import summarize
 
     systems = _systems(args.systems, REMOTE_SYSTEMS)
     names = [s for s in args.scenarios.split(",") if s]

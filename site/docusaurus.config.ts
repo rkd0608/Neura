@@ -3,7 +3,8 @@
 // served at /docs/ on the NucleiLabs site, in its design (src/css, src/theme/Footer).
 import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
-import { themes as prismThemes } from "prism-react-renderer";
+
+import codeColors from "./src/prism";
 
 // Where the site's other pages are: the console (sign in) and contact, as the home page has them.
 const CONSOLE_URL = process.env.NEURA_CONSOLE_URL ?? "http://127.0.0.1:3000/sign-in";
@@ -84,9 +85,17 @@ const config: Config = {
         },
       ],
     },
+    // Diagrams' edge labels in the tokens' colours too (mermaid's dark theme puts #ccc on #585858).
+    mermaid: {
+      options: {
+        themeCSS:
+          ".edgeLabel, .edgeLabel p, .labelBkg" +
+          " { background-color: var(--surface-2); color: var(--text); }",
+      },
+    },
     prism: {
-      theme: prismThemes.oneLight,
-      darkTheme: prismThemes.oneDark,
+      theme: codeColors,
+      darkTheme: codeColors,
       additionalLanguages: ["bash", "protobuf", "yaml", "json"],
     },
   } satisfies Preset.ThemeConfig,

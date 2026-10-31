@@ -59,6 +59,10 @@
   --ifm-color-danger-contrast-background: var(--danger-soft);
 
   --docsearch-searchbox-background: var(--surface-2);
+  /* The search box, its placeholder and keyboard hint (Infima's grays fall under AA). */
+  --ifm-navbar-search-input-background-color: var(--surface-2);
+  --ifm-navbar-search-input-placeholder-color: var(--text-3);
+  --ifm-color-emphasis-500: var(--border-strong);
   --ifm-h1-font-size: 2.4rem;
   --ifm-line-height-base: 1.65;
 }

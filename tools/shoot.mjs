@@ -7,9 +7,10 @@
 // included, then opens every docs page and the site in Chromium. Each page is screenshotted on a
 // desktop and the main ones also on a phone and in the light theme. A page fails on a console
 // error, an uncaught exception, a failed or refused request, a request to another origin, an image
-// that did not load, or content wider than a phone's screen. Writes DIR/*.png and DIR/report.json
-// (default .verify/shots); exits 1 when any page failed. Build first: `make landing-check` and
-// `make docs-check` (verify does both).
+// that did not load, content wider than a phone's screen, or an accessibility violation (axe,
+// WCAG 2.1 A and AA, the rules the console's end-to-end tests check, in the theme shot). Writes
+// DIR/*.png and DIR/report.json (default .verify/shots); exits 1 when any page failed. Build
+// first: `make landing-check` and `make docs-check` (verify does both).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -116,6 +117,29 @@ function playwright() {
   throw new Error("Playwright is not installed: run `make console-setup`");
 }
 
+// axe-core's Playwright runner, the console's, as its end-to-end tests use it.
+function axeBuilder() {
+  try {
+    return createRequire(join(ROOT, "console", "package.json"))("@axe-core/playwright").AxeBuilder;
+  } catch {
+    throw new Error("@axe-core/playwright is not installed: run `make console-setup`");
+  }
+}
+const AxeBuilder = axeBuilder();
+const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+
+// Every violation, each with the elements it was found on and, for the first, why (a contrast
+// ratio, a missing name).
+async function accessibility(tab) {
+  const { violations } = await new AxeBuilder({ page: tab }).withTags(WCAG).analyze();
+  return violations.map((v) => {
+    const where = v.nodes.slice(0, 3).map((n) => n.target.join(" "));
+    const more = v.nodes.length > 3 ? ` and ${v.nodes.length - 3} more` : "";
+    const why = v.nodes[0]?.failureSummary?.split("\n").slice(1).join(" ").trim();
+    return `accessibility: ${v.id} (${v.impact}): ${v.help}: ${where.join(", ")}${more}: ${why}`;
+  });
+}
+
 // NEURA_CHROMIUM, else Playwright's own browser when it is installed, else /opt/pw-browsers'.
 // Chosen before launching: a launch that fails leaves its profile behind in the temp directory.
 function launch(chromium) {
@@ -171,6 +195,7 @@ async function shoot(browser, base, page, view, theme, out) {
   for (const src of layout.images) problems.push(`image did not load: ${src}`);
   const name = `${(page.replace(/^\/|\/$/g, "") || "home").replaceAll("/", "_")}-${view}-${theme}.png`;
   await tab.screenshot({ path: join(out, name), fullPage: view === "desktop" });
+  problems.push(...(await accessibility(tab)));
   await context.close();
   return { page, view, theme, title: layout.title, screenshot: name, problems };
 }

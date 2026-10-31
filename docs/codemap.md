@@ -478,6 +478,7 @@ Under `site/`:
 - `src/components/StatusBanner.tsx`: The status label every page carries (design §26.2), shown above the page's content.
 - `src/components/SupportedTable.tsx`: The Supported combinations table (design §26.5): rendered from data/supported.json, which only qualification runs write, so nobody can add a supported combination by hand.
 - `src/css/custom.css`: The docs in the NucleiLabs design: the console's and the site's tokens (tokens.css, loaded first), mapped onto Docusaurus's theme variables, with the site's navigation, type and footer.
+- `src/prism.ts`: The code blocks' colours: the design tokens' (console/src/styles/tokens.css), so one theme serves both modes and every colour meets WCAG 2.1 AA on the block's background in each, as the tokens do.
 - `src/theme/DocItem/Content/index.tsx`: Wraps every docs page's content with its status banner, read from the page's front matter.
 - `src/theme/Footer/index.tsx`: The site's footer on every docs page: the same columns as the NucleiLabs home page.
 

@@ -26,7 +26,10 @@ All notable changes to neura-robot. The format follows
   recorded actions.
 - Universal Robots arms through Universal Robots' official ROS 2 driver, tested against URSim (the
   real controller software): `make test-ursim`.
-- `make doctor`, `make setup-all` and `make assets`: check a machine, install everything, fetch
+- `make setup-all` installs every extra the machine can run, with the right PyTorch: the CPU
+  build on Linux without an NVIDIA GPU (`TORCH=cpu` or `cuda` to choose), PyPI's on Apple
+  Silicon, and everything but LeRobot on an Intel Mac or before Python 3.12.
+- `make doctor` and `make assets`: check a machine, install everything, fetch
   the simulated arms' models.
 
 ### Fixed
@@ -34,6 +37,7 @@ All notable changes to neura-robot. The format follows
 - A camera the policy does not read no longer holds observations back when its frames lag.
 - The MuJoCo tests skip with what to install, instead of failing, when libEGL is missing.
 - The ROS 2 relay keeps accepting connections after one ends abruptly (it stopped for good).
+- The `lerobot` extra includes LeRobot's dataset support, which recorded robots need.
 - `neura-arm` closing a ROS 2 arm ends its connection to the relay (it stayed open, so the next
   connection was never served).
 

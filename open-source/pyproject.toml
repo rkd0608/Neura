@@ -45,7 +45,7 @@ dependencies = [
 # A policy behind openpi's websocket policy server.
 openpi = ["msgpack>=1.1", "websockets>=13"]
 # A policy behind LeRobot's async inference server (LeRobot needs Python 3.12+).
-lerobot = ["lerobot>=0.6.1,<0.7"]
+lerobot = ["lerobot[dataset]>=0.6.1,<0.7"]
 # The SO-101 arm on its Feetech servo bus, through LeRobot (Python 3.12+).
 so101 = ["lerobot[feetech]>=0.6.1,<0.7"]
 # Simulated robots in MuJoCo: the MuJoCo Menagerie arms and the ALOHA tasks.

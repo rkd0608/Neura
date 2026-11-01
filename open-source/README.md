@@ -118,13 +118,22 @@ git clone https://github.com/rkd0608/neura-robot && cd neura-robot
 python3.12 -m venv .venv && . .venv/bin/activate   # 3.10 works for everything but LeRobot
 
 make setup        # the core and the development tools: pip install -e ".[dev,openpi]"
-make setup-all    # everything (Python 3.12+): adds MuJoCo, LeRobot and the SO-101 driver
+make setup-all    # every extra this machine can run, with the right PyTorch (see below)
 make assets       # fetch the simulated arms' models now (else on first use), about 100 MB
 ```
 
-`setup-all` installs LeRobot, which brings PyTorch. Without an NVIDIA GPU, install PyTorch's CPU
-build first, or pip fetches the much larger CUDA one:
-`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+`make setup-all` adds MuJoCo and LeRobot (the SO-101 driver, the LeRobot server, recorded
+robots), and picks the PyTorch LeRobot brings for this machine:
+
+| Machine | PyTorch | Size |
+|---|---|---|
+| Linux, no NVIDIA GPU | the CPU build, from PyTorch's index | about 2 GB in all |
+| Linux with an NVIDIA GPU (`nvidia-smi` works) | PyPI's, with CUDA | several GB more |
+| Mac with Apple Silicon | PyPI's: CPU and Apple's GPU (Metal) | |
+| Intel Mac, or Python before 3.12 | none: everything but LeRobot is installed, and it says why | |
+
+Override the choice on Linux with `make setup-all TORCH=cpu` or `TORCH=cuda`; `python
+scripts/setup.py --dry-run` prints what it would run.
 
 Or pick extras yourself: `pip install -e ".[dev,openpi,sim]"`.
 
@@ -397,7 +406,7 @@ with its output.
 | `packages/neura-contracts` | contract documents and their compatibility check (`neura_contracts`) |
 | `packages/neura-proto` | the wire protocol, generated from `proto/neura/v1` |
 | `examples/` | contracts, robot configurations, example policies, the quickstart |
-| `scripts/doctor.py` | `make doctor` |
+| `scripts/` | `make setup-all` (`setup.py`) and `make doctor` (`doctor.py`) |
 | `docs/` | the documentation |
 
 ## Platforms

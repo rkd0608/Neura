@@ -53,7 +53,8 @@ pytest -k incident              # by name
 
 Some tests need more than Python, and skip with a reason when it is missing:
 
-- **LeRobot and the SO-101 emulator**: `pip install -e ".[so101,lerobot]"` (Python 3.12+).
+- **LeRobot, the SO-101 emulator and recorded robots**: `make setup-all` (Python 3.12+; it picks
+  the CPU build of PyTorch on a machine without an NVIDIA GPU).
 - **MuJoCo**: `pip install -e ".[sim]"`, git (the simulated arms' models are fetched once; `make
   assets`), and headless OpenGL to render its cameras (on Debian or
   Ubuntu: `sudo apt-get install libegl1 libgl1`; or set `MUJOCO_GL=osmesa` with `libosmesa6`).

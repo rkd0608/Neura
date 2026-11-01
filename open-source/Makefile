@@ -1,6 +1,7 @@
 # Common tasks for neura-robot. `make help` lists them.
 .DEFAULT_GOAL := help
 PYTHON ?= python
+TORCH ?= auto
 
 .PHONY: help
 help: ## List the tasks
@@ -11,8 +12,8 @@ setup: ## Install neura-robot for development, in the active environment
 	$(PYTHON) -m pip install -e ".[dev,openpi]"
 
 .PHONY: setup-all
-setup-all: ## Everything: also LeRobot (SO-101, its server) and MuJoCo (Python 3.12+)
-	$(PYTHON) -m pip install -e ".[dev,openpi,sim,so101,lerobot]"
+setup-all: ## Every extra this machine can run, with the right PyTorch (TORCH=auto, cpu or cuda)
+	$(PYTHON) scripts/setup.py --torch $(TORCH)
 
 .PHONY: assets
 assets: ## Fetch the simulated arms' models (MuJoCo Menagerie, with git, once)

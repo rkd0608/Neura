@@ -89,11 +89,7 @@ def extras() -> None:
         "LeRobot: SO-101 driver and emulator, LeRobot server",
         ""
         if lerobot
-        else (
-            'pip install -e ".[so101,lerobot]"'
-            if lerobot_python
-            else "needs Python 3.12+ (LeRobot's requirement)"
-        ),
+        else ("make setup-all" if lerobot_python else "needs Python 3.12+ (LeRobot's requirement)"),
     )
     if not has("mujoco"):
         line(OPTIONAL, "MuJoCo: simulated arms and ALOHA", 'pip install -e ".[sim]"')

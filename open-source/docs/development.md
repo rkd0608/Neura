@@ -23,7 +23,7 @@ comment's own text should stand without it. If one doesn't, that's worth an issu
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-make setup        # or make setup-all for every extra (Python 3.12+)
+make setup        # or make setup-all: every extra this machine can run, the right PyTorch
 make doctor       # what this machine can run, and how to get the rest
 make check
 ```

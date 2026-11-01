@@ -5,7 +5,7 @@
 | Path | What it is |
 |---|---|
 | `packages/neura-runtime` | the runtime, transports, incident records (`neura_runtime`) |
-| `packages/neura-robots` | robots: SO-101, ROS 2, simulated arms (`sim/`: Menagerie and ALOHA), the robot-side process (`neura_robots`) |
+| `packages/neura-robots` | robots: SO-101, ROS 2, simulated arms (`sim/`: Menagerie and ALOHA), recordings (`recorded.py`), the robot-side process (`neura_robots`) |
 | `packages/neura-contracts` | contract documents and their compatibility check (`neura_contracts`) |
 | `packages/neura-proto` | the wire protocol, generated from `proto/neura/v1` (`neura.v1`) |
 | `examples/` | contracts, robot configurations, example policies, the quickstart |

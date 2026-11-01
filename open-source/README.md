@@ -51,7 +51,8 @@ flowchart LR
 - [Quickstart](#quickstart): one minute, nothing to install but Python
 - [Set up your machine](#set-up-your-machine): every prerequisite, `make doctor`, Hugging Face
 - [Try it without hardware](#try-it-without-hardware): simulated arms, the SO-101 emulator, a
-  remote policy, policy servers in Docker, ROS 2 in Docker, incident records
+  real robot's recording from Hugging Face, a remote policy, policy servers, ROS 2 and a
+  Universal Robots arm in Docker, incident records
 - [Run a real robot](#run-a-real-robot)
 - [Bring your policy](#bring-your-policy)
 - [What the runtime guarantees](#what-the-runtime-guarantees)
@@ -78,12 +79,19 @@ A simulated arm runs an `@neura.policy` through the same runtime a real robot us
   state Ready, commands sent to the arm: 0
 2. Armed. The policy drives the arm at 30 Hz.
   state Running, commands sent: 60
+  last command: [0.0, 0.0, 0.0, 0.0, 0.0, 50.0]
 3. The policy starts failing. The arm runs out of fresh actions and the runtime stops.
   fault: STARVATION_GRACE_EXHAUSTED; response: controlled_stop
   commands after the fault: 0
 4. The fault wrote an incident record. Replaying it through a fresh runtime:
-  709 events; replays the same: True
+  /tmp/neura-incidents-…/demo-arm-…-STARVATION_GRACE_EXHAUSTED.mcap
+  712 events; replays the same: True
+
+Open the record in Foxglove (https://foxglove.dev) to see every decision in time.
 ```
+
+The number of events changes a little from run to run (it depends on this machine's timing);
+"replays the same: True" doesn't.
 
 ## Set up your machine
 
@@ -113,6 +121,10 @@ make setup        # the core and the development tools: pip install -e ".[dev,op
 make setup-all    # everything (Python 3.12+): adds MuJoCo, LeRobot and the SO-101 driver
 make assets       # fetch the simulated arms' models now (else on first use), about 100 MB
 ```
+
+`setup-all` installs LeRobot, which brings PyTorch. Without an NVIDIA GPU, install PyTorch's CPU
+build first, or pip fetches the much larger CUDA one:
+`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
 
 Or pick extras yourself: `pip install -e ".[dev,openpi,sim]"`.
 
@@ -381,7 +393,7 @@ with its output.
 | Path | What it is |
 |---|---|
 | `packages/neura-runtime` | the runtime, policy transports, incident records (`neura_runtime`) |
-| `packages/neura-robots` | robots: SO-101, ROS 2, simulated arms (`sim/`), ALOHA, the robot process |
+| `packages/neura-robots` | robots: SO-101 and its emulator, ROS 2 (`ros2/`: the relay node), simulated arms (`sim/`), recordings (`recorded.py`), the robot process |
 | `packages/neura-contracts` | contract documents and their compatibility check (`neura_contracts`) |
 | `packages/neura-proto` | the wire protocol, generated from `proto/neura/v1` |
 | `examples/` | contracts, robot configurations, example policies, the quickstart |

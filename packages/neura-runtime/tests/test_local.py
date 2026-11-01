@@ -31,7 +31,7 @@ from mcap.reader import make_reader
 
 from neura.v1 import worker_pb2
 from neura_contracts import ReasonCode
-from neura_runtime import remote, replay, timeline
+from neura_runtime import remote, replay, timeline, view
 from neura_runtime.authored import AuthoredPolicy
 from neura_runtime.binding import ExecutionBinding, load_binding
 from neura_runtime.incident import IncidentRecorder
@@ -298,6 +298,9 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     # Told in words, stamped with the time of day: the runtime's states and the fault, in order.
     story = timeline.tell(record)
     assert story.index("state: Running") < story.index("FAULT") < story.index("state: Faulted")
+    page = view.render(record)
+    assert page.count("<svg") == 2
+    assert "FAULT STARVATION_GRACE_EXHAUSTED" in page
     with recorder.written[0].open("rb") as stream:
         first = next(make_reader(stream).iter_messages())[2].log_time
     assert abs(first / 1e9 - time.time()) < 60

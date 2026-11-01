@@ -283,13 +283,14 @@ Every robot above keeps the last ~30 seconds of what its runtime saw, was told a
 fault, or typing `incident`, writes it to `incidents/` as [MCAP](https://mcap.dev):
 
 ```bash
-neura-robot timeline incidents/<file>.mcap   # the story in words: states, policy answers, the fault
+neura-robot view incidents/<file>.mcap       # a page in your browser: a timeline and the story
+neura-robot timeline incidents/<file>.mcap   # the story in words, in the terminal
 neura-robot replay incidents/<file>.mcap     # a fresh runtime must decide exactly the same
 ```
 
-To see it as a timeline, open the record in [Foxglove](https://app.foxglove.dev) and load the
-layout in [`examples/foxglove/`](examples/foxglove/incident-layout.json) once (Layouts → Import
-from file). See [docs/incidents.md](docs/incidents.md).
+`view` writes the page next to the record (`.html`, one file, nothing to install) and opens it:
+the runtime's state, the policy's answers and your commands on one timeline, the fault, the
+commands sent to the arm, and the story in words. See [docs/incidents.md](docs/incidents.md).
 
 ## Run a real robot
 

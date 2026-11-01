@@ -347,6 +347,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
 - `neura_runtime/timeline.py`: An incident record told in words: what the operator did, what the runtime's state became, what the policy answered (and what was refused, and why), and the fault, with the seconds since the record …
+- `neura_runtime/view.py`: An incident record as a web page, one self-contained HTML file with nothing to install: the runtime's state, the policy's answers and the operator's actions on one timeline, the commands sent to the …
 
 Tests, under `packages/neura-runtime/tests/`: `openpi/serve_still.py`, `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_local.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
 

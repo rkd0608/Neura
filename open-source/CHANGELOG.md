@@ -26,9 +26,10 @@ All notable changes to neura-robot. The format follows
   recorded actions.
 - Universal Robots arms through Universal Robots' official ROS 2 driver, tested against URSim (the
   real controller software): `make test-ursim`.
-- `neura-robot timeline RECORD` tells an incident record in words; records carry the runtime's
-  state as its own topic and the time of day of each event; a Foxglove layout for them
-  (`examples/foxglove/incident-layout.json`).
+- `neura-robot view RECORD` turns an incident record into a web page (a timeline of the runtime's
+  state, the policy's answers and the operator's commands, the commands plotted, the story);
+  `neura-robot timeline RECORD` tells it in words. Records carry the runtime's state as its own
+  topic and the time of day of each event.
 - `make setup-all` installs every extra the machine can run, with the right PyTorch: the CPU
   build on Linux without an NVIDIA GPU (`TORCH=cpu` or `cuda` to choose), PyPI's on Apple
   Silicon, and everything but LeRobot on an Intel Mac or before Python 3.12.

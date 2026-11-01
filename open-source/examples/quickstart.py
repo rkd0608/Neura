@@ -103,9 +103,8 @@ async def main() -> None:
     )
     say(f"{shown}")
     say(f"{outcome.events} events; replays the same: {outcome.matches}")
-    print(f"\nThe story in words:  neura-robot timeline {shown}")
-    print("As a timeline: open it in Foxglove (https://app.foxglove.dev) with the layout in")
-    print("examples/foxglove/incident-layout.json (Layouts, then Import from file).")
+    print(f"\nSee it in the browser:  neura-robot view {shown}")
+    print(f"Or in words:            neura-robot timeline {shown}")
 
 
 if __name__ == "__main__":

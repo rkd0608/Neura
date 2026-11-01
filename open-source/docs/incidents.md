@@ -52,14 +52,18 @@ tells the record in words, second by second:
 
 ## Viewing
 
-Open the file in [Foxglove](https://foxglove.dev) (in the browser or the desktop app). Load the
-layout once: **Layouts** (top right) → **Import from file** →
-[`examples/foxglove/incident-layout.json`](../examples/foxglove/incident-layout.json). It shows the
-runtime's state, the policy's answers and the runtime's control of the arm as a timeline, a plot
-of the commands sent to the arm, the fault, and each policy answer in full. Events are stamped with
-the time of day they happened.
+```bash
+neura-robot view incidents/so101-a-20261031T120000-STARVATION_GRACE_EXHAUSTED.mcap
+```
 
-Each kind of event is its own JSON topic: `/neura/state` (the runtime's state, each time it
+writes a web page next to the record (`.html`: one file, nothing to install, safe to attach to an
+issue) and opens it in the browser: the runtime's state, the policy's answers (accepted, refused,
+not given), the operator's commands and what the arm was told, on one timeline with the fault
+marked; the commands sent to the arm, each joint from its minimum to its maximum; and the story
+in words. `--no-open` only writes it.
+
+The file opens in [Foxglove](https://foxglove.dev) and [Rerun](https://rerun.io) as well, with
+events stamped with the time of day they happened. Each kind of event is its own JSON topic: `/neura/state` (the runtime's state, each time it
 changes), `/neura/commanded` (actions sent, with values), `/neura/chunk` (accepted or refused, and
 why), `/neura/fault`, `/neura/capture` (joint states), `/neura/input/*` (what reached the runtime),
 and so on. They open in [Rerun](https://rerun.io) too.

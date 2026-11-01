@@ -12,6 +12,9 @@ neura-robot serve POLICY [--weights DIR] [--device DEVICE] [--listen HOST:PORT]
 neura-robot replay RECORD
     run an incident record (.mcap) back through a fresh runtime and say whether it decides
     exactly as the robot did, or where it first differs.
+neura-robot view RECORD [--no-open]
+    an incident record as a web page (written next to it, opened in the browser): the runtime's
+    state, the policy's answers and the operator's actions on one timeline, the commands plotted.
 neura-robot timeline RECORD
     tell an incident record in words: what the operator did, the runtime's state, what the
     policy answered and what was refused, and the fault, second by second.
@@ -63,6 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     served.add_argument("--listen", default="127.0.0.1:50061")
     replayed = sub.add_parser("replay", help="replay an incident record through the runtime")
     replayed.add_argument("record", type=Path)
+    viewed = sub.add_parser("view", help="an incident record as a web page")
+    viewed.add_argument("record", type=Path)
+    viewed.add_argument("--no-open", action="store_true", help="write the page, do not open it")
     told = sub.add_parser("timeline", help="tell an incident record in words")
     told.add_argument("record", type=Path)
     args = parser.parse_args(argv)
@@ -70,6 +76,16 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(serve(args.policy, args.weights, args.device, args.listen))
     if args.command == "replay":
         return replay_record(args.record)
+    if args.command == "view":
+        import webbrowser
+
+        from neura_runtime import replay, view
+
+        page = view.write(replay.read(args.record), args.record)
+        print(page)
+        if not args.no_open:
+            webbrowser.open(page.resolve().as_uri())
+        return 0
     if args.command == "timeline":
         from neura_runtime import replay, timeline
 

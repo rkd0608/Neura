@@ -126,13 +126,21 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - runs insid
             with lock:
                 peer[:] = [connection]
             stream = connection.makefile("rb")
-            while (frame := read_frame(stream)) is not None:
-                header, _ = frame
-                if header.get("kind") == "command":
-                    commands.publish(Float64MultiArray(data=[float(p) for p in header["position"]]))
-            with lock:
-                peer.clear()
-            connection.close()
+            # A connection that fails (reset when neura-arm exits with frames unread, or a bad
+            # frame) ends; the relay goes on accepting the next one.
+            try:
+                while (frame := read_frame(stream)) is not None:
+                    header, _ = frame
+                    if header.get("kind") == "command":
+                        position = [float(p) for p in header["position"]]
+                        commands.publish(Float64MultiArray(data=position))
+            except (OSError, ValueError) as exc:
+                print(f"neura-arm's connection ended: {exc}", flush=True)
+            finally:
+                with lock:
+                    peer.clear()
+                stream.close()  # the connection closes only once its file is closed too
+                connection.close()
 
     threading.Thread(target=serve, daemon=True).start()
     print(f"relaying {len(joints)} joints and {len(cameras)} cameras on {args.socket}", flush=True)

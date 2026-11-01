@@ -40,6 +40,8 @@ from neura_contracts import RobotProfile, load_document
 from neura_robots.lock import ActuatorBusyError
 from neura_robots.policies import PolicyConfig, describe, inferred_binding, open_policy
 from neura_robots.process import ArmProcess, AssignedArm, OperatorInbox
+from neura_robots.recorded import RecordedArm, RecordedEpisode
+from neura_robots.recorded import describe as describe_recording
 from neura_robots.ros2.arm import Ros2Arm, Ros2Config, Ros2Joint
 from neura_robots.so101 import ArmError, CameraConfig, So101Arm, So101Config
 
@@ -131,6 +133,17 @@ class MujocoArmConfig(_Model):
         return self
 
 
+class RecordedArmConfig(_Model):
+    type: Literal["recorded"]
+    # A LeRobot dataset of a real arm: a Hugging Face Hub name, or a local copy under `root`.
+    dataset: str
+    episode: int = Field(default=0, ge=0)
+    root: Path | None = None
+    # Each camera role of the robot profile, and the dataset's camera it is served from.
+    cameras: dict[str, str] = Field(default_factory=dict)
+    on_exit: Literal["hold"] = "hold"
+
+
 class CameraEntry(_Model):
     # ros2: frames from the ROS 2 relay node, which subscribes to the camera's topic
     type: Literal["opencv", "synthetic", "ros2"] = "opencv"
@@ -146,7 +159,7 @@ class RobotConfig(_Model):
     policy: PolicyConfig | None = None
     # Contracts to serve; without them, whatever revision the site assigns this robot.
     revision: RevisionConfig | None = None
-    arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig
+    arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig | RecordedArmConfig
     cameras: dict[str, CameraEntry] = Field(default_factory=dict)
     instruction: str | None = None
     # Where the robot spools recorded episodes when its site records them (design §28.2); unset,
@@ -168,8 +181,8 @@ class RobotConfig(_Model):
 
     @model_validator(mode="after")
     def _cameras_match_the_arm(self) -> RobotConfig:
-        if isinstance(self.arm, MujocoArmConfig) and self.cameras:
-            raise ValueError("a simulated arm's camera is its scene's: leave `cameras:` out")
+        if isinstance(self.arm, MujocoArmConfig | RecordedArmConfig) and self.cameras:
+            raise ValueError("this arm's cameras are its own: leave the top-level `cameras:` out")
         ros2 = isinstance(self.arm, Ros2ArmConfig)
         wrong = sorted(role for role, c in self.cameras.items() if (c.type == "ros2") != ros2)
         if wrong:
@@ -204,9 +217,11 @@ class RobotConfig(_Model):
         credentials = config.credentials and config.credentials.model_copy(
             update={"cert_dir": rel(config.credentials.cert_dir)}
         )
-        arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig = config.arm
+        arm: ArmConfig | Ros2ArmConfig | MujocoArmConfig | RecordedArmConfig = config.arm
         if isinstance(config.arm, Ros2ArmConfig):
             arm = config.arm.model_copy(update={"socket": rel(config.arm.socket)})
+        elif isinstance(config.arm, RecordedArmConfig):
+            arm = config.arm.model_copy(update={"root": rel(config.arm.root)})
         elif isinstance(config.arm, ArmConfig):
             arm = config.arm.model_copy(
                 update={
@@ -244,11 +259,15 @@ class RobotConfig(_Model):
             lock_dir=arm.lock_dir,
         )
 
-    def open_arm(self, profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm:
+    def open_arm(self, profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm | RecordedArm:
         """The configured arm, not yet connected."""
         arm = self.arm
         if isinstance(arm, MujocoArmConfig):
             return _simulated_arm(arm, profile)
+        if isinstance(arm, RecordedArmConfig):
+            return RecordedArm(
+                RecordedEpisode(arm.dataset, arm.episode, arm.root), profile, arm.cameras
+            )
         if not isinstance(arm, Ros2ArmConfig):
             return So101Arm(self.so101(), profile)
         joints = [Ros2Joint(j.ros, j.name, j.scale, j.offset) for j in arm.joints]
@@ -301,11 +320,13 @@ def _say(line: str) -> None:
     print(line, flush=True)
 
 
-def _where(arm: So101Arm | Ros2Arm | SimArm) -> str:
+def _where(arm: So101Arm | Ros2Arm | SimArm | RecordedArm) -> str:
     if isinstance(arm, So101Arm):
         return arm.lock.device
     if isinstance(arm, Ros2Arm):
         return f"the relay on {arm.config.socket}"
+    if isinstance(arm, RecordedArm):
+        return f"a recording ({arm.episode.dataset.repo_id})"
     return f"MuJoCo ({arm.sim.model.nu} actuators)"
 
 
@@ -387,7 +408,7 @@ async def serve(
         print(f"cannot serve: {exc}", file=sys.stderr)
         return 1
     credentials = config.robot_credentials() if config.gateway is not None else None
-    arm: So101Arm | Ros2Arm | SimArm | None = None
+    arm: So101Arm | Ros2Arm | SimArm | RecordedArm | None = None
     policy: PolicyClient | None = None
     current: list[Any] = []
 
@@ -428,7 +449,7 @@ async def serve(
             await process.connection.run(stop)
         else:
 
-            def open_arm(profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm:
+            def open_arm(profile: RobotProfile) -> So101Arm | Ros2Arm | SimArm | RecordedArm:
                 nonlocal arm
                 arm = config.open_arm(profile)
                 arm.connect()
@@ -464,6 +485,8 @@ async def serve(
                 running.incidents.close()  # a record a fault is waiting on is written now
         if arm is not None:
             on_exit = config.arm.on_exit
+            if isinstance(arm, RecordedArm):  # the commands against what was recorded
+                _say(json.dumps(describe_recording(arm)))
             if arm.close():
                 _say(f"{config.robot_id}: let go of the arm ({on_exit})")
             else:

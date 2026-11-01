@@ -191,7 +191,20 @@ Action queue and chunk merging, fencing, the state machine, sessions.
 - Tests: `packages/neura-robots/tests/test_ros2.py::test_a_ros2_arm_is_driven_safely_over_a_lossy_link`
   (ROS 2 Jazzy in Docker, packet loss and a cut link): build `packages/neura-robots/tests/ros2/`
   as `neura-ros2-test:dev` and set `NEURA_TEST_ROS2_IMAGE`
-- Docs: `site/docs/ros2.md`; example: `examples/robots/ros2-arm.yaml`
+- Universal Robots: `packages/neura-robots/tests/test_ursim.py` (URSim and the official
+  ur_robot_driver in Docker: build `packages/neura-robots/tests/ursim/` as
+  `neura-ur-driver-test:dev` and set `NEURA_TEST_UR_DRIVER_IMAGE`; the published repository's
+  Makefile has a target for it)
+- Docs: `site/docs/ros2.md`, `open-source/docs/ros2.md`; example: `examples/robots/ros2-arm.yaml`
+
+### Recorded robots: real datasets through the runtime (§30.2)
+
+- Code: `packages/neura-robots/src/neura_robots/recorded.py`, `arm: type: recorded` in
+  `packages/neura-robots/src/neura_robots/cli.py`
+- Tests: `packages/neura-robots/tests/test_recorded.py` (lerobot/svla_so101_pickplace from the
+  Hub, the runtime and a policy, until the recording ends)
+- See it: `neura-arm run open-source/examples/robots/so101-recorded.yaml` (from the published
+  repository, where `examples/contracts` sits beside it)
 
 ### Simulated arms: MuJoCo Menagerie (§30.2)
 

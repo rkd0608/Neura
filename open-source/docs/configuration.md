@@ -73,6 +73,13 @@ runs on this machine. A remote policy (`neura://`, `openpi://`, `lerobot://`) ne
 The models are fetched once with git (about 100 MB, into `~/.cache/neura-robot`), or read from
 the Menagerie checkout `NEURA_MENAGERIE` names. Example: [`panda-sim.yaml`](../examples/robots/panda-sim.yaml).
 
+**A recording** (`type: recorded`, needs the `lerobot` extra): `dataset` (a LeRobot dataset of a real
+arm: a Hugging Face Hub name, or a local copy under `root`), `episode`, `cameras` (each camera role
+of the robot profile, and the dataset's camera it is served from). Its joints must be the robot
+profile's. The episode plays at the speed it was recorded; the commands change nothing (open
+loop); the episode ending is the robot going away. At exit, `neura-arm` prints how far the
+commands were from the recorded actions. Example: [`so101-recorded.yaml`](../examples/robots/so101-recorded.yaml).
+
 ## `cameras`
 
 By the robot profile's camera roles: `{type: opencv, index_or_path: ..., fps: 30}` for a real

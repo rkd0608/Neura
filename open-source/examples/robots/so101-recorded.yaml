@@ -1,0 +1,27 @@
+# neura-arm configuration for a recorded SO-101: an episode of a real arm's dataset on the Hugging
+# Face Hub, played to the runtime and the policy at the speed it was recorded. Everything but the
+# arm moving in response (open loop). Needs the lerobot extra; the dataset (86 MB) is fetched once.
+#
+#   neura-arm run examples/robots/so101-recorded.yaml
+#
+# Type `arm`; when the episode ends the runtime stops (the robot is gone), and `quit` prints how
+# far the policy's commands were from the actions recorded at the same moments.
+
+robot_id: so101-recorded
+
+revision:
+  id: local
+  artifact: ../contracts/act-so101.artifact.yaml
+  robot_profile: ../contracts/so101.robot.yaml
+  execution_profile: ../contracts/act-so101-30hz.profile.yaml
+
+policy:
+  uri: ../policies/mid_range.py
+
+arm:
+  type: recorded
+  dataset: lerobot/svla_so101_pickplace   # or a local copy: add `root: path/to/it`
+  episode: 0
+  cameras:  # the robot profile's camera role: the dataset's camera
+    front: up
+    wrist: side

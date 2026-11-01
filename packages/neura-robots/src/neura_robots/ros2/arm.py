@@ -11,6 +11,7 @@ commands the positions last read, which a ROS position controller keeps. Images 
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import socket
@@ -101,6 +102,10 @@ class Ros2Arm:
         with self._lock:
             sock, self._sock = self._sock, None
         if sock is not None:
+            # Shut down, not only close: the reader thread's file keeps the socket open until
+            # it is closed too, and the relay serves one connection at a time.
+            with contextlib.suppress(OSError):
+                sock.shutdown(socket.SHUT_RDWR)
             sock.close()
         return held
 

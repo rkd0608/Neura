@@ -143,10 +143,12 @@ LeRobot policies and datasets live on the [Hugging Face Hub](https://huggingface
 hf auth login            # only for gated or private repositories; public ones need no account
 export HF_HOME=~/hf      # optional: where models and datasets are cached (~/.cache/huggingface)
 hf download lerobot/act_aloha_sim_transfer_cube_human     # e.g. fetch a public policy ahead
+hf download --repo-type dataset lerobot/svla_so101_pickplace   # the recording the examples use
 ```
 
 Behind a firewall or proxy, allow `huggingface.co` and `*.hf.co` (where the files are served
-from). The tests themselves never download from the Hub: they build small synthetic checkpoints.
+from). One test needs the Hub: the recorded SO-101 (86 MB, cached after the first run); the others
+build small synthetic checkpoints.
 
 ## Try it without hardware
 
@@ -189,6 +191,20 @@ neura-arm run examples/robots/so101-emulated.yaml
 
 Same commands: `arm`, `status`, `takeover`, `incident`, `quit`.
 
+### A real robot's recording, from Hugging Face
+
+An episode of a real SO-101's dataset on the Hugging Face Hub (its joint states and both camera
+streams) played to the runtime and the policy at the speed it was recorded (`lerobot` extra):
+
+```bash
+neura-arm run examples/robots/so101-recorded.yaml
+```
+
+Everything but the arm moving in response (the commands change nothing: open loop). Type `arm`;
+when the episode ends the runtime stops, as for a robot that went away, and `quit` prints how far
+the policy's commands were from the actions recorded at the same moments, joint by joint. Point
+`dataset:` at any LeRobot dataset whose joints match the robot profile.
+
 ### A policy on another machine
 
 Serve any `@neura.policy` class over the network, and point a robot at it. On the GPU machine
@@ -229,7 +245,16 @@ machine driving it while packets are dropped and the link is cut:
 make test-docker      # builds the openpi and ROS 2 images and runs both scenarios
 ```
 
-To drive your own ROS 2 robot, see [docs/ros2.md](docs/ros2.md).
+### A Universal Robots arm, through its own controller software
+
+URSim, Universal Robots' simulator, runs the real UR controller software; Universal Robots'
+official ROS 2 driver talks to it exactly as to an arm. `neura-arm` drives a UR5e through both:
+
+```bash
+make test-ursim       # builds the driver's image, boots URSim (about a minute), runs the scenario
+```
+
+To drive your own ROS 2 robot, including a UR arm, see [docs/ros2.md](docs/ros2.md).
 
 ### Incident records
 
@@ -324,8 +349,10 @@ make help          # every task
 | Runtime, contracts, transports, incident records | always | the core |
 | Simulated arms and ALOHA | `sim` installed | offscreen OpenGL; git for the models |
 | SO-101 driver against the emulated bus | `so101` installed | Python 3.12+ |
+| A real SO-101's recording through the runtime | `lerobot` installed | the dataset from the Hugging Face Hub (86 MB, once) |
 | LeRobot's own async server | `lerobot` installed | Python 3.12+ |
 | openpi's own server, ROS 2 Jazzy | `make test-docker` | Docker, with `NET_ADMIN` allowed |
+| A UR5e through URSim and the official UR driver | `make test-ursim` | Docker; about 6 GB of images |
 
 `pytest packages/neura-runtime` runs one package; `pytest -k incident` runs by name. Tests treat
 warnings as errors, and the timing-sensitive ones assume the machine isn't busy with something
@@ -367,7 +394,7 @@ with its output.
 |---|---|
 | Python | 3.10, 3.11, 3.12, 3.13 (LeRobot extras: 3.12+) |
 | OS | Linux on x86-64 and arm64 (tested in CI on both; not yet on a Jetson); macOS for development |
-| Robots | SO-101 (LeRobot driver), ROS 2 position-controlled arms (tested on Jazzy; the relay is written for Humble's Python 3.10 too), simulated: Franka Panda, UR5e, Kinova Gen3, xArm7, SO-ARM100, ALOHA |
+| Robots | SO-101 (LeRobot driver), ROS 2 position-controlled arms (tested on Jazzy; the relay is written for Humble's Python 3.10 too), Universal Robots e-Series through the official driver (tested on URSim), simulated: Franka Panda, UR5e, Kinova Gen3, xArm7, SO-ARM100, ALOHA |
 | Policy servers | `neura-robot serve`, openpi, LeRobot async inference |
 
 ## Project status

@@ -300,6 +300,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/lock.py`: One actuator authority per robot (design §6.3).
 - `neura_robots/policies.py`: The policy a robot runs without a site gateway: ``policy:`` in a ``neura-arm`` configuration, opened and checked against the robot's contracts before anything can move (design §30.2).
 - `neura_robots/process.py`: The robot-side process for an arm (design §7): the runtime, the session client and the gateway connection around a connected arm (``arm.Arm``: the SO-101, or the simulated ALOHA), driven by a local …
+- `neura_robots/recorded.py`: A recorded robot: an episode of a LeRobot dataset (a real arm's joint states and camera frames, from the Hugging Face Hub or a local copy) played back to the runtime as if a robot were sending it, at …
 - `neura_robots/ros2/__init__.py`: ROS 2 robots: a relay node on the robot's ROS side, and the arm Neura's robot-side process drives through it (design §29.8).
 - `neura_robots/ros2/arm.py`: A ROS 2 robot as an arm Neura's robot-side process drives (``arm.Arm``), through the relay node running in the robot's ROS environment (``ros2.relay``).
 - `neura_robots/ros2/relay.py`: The ROS 2 side of the bridge: a node that relays a robot's joint states and camera images to Neura's robot-side process, and its position commands back, over a local Unix socket.
@@ -310,7 +311,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/sim/world.py`: Time for a simulated robot (any ``scene.Scene``).
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
-Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_menagerie.py`, `test_process.py`, `test_ros2.py`, `test_so101.py`
+Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_menagerie.py`, `test_process.py`, `test_recorded.py`, `test_ros2.py`, `test_so101.py`, `test_ursim.py`
 
 ## packages/neura-runtime
 

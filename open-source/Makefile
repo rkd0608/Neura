@@ -53,3 +53,9 @@ test-docker: ## openpi's own server and ROS 2 Jazzy under packet loss, in Docker
 	docker build -t neura-ros2-test:dev packages/neura-robots/tests/ros2
 	NEURA_TEST_OPENPI_IMAGE=neura-openpi-test:dev NEURA_TEST_ROS2_IMAGE=neura-ros2-test:dev \
 		$(PYTHON) -m pytest packages/neura-runtime/tests/test_local.py packages/neura-robots/tests/test_ros2.py
+
+.PHONY: test-ursim
+test-ursim: ## A UR5e through URSim and Universal Robots' official ROS 2 driver, in Docker
+	docker build -t neura-ur-driver-test:dev packages/neura-robots/tests/ursim
+	NEURA_TEST_UR_DRIVER_IMAGE=neura-ur-driver-test:dev \
+		$(PYTHON) -m pytest packages/neura-robots/tests/test_ursim.py

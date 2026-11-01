@@ -79,6 +79,35 @@ link, the arm is still driven and the joint states still arrive about 80 times a
 link cut, the runtime faults within the timeout and sends nothing more. The invariant monitor sees
 no violation.
 
+## Universal Robots arms
+
+Universal Robots' official driver ([ur_robot_driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver))
+works as it is, with its forward position controller:
+
+```bash
+# in the robot computer's ROS environment
+ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur5e robot_ip:=<the robot> \
+    initial_joint_controller:=forward_position_controller
+python3 relay.py --socket /run/neura/ros2.sock --joints \
+    shoulder_pan_joint,shoulder_lift_joint,elbow_joint,wrist_1_joint,wrist_2_joint,wrist_3_joint
+```
+
+The joints are in radians; map each with `scale: 1`. The forward position controller follows each
+command at once, so a policy must move gradually (the controller stops the arm on a jump: a
+protective stop).
+
+This is tested against URSim, Universal Robots' simulator running the real controller software:
+`make test-ursim` (Docker; it builds the driver's image). The relay and `neura-arm` drive the arm
+through the official driver, a takeover holds it, and when the driver crashes the runtime faults
+within the timeout.
+
+**What the ROS side can't see.** When the link between the driver and the UR controller is lost,
+the driver goes on publishing the last joint states at 500 Hz, and reports its program running for
+20 seconds and more. Nothing in ROS shows the robot is gone, so neither can the runtime: it goes on
+sending commands that reach nothing. The controller stops the arm on its own (its control script's
+watchdog), and driving it again needs the program restarted. Keep the robot computer on the same
+switch as the controller, and watch the driver's logs.
+
 ## Not built yet
 
 - Action interfaces (`control_msgs/FollowJointTrajectory`): position command topics only.

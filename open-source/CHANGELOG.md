@@ -21,6 +21,11 @@ All notable changes to neura-robot. The format follows
 - Python 3.10 to 3.13, on x86-64 and arm64.
 - Simulated arms from MuJoCo Menagerie (Franka Panda, UR5e, Kinova Gen3, xArm7, SO-ARM100) as
   `neura-arm` arms (`type: mujoco`), their contracts inferred from the model and the policy.
+- Recorded robots (`type: recorded`): an episode of a real arm's LeRobot dataset, from the Hugging
+  Face Hub or a local copy, played to the runtime and the policy, with the commands compared to the
+  recorded actions.
+- Universal Robots arms through Universal Robots' official ROS 2 driver, tested against URSim (the
+  real controller software): `make test-ursim`.
 - `make doctor`, `make setup-all` and `make assets`: check a machine, install everything, fetch
   the simulated arms' models.
 
@@ -28,6 +33,9 @@ All notable changes to neura-robot. The format follows
 
 - A camera the policy does not read no longer holds observations back when its frames lag.
 - The MuJoCo tests skip with what to install, instead of failing, when libEGL is missing.
+- The ROS 2 relay keeps accepting connections after one ends abruptly (it stopped for good).
+- `neura-arm` closing a ROS 2 arm ends its connection to the relay (it stayed open, so the next
+  connection was never served).
 
 ## Roadmap
 

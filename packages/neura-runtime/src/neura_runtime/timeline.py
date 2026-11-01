@@ -10,7 +10,7 @@ state was recorded tell the rest all the same.
 from __future__ import annotations
 
 import base64
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 from neura.v1 import dataplane_pb2
@@ -90,11 +90,16 @@ def _describe(event: Event, authority: list[bool]) -> str | None:
 
 def lines(record: Record) -> Iterator[Line]:
     """The record's story, a line at a time, repeats folded."""
+    return lines_from(record.events)
+
+
+def lines_from(events: Sequence[Event]) -> Iterator[Line]:
+    """The story of a record's events (the recorder's, before it is written, or a record's)."""
     # Events before the first timed one (the state the record starts in) happen at its time.
-    now = next((int(e["t"]) for e in record.events if "t" in e), 0)
+    now = next((int(e["t"]) for e in events if "t" in e), 0)
     authority = [True]  # the record starts with the runtime holding the arm, until it says not
     current: Line | None = None
-    for event in record.events:
+    for event in events:
         now = int(event.get("t", now))
         text = _describe(event, authority)
         if text is None:

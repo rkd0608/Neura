@@ -330,6 +330,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/capture/testing.py`: Synthetic episodes for tests of anything that reads them (site store, export, training, replay evaluation), written through the same spool robots use.
 - `neura_runtime/capture/uploader.py`: Uploads finished episodes from the robot's spool to the site (design §28.2).
 - `neura_runtime/cli.py`: ``neura-robot``: robot-side tools.
+- `neura_runtime/foxglove.py`: An incident record in Foxglove's own message types, so Foxglove's built-in panels draw it as it opens, with nothing to configure:
 - `neura_runtime/grpc_client.py`: asyncio/gRPC adapter that moves ``SessionClient`` messages to and from a site gateway.
 - `neura_runtime/incident.py`: The incident record: what the robot's runtime saw, decided and did, written as MCAP when a fault latches or on request, and replayable to the same decisions (design §30.2).
 - `neura_runtime/interfaces.py`: Integration points a supported robot integration implements (design §3, §7).

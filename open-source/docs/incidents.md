@@ -62,8 +62,21 @@ not given), the operator's commands and what the arm was told, on one timeline w
 marked; the commands sent to the arm, each joint from its minimum to its maximum; and the story
 in words. `--no-open` only writes it.
 
-The file opens in [Foxglove](https://foxglove.dev) and [Rerun](https://rerun.io) as well, with
-events stamped with the time of day they happened. Each kind of event is its own JSON topic: `/neura/state` (the runtime's state, each time it
+### In Foxglove
+
+Open the file in [Foxglove](https://app.foxglove.dev) (drag it onto the page, or the desktop app).
+Records carry two topics in Foxglove's own message types, which its built-in panels draw with
+nothing to configure:
+
+- **`/neura/scene`, in the 3D panel** (in the default layout): a status board. The runtime's state
+  as a coloured label (Ready, Armed, Running, Waiting, Faulted), a bar per joint for the command
+  last sent to the arm (its height the command between the joint's minimum and maximum), and the
+  fault in red. Press play, or drag the timeline. If the panel shows only a grid, tick
+  `/neura/scene` in its topic list.
+- **`/neura/log`, in a Log panel** (add one: the panel menu, then Log): the story as log lines,
+  faults as errors and holds as warnings.
+
+Events are stamped with the time of day they happened. Each kind of event is its own JSON topic: `/neura/state` (the runtime's state, each time it
 changes), `/neura/commanded` (actions sent, with values), `/neura/chunk` (accepted or refused, and
 why), `/neura/fault`, `/neura/capture` (joint states), `/neura/input/*` (what reached the runtime),
 and so on. They open in [Rerun](https://rerun.io) too.

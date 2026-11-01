@@ -290,7 +290,11 @@ neura-robot replay incidents/<file>.mcap     # a fresh runtime must decide exact
 
 `view` writes the page next to the record (`.html`, one file, nothing to install) and opens it:
 the runtime's state, the policy's answers and your commands on one timeline, the fault, the
-commands sent to the arm, and the story in words. See [docs/incidents.md](docs/incidents.md).
+commands sent to the arm, and the story in words.
+
+Records open in [Foxglove](https://app.foxglove.dev) as they are: its 3D panel shows a status
+board (the runtime's state, a bar per joint for the command sent, the fault) and a Log panel the
+story. See [docs/incidents.md](docs/incidents.md).
 
 ## Run a real robot
 

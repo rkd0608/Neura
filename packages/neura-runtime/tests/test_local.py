@@ -302,8 +302,11 @@ async def test_a_policy_drives_the_runtime_and_its_failures_stop_it(
     assert page.count("<svg") == 2
     assert "FAULT STARVATION_GRACE_EXHAUSTED" in page
     with recorder.written[0].open("rb") as stream:
-        first = next(make_reader(stream).iter_messages())[2].log_time
-    assert abs(first / 1e9 - time.time()) < 60
+        messages = list(make_reader(stream).iter_messages())
+    assert abs(messages[0][2].log_time / 1e9 - time.time()) < 60
+    # In Foxglove's own types, which its Log and 3D panels draw as the file opens.
+    foxglove = {(c.topic, s.name) for s, c, _ in messages if s and s.name.startswith("foxglove.")}
+    assert foxglove == {("/neura/log", "foxglove.Log"), ("/neura/scene", "foxglove.SceneUpdate")}
     # A record that says one command failed where it succeeded no longer replays the same.
     failed = next(e for e in record.events if e["kind"] == "command_result")
     failed["ok"] = False

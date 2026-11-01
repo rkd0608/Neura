@@ -372,6 +372,7 @@ def write_mcap(
                 sequence=sequence,
                 data=json.dumps(event).encode(),
             )
+        _foxglove(writer, events, contracts, wall_offset_ns)
         replay: dict[str, Any] = {"robot_id": robot_id, "checkpoint": checkpoint, "events": events}
         replay["replayable"] = replayable
         for name, data in (
@@ -386,3 +387,34 @@ def write_mcap(
                 data=data,
             )
         writer.finish()  # type: ignore[no-untyped-call]
+
+
+def _foxglove(writer: Any, events: list[Event], contracts: dict[str, str], offset_ns: int) -> None:
+    """The record in Foxglove's own types (``neura_runtime.foxglove``): its built-in Log and 3D
+    panels draw them with nothing to configure."""
+    from neura_contracts import RobotProfile, load_document
+    from neura_runtime import foxglove
+
+    robot = load_document(contracts["robot_profile"])
+    assert isinstance(robot, RobotProfile)
+    commands = [(c.name, c.min, c.max) for c in robot.spec.command_interface]
+    for topic, schema_name, messages in (
+        ("/neura/log", "foxglove.Log", foxglove.log_messages(events, offset_ns)),
+        (
+            "/neura/scene",
+            "foxglove.SceneUpdate",
+            foxglove.scene_messages(events, commands, offset_ns),
+        ),
+    ):
+        schema = writer.register_schema(
+            name=schema_name, encoding="jsonschema", data=b'{"type": "object"}'
+        )
+        channel = writer.register_channel(topic=topic, message_encoding="json", schema_id=schema)
+        for sequence, (at, message) in enumerate(messages):
+            writer.add_message(
+                channel_id=channel,
+                log_time=at,
+                publish_time=at,
+                sequence=sequence,
+                data=json.dumps(message).encode(),
+            )

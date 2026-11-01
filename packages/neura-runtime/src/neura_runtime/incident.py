@@ -8,13 +8,17 @@ latches or on request, and replayable to the same decisions (design §30.2).
 - the robot's answers: authority, each command's result, each fault response, and what the sensors
   returned (joint states and image sizes; image contents only when asked for);
 - decisions: each action commanded, each chunk merged or refused and why, epochs, faults, and each
-  observation requested.
+  observation requested;
+- the runtime's state (Ready, Armed, Running, Waiting, Faulted...) each time it changes: derived
+  from the decisions, so for reading, and not compared on replay.
 
 The list starts at a checkpoint (``RobotRuntime.checkpoint``), taken whenever a task epoch
 advances, so a record covers about the last ``window_s`` seconds and always begins where the
 runtime's state is known. ``neura_runtime.replay`` feeds a record's inputs and answers to a fresh
 runtime and checks that it decides the same. Files open in Foxglove and Rerun: one JSON topic per
-kind of event; the replay data and the contracts are attachments. Nothing leaves the machine.
+kind of event, stamped with the time of day it happened (the robot's clock, anchored to the
+wall clock when the record is written); the replay data and the contracts are attachments.
+``neura_runtime.timeline`` tells the story in words. Nothing leaves the machine.
 """
 
 from __future__ import annotations
@@ -126,6 +130,7 @@ class IncidentRecorder:
         self.replayable = True
         self._writers: list[threading.Thread] = []
         self.runtime: RobotRuntime | None = None
+        self._state: str | None = None
 
     # --- wiring
 
@@ -139,6 +144,7 @@ class IncidentRecorder:
         self.runtime = runtime
         self._checkpoint()
         runtime.observers.append(self)
+        self._note_state()
 
         def wrap(name: str, describe: Callable[..., Event]) -> None:
             original = getattr(runtime, name)
@@ -155,6 +161,7 @@ class IncidentRecorder:
                     self.record({"kind": "raised", "error": type(error).__name__})
                     raise
                 self._outbox()
+                self._note_state()
                 if runtime.task_epoch != epoch:
                     self._checkpoint()
                 if name == "tick":
@@ -231,6 +238,13 @@ class IncidentRecorder:
             self._dropped += 1
             self.replayable = False  # its checkpoint's events are gone
 
+    def _note_state(self) -> None:
+        assert self.runtime is not None
+        state = self.runtime.state.value
+        if state != self._state:
+            self._state = state
+            self.record({"kind": "state", "state": state})
+
     def _outbox(self) -> None:
         assert self.runtime is not None
         for item in self.runtime.outbox:
@@ -286,6 +300,8 @@ class IncidentRecorder:
         checkpoint, events = self.events()
         replayable = self.replayable
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+        # The robot's clock, anchored so that the newest event is now: times of day in a viewer.
+        wall_offset_ns = time.time_ns() - self._now * 1000
         path = self.directory / f"{self.robot_id}-{stamp}-{label}.mcap"
         binding = self.runtime.binding
         contracts = {
@@ -297,7 +313,13 @@ class IncidentRecorder:
         def write() -> None:
             try:
                 write_mcap(
-                    path, self.robot_id, checkpoint, events, contracts, replayable=replayable
+                    path,
+                    self.robot_id,
+                    checkpoint,
+                    events,
+                    contracts,
+                    replayable=replayable,
+                    wall_offset_ns=wall_offset_ns,
                 )
             except OSError as error:
                 log.error("could not write the incident record %s: %s", path, error)
@@ -319,7 +341,10 @@ def write_mcap(
     contracts: dict[str, str],
     *,
     replayable: bool = True,
+    wall_offset_ns: int = 0,
 ) -> None:
+    """``wall_offset_ns`` turns the robot's clock (µs) into the time of day the viewer shows; the
+    replay data keeps the robot's own clock."""
     from mcap.writer import Writer
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,7 +355,8 @@ def write_mcap(
             name="neura.Event", encoding="jsonschema", data=b'{"type": "object"}'
         )
         channels: dict[str, int] = {}
-        now = 0
+        # Events before the first timed one (the state the record starts in) happen at its time.
+        now = next((int(e["t"]) for e in events if "t" in e), 0)
         for sequence, event in enumerate(events):
             now = int(event.get("t", now))
             kind = str(event["kind"])
@@ -341,8 +367,8 @@ def write_mcap(
                 )
             writer.add_message(
                 channel_id=channels[topic],
-                log_time=now * 1000,
-                publish_time=now * 1000,
+                log_time=now * 1000 + wall_offset_ns,
+                publish_time=now * 1000 + wall_offset_ns,
                 sequence=sequence,
                 data=json.dumps(event).encode(),
             )
@@ -353,8 +379,8 @@ def write_mcap(
             (CONTRACTS_ATTACHMENT, json.dumps(contracts).encode()),
         ):
             writer.add_attachment(
-                create_time=now * 1000,
-                log_time=now * 1000,
+                create_time=now * 1000 + wall_offset_ns,
+                log_time=now * 1000 + wall_offset_ns,
                 name=name,
                 media_type="application/json",
                 data=data,

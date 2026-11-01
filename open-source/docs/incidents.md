@@ -27,12 +27,42 @@ there. A record covers about the last 30 seconds.
 Files go to `incidents_dir` (default `incidents/`, next to the configuration), named
 `<robot>-<UTC time>-<reason>.mcap`. Nothing is sent anywhere.
 
+## Reading
+
+```bash
+neura-robot timeline incidents/so101-a-20261031T120000-STARVATION_GRACE_EXHAUSTED.mcap
+```
+
+tells the record in words, second by second:
+
+```
+   0.00s  state: Ready
+   0.51s  operator: arm
+   0.51s  state: Armed
+   0.54s  policy answer accepted
+   0.54s  state: Running
+   1.54s  policy answer accepted  x2 over 1.00s
+   3.54s  the policy gave no answer: the model fell over  x21 over 0.66s
+   4.23s  the arm told to hold position
+   4.23s  state: Waiting
+   5.23s  FAULT STARVATION_GRACE_EXHAUSTED; the arm: controlled stop (confirmed)
+   5.23s  state: Faulted
+         110 actions sent to the arm; policy answers: 3 accepted, 0 refused, 51 not given; 1 fault
+```
+
 ## Viewing
 
-Open the file in [Foxglove](https://foxglove.dev) or [Rerun](https://rerun.io). Each kind of event
-is its own JSON topic: `/neura/commanded` (actions sent, with values), `/neura/chunk` (accepted or
-refused, and why), `/neura/fault`, `/neura/capture` (joint states), `/neura/input/*` (what reached
-the runtime), and so on.
+Open the file in [Foxglove](https://foxglove.dev) (in the browser or the desktop app). Load the
+layout once: **Layouts** (top right) → **Import from file** →
+[`examples/foxglove/incident-layout.json`](../examples/foxglove/incident-layout.json). It shows the
+runtime's state, the policy's answers and the runtime's control of the arm as a timeline, a plot
+of the commands sent to the arm, the fault, and each policy answer in full. Events are stamped with
+the time of day they happened.
+
+Each kind of event is its own JSON topic: `/neura/state` (the runtime's state, each time it
+changes), `/neura/commanded` (actions sent, with values), `/neura/chunk` (accepted or refused, and
+why), `/neura/fault`, `/neura/capture` (joint states), `/neura/input/*` (what reached the runtime),
+and so on. They open in [Rerun](https://rerun.io) too.
 
 ## Replaying
 

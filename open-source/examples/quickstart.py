@@ -11,7 +11,6 @@ exactly the same.
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -51,7 +50,7 @@ async def main() -> None:
             raise PolicyError("the model fell over")
         return authored(inputs)
 
-    incidents = Path(tempfile.mkdtemp(prefix="neura-incidents-"))
+    incidents = HERE.parent / "incidents"  # in the repository, ignored by git
     arm = FakeController()  # a simulated arm: it records what it is told to do
     recorder = IncidentRecorder(incidents, robot_id="demo-arm")
     runtime = RobotRuntime(
@@ -97,9 +96,16 @@ async def main() -> None:
     print("4. The fault wrote an incident record. Replaying it through a fresh runtime:")
     record_path = recorder.written[0]
     outcome = replay.replay(replay.read(record_path))
-    say(f"{record_path}")
+    shown = (
+        record_path.relative_to(Path.cwd())
+        if record_path.is_relative_to(Path.cwd())
+        else record_path
+    )
+    say(f"{shown}")
     say(f"{outcome.events} events; replays the same: {outcome.matches}")
-    print("\nOpen the record in Foxglove (https://foxglove.dev) to see every decision in time.")
+    print(f"\nThe story in words:  neura-robot timeline {shown}")
+    print("As a timeline: open it in Foxglove (https://app.foxglove.dev) with the layout in")
+    print("examples/foxglove/incident-layout.json (Layouts, then Import from file).")
 
 
 if __name__ == "__main__":

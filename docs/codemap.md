@@ -346,6 +346,7 @@ Under `packages/neura-runtime/src/`:
 - `neura_runtime/synthetic.py`: Checkpoints with the right architecture and random weights, for tests and benchmarks.
 - `neura_runtime/tensors.py`: Encoding and validating ``neura.v1.Tensor`` payloads (row-major, little-endian).
 - `neura_runtime/testing.py`: Test doubles for integrations: an in-memory controller and sensor source.
+- `neura_runtime/timeline.py`: An incident record told in words: what the operator did, what the runtime's state became, what the policy answered (and what was refused, and why), and the fault, with the seconds since the record …
 
 Tests, under `packages/neura-runtime/tests/`: `openpi/serve_still.py`, `test_action_queue.py`, `test_capture.py`, `test_grpc_client.py`, `test_local.py`, `test_runtime.py`, `test_session.py`, `test_tensors.py`
 

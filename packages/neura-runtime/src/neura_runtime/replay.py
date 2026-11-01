@@ -34,6 +34,8 @@ from neura_runtime.runtime import RobotRuntime
 
 # The robot's answers, given back in order during a replay.
 ANSWERS = frozenset({"authority", "command_result", "response_result", "capture"})
+# Events derived from the others, for reading (incident.py): not compared.
+DERIVED = frozenset({"state"})
 
 
 class DivergedError(Exception):
@@ -162,19 +164,23 @@ def replay(record: Record) -> Outcome:
             break
         except Exception:  # noqa: S112 - the recorder logged it as "raised": compared below
             continue
-    _, replayed = recorder.events()
+    # The state events are derived from the decisions, for reading: records written before they
+    # existed replay all the same.
+    recorded_events = [e for e in record.events if e["kind"] not in DERIVED]
+    replayed = [e for e in recorder.events()[1] if e["kind"] not in DERIVED]
     counts: dict[str, int] = {}
-    for event in record.events:
+    for event in recorded_events:
         counts[event["kind"]] = counts.get(event["kind"], 0) + 1
-    for index, (recorded, again) in enumerate(zip(record.events, replayed, strict=False)):
+    total = len(recorded_events)
+    for index, (recorded, again) in enumerate(zip(recorded_events, replayed, strict=False)):
         if _comparable(recorded) != _comparable(again):
-            return Outcome(False, len(record.events), index, recorded, again, counts)
-    if len(replayed) != len(record.events):
-        index = min(len(replayed), len(record.events))
+            return Outcome(False, total, index, recorded, again, counts)
+    if len(replayed) != total:
+        index = min(len(replayed), total)
         extra = replayed[index] if index < len(replayed) else None
-        missing = record.events[index] if index < len(record.events) else None
-        return Outcome(False, len(record.events), index, missing, extra, counts)
-    return Outcome(True, len(record.events), counts=counts)
+        missing = recorded_events[index] if index < total else None
+        return Outcome(False, total, index, missing, extra, counts)
+    return Outcome(True, total, counts=counts)
 
 
 def _comparable(event: Event) -> Any:

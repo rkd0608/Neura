@@ -12,6 +12,9 @@ neura-robot serve POLICY [--weights DIR] [--device DEVICE] [--listen HOST:PORT]
 neura-robot replay RECORD
     run an incident record (.mcap) back through a fresh runtime and say whether it decides
     exactly as the robot did, or where it first differs.
+neura-robot timeline RECORD
+    tell an incident record in words: what the operator did, the runtime's state, what the
+    policy answered and what was refused, and the fault, second by second.
 """
 
 from __future__ import annotations
@@ -60,11 +63,18 @@ def main(argv: list[str] | None = None) -> int:
     served.add_argument("--listen", default="127.0.0.1:50061")
     replayed = sub.add_parser("replay", help="replay an incident record through the runtime")
     replayed.add_argument("record", type=Path)
+    told = sub.add_parser("timeline", help="tell an incident record in words")
+    told.add_argument("record", type=Path)
     args = parser.parse_args(argv)
     if args.command == "serve":
         return asyncio.run(serve(args.policy, args.weights, args.device, args.listen))
     if args.command == "replay":
         return replay_record(args.record)
+    if args.command == "timeline":
+        from neura_runtime import replay, timeline
+
+        print(f"{args.record.name}\n{timeline.tell(replay.read(args.record))}")
+        return 0
     key_path, csr_path = keygen(args.robot_name, args.dir)
     print(f"key {key_path} (keep it on this robot), request {csr_path} (give it to the operator)")
     return 0

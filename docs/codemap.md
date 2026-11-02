@@ -296,6 +296,13 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/arm.py`: What the robot-side process (``process.ArmProcess``) needs of an arm integration: the runtime's Controller and SensorSource, plus recovery, revalidation and telemetry.
 - `neura_robots/cameras.py`: Cameras for robot integrations.
 - `neura_robots/cli.py`: ``neura-arm``: serve a real arm through a site gateway.
+- `neura_robots/compare/__init__.py`: The same policy driving the same arm with and without neura-robot, under the same conditions (a steady GPU server, latency spikes, a network drop, a policy crash, an operator takeover, and a real …
+- `neura_robots/compare/__main__.py`: ``python -m neura_robots.compare [--out DIR] [--smolvla CONTRACTS]``: run both loops under every condition and write ``DIR/comparison.md`` (default ``docs``) with its figure.
+- `neura_robots/compare/loops.py`: The two loops compared, on one clock, the same simulated arm and the same policy:
+- `neura_robots/compare/metrics.py`: What is measured of a run (``compare.loops.Run``), the same for both loops: how late each command was for the moment it was planned for, how long the arm went without a new command while the task …
+- `neura_robots/compare/report.py`: The write-up of a comparison (``python -m neura_robots.compare``): a Markdown page with the measures of both loops under every condition, a figure of what each loop told the arm against the planned …
+- `neura_robots/compare/scenarios.py`: The conditions both loops are run under (``compare.loops``): how long the policy takes to answer each request, and what goes wrong when.
+- `neura_robots/compare/smolvla.py`: A real model, SmolVLA (Hugging Face's 450M-parameter vision-language-action model, ``lerobot/smolvla_base``), on real frames: a real SO-101's recorded cameras and joints …
 - `neura_robots/emulator.py`: An emulated SO-101 servo bus: six Feetech STS3215 servos behind a pseudo-terminal.
 - `neura_robots/lock.py`: One actuator authority per robot (design §6.3).
 - `neura_robots/policies.py`: The policy a robot runs without a site gateway: ``policy:`` in a ``neura-arm`` configuration, opened and checked against the robot's contracts before anything can move (design §30.2).
@@ -311,7 +318,7 @@ Under `packages/neura-robots/src/`:
 - `neura_robots/sim/world.py`: Time for a simulated robot (any ``scene.Scene``).
 - `neura_robots/so101.py`: The SO-101 arm as a Neura robot integration (design §3, §6.3, §7).
 
-Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_emulator.py`, `test_menagerie.py`, `test_process.py`, `test_recorded.py`, `test_ros2.py`, `test_so101.py`, `test_ursim.py`
+Tests, under `packages/neura-robots/tests/`: `ros2/sim_robot.py`, `test_aloha.py`, `test_arm_cli.py`, `test_capture_arm.py`, `test_cell.py`, `test_compare.py`, `test_emulator.py`, `test_menagerie.py`, `test_process.py`, `test_recorded.py`, `test_ros2.py`, `test_so101.py`, `test_ursim.py`
 
 ## packages/neura-runtime
 

@@ -206,6 +206,18 @@ Action queue and chunk merging, fencing, the state machine, sessions.
 - See it: `neura-arm run open-source/examples/robots/so101-recorded.yaml` (from the published
   repository, where `examples/contracts` sits beside it)
 
+### With and without neura-robot: the comparison (§30.2)
+
+- Code: `packages/neura-robots/src/neura_robots/compare/` (`scenarios.py` the injected failures,
+  `loops.py` the plain loop and the runtime's, `metrics.py` what is measured, `report.py` the
+  page, `smolvla.py` the real model)
+- Tests: `packages/neura-robots/tests/test_compare.py` (under latency spikes only the plain loop
+  sends late commands)
+- Docs: `open-source/docs/comparison.md` (written by the command), summarised in
+  `open-source/README.md`
+- See it: `uv run python -m neura_robots.compare --out open-source/docs --smolvla
+  examples/contracts` (`make compare` in the published repository)
+
 ### Simulated arms: MuJoCo Menagerie (§30.2)
 
 - Code: `packages/neura-robots/src/neura_robots/sim/` (`scene.py` the scene interface and its

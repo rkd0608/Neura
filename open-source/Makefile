@@ -45,6 +45,14 @@ test: ## The tests that run here; skips say what they need
 quickstart: ## The quickstart: a simulated arm, a policy, a fault, its incident record
 	$(PYTHON) examples/quickstart.py
 
+.PHONY: compare
+compare: ## With and without neura-robot, under the same failures: writes docs/comparison.md
+	$(PYTHON) -m neura_robots.compare --out docs
+
+.PHONY: compare-smolvla
+compare-smolvla: ## The same, and a real model (SmolVLA, the lerobot extra, about 3 GB once)
+	$(PYTHON) -m neura_robots.compare --out docs --smolvla examples/contracts
+
 .PHONY: check
 check: lint typecheck test quickstart ## Everything CI runs on every Python
 

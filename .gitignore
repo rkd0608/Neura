@@ -23,3 +23,6 @@ logs/
 
 # Git worktrees of agents working in parallel (Claude Code)
 .claude/worktrees/
+
+# incident records the examples and the comparison write
+incidents/

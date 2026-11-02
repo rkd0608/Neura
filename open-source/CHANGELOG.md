@@ -26,6 +26,9 @@ All notable changes to neura-robot. The format follows
   recorded actions.
 - Universal Robots arms through Universal Robots' official ROS 2 driver, tested against URSim (the
   real controller software): `make test-ursim`.
+- `python -m neura_robots.compare` (`make compare`): the same policy and simulated arm through a
+  plain loop and through neura-robot under latency spikes, a network drop, a crash and a takeover,
+  and SmolVLA's measured answer times, written to `docs/comparison.md`.
 - `neura-robot view RECORD` turns an incident record into a web page (a timeline of the runtime's
   state, the policy's answers and the operator's commands, the commands plotted, the story);
   `neura-robot timeline RECORD` tells it in words. Records carry the runtime's state as its own

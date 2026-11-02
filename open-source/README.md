@@ -56,6 +56,7 @@ flowchart LR
 - [Run a real robot](#run-a-real-robot)
 - [Bring your policy](#bring-your-policy)
 - [What the runtime guarantees](#what-the-runtime-guarantees)
+- [With and without neura-robot](#with-and-without-neura-robot): the numbers
 - [Run the tests](#run-the-tests)
 - [Troubleshooting](#troubleshooting)
 - [The repository](#the-repository), [Platforms](#platforms), [Status](#project-status),
@@ -363,6 +364,25 @@ runtime in every end-to-end test. Details: [docs/safety.md](docs/safety.md).
 > neura-robot is not a safety-rated controller. It works *inside* the robot's own certified safety
 > functions (e-stops, torque limits, safety-rated monitored stops), never instead of them.
 
+## With and without neura-robot
+
+The same policy drives the same simulated arm (an SO-ARM100 at 50 Hz) through two loops, under the
+same injected failures: the loop most teams write first (LeRobot's synchronous loop: wait for a
+chunk, then play it from its first action), and neura-robot's runtime. A command is *late* when it
+reaches the arm more than 0.25 s after the moment it was planned for: the arm is acting on the past.
+
+| Condition | Late commands without neura | With neura |
+|---|---|---|
+| Steady GPU server, about 100 ms | 0 | 0 |
+| 1 answer in 8 takes 0.5-0.9 s | 17, up to 0.88 s late | 0 |
+| The network down for 1 s | 50, up to 0.64 s late | 0, the arm held |
+| SmolVLA on a CPU, measured (about 2.1 s an answer) | every command, about 2 s late | 0: it held the arm, and refuses to start under contracts derived from that time |
+
+When the policy crashes or the operator takes over, both loops stop; neura also faults, holds,
+and leaves a record of why. The full tables, a figure, the real model on a real SO-101's recorded
+frames, and the limits of the comparison: [docs/comparison.md](docs/comparison.md). Run it again
+with `make compare` (`make compare-smolvla` adds the real model).
+
 ## Run the tests
 
 ```bash
@@ -444,6 +464,7 @@ shared GPU serving, rollouts with shadow tests and rollback, and on-site data ca
 | [Policies](docs/policies.md) | `@neura.policy`, `neura-robot serve`, openpi and LeRobot |
 | [Safety model](docs/safety.md) | What the runtime guarantees, and what it doesn't |
 | [Incident records](docs/incidents.md) | Recording, the MCAP layout, replay |
+| [With and without neura-robot](docs/comparison.md) | The same policy and arm through a plain loop and through neura-robot, under the same failures |
 | [ROS 2](docs/ros2.md) | The relay node and ROS 2 robots |
 | [Development](docs/development.md) | Working on neura-robot: layout, tests, regenerating the protocol |
 

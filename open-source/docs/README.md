@@ -42,5 +42,6 @@ machine, openpi's server or LeRobot's server. The runtime cannot tell them apart
 | [Policies](policies.md) | `@neura.policy`, `neura-robot serve`, openpi and LeRobot |
 | [Safety model](safety.md) | What the runtime guarantees, and what it doesn't |
 | [Incident records](incidents.md) | Recording, the MCAP layout, replay |
+| [With and without neura-robot](comparison.md) | A plain loop and neura-robot under the same failures, and a real model |
 | [ROS 2](ros2.md) | The relay node and ROS 2 robots |
 | [Development](development.md) | The repository, the tests, and how to add a robot or a transport |

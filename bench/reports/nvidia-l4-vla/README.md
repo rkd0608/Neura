@@ -1,8 +1,10 @@
 # Neura GPU-sharing benchmark: NVIDIA L4
 
-Generated 2026-10-17T18:44:03+00:00 from commit `9fa7f8e` with `neura-bench run --preset vla --device cuda:0 --size base --out /tmp/neura-bench-08_3ki8a/report` (torch 2.11.0, LeRobot 0.6.1). Regenerate the Markdown from `results.json` with `neura-bench report`.
+Generated 2026-11-03T06:18:55+00:00 from commit `b867bc4` with `neura-bench run --preset vla --device cuda:0 --size base --out /tmp/neura-bench-jcy0vt41/report` (torch 2.11.0, LeRobot 0.6.1). Regenerate the Markdown from `results.json` with `neura-bench report`.
 
-Models: synthetic checkpoints with the real LeRobot architectures and random weights (ACT, Diffusion Policy, SmolVLA, pi0; size `base`, cameras 640 x 480, bf16). Latency, memory and batching depend on architecture and shapes, not on what weights learned; closed-loop task success needs trained weights and is not measured here. SmolVLA reads its backbone's configuration and processor from the Hub, not its weights; pi0 is LeRobot's (PaliGemma with Gemma 2B, and a 300M action expert), kept in bfloat16 as LeRobot runs it, its instruction tokenized by a public tokenizer in place of PaliGemma's gated one and padded to the same 48 tokens, so the model computes the same shapes. Their profile here: chunks of 50 actions, the next requested at 30 left, an observation at most 600 ms old when it reaches the model and 1500 ms when the robot accepts its chunk (the example profile's 100 and 150 ms cannot be met by a pass of about 0.4 s).
+Models: synthetic checkpoints with the real LeRobot architectures and random weights (ACT, Diffusion Policy, SmolVLA; size `base`, cameras 640 x 480, bf16). Latency, memory and batching depend on architecture and shapes, not on what weights learned; closed-loop task success needs trained weights and is not measured here. SmolVLA reads its backbone's configuration and processor from the Hub, not its weights; pi0 is LeRobot's (PaliGemma with Gemma 2B, and a 300M action expert), kept in bfloat16 as LeRobot runs it, its instruction tokenized by a public tokenizer in place of PaliGemma's gated one and padded to the same 48 tokens, so the model computes the same shapes. Their profile here: chunks of 50 actions, the next requested at 30 left, an observation at most 600 ms old when it reaches the model and 1500 ms when the robot accepts its chunk (the example profile's 100 and 150 ms cannot be met by a pass of about 0.4 s).
+
+Not measured: pi0 (measuring it: PolicyError: worker could not start: {'code': 'WORKER_LOAD_FAILED', 'message': "TypeError: create_causal_mask() got an unexpected keyword argument 'cache_position'"}).
 
 ## Robots per device at the SLO
 
@@ -10,17 +12,14 @@ SLO: at most 1.0 deadline misses per 1,000 requests, at most 0.0 starvation even
 
 | Case | Workload | One device per robot | One process per robot | Best Neura |
 | --- | --- | --- | --- | --- |
-| Same weights on every robot | phased arrivals | 1 | 96, fails at 128 | 32, fails at 48 (Neura, deadline + fairness) |
-| Same weights on every robot | synchronized (bursty) arrivals | 1 | 24, fails at 32 | 24, fails at 32 (Neura, FIFO) |
-| Same weights on every robot | phased, with a background GPU job | 1 | 96, fails at 128 | 32, fails at 48 (Neura, deadline + fairness) |
-| Same weights on every robot: SmolVLA | phased arrivals | 1 | 12, fails at 16 | 1, fails at 2 (Neura, deadline + fairness) |
-| Same weights on every robot: SmolVLA | synchronized (bursty) arrivals | 1 | 12, fails at 16 | 1, fails at 2 (Neura, deadline + fairness) |
-| Same weights on every robot: pi0 | phased arrivals | 1 | 2, fails at 4 | 2, fails at 4 (Neura, deadline + fairness) |
-| Same weights on every robot: pi0 | synchronized (bursty) arrivals | 1 | 2, fails at 4 | 2, fails at 4 (Neura, deadline + fairness) |
+| Same weights on every robot | phased arrivals | 1 | 16, fails at 24 | 8, fails at 12 (Neura, lanes + lined-up requests) |
+| Same weights on every robot | synchronized (bursty) arrivals | 1 | 16, fails at 24 | 8, fails at 12 (Neura, lanes + lined-up requests) |
+| Same weights on every robot | phased, with a background GPU job | 1 | 16, fails at 24 | 8, fails at 12 (Neura, lanes + lined-up requests) |
+| Same weights on every robot: SmolVLA | phased arrivals | 1 | 8, fails at 12 | 16, fails at 24 (Neura, lanes + lined-up requests) |
+| Same weights on every robot: SmolVLA | synchronized (bursty) arrivals | 1 | 8, fails at 12 | 12, fails at 16 (Neura, lanes + lined-up requests) |
 
-- **Same weights on every robot:** sharing a device pays, but here one process per robot serves as many or more (96 against 32): on this device batching does not beat co-location. Neura, deadline + fairness serves 32 robots per device (0.031 device-hours per robot-hour, against 1 with a device per robot); at 48 robots it misses the SLO, so the crossover where one device stops paying is between 32 and 48.
-- **Same weights on every robot: SmolVLA:** sharing does not pay on this device: Neura, deadline + fairness serves 1 robot(s) at the SLO.
-- **Same weights on every robot: pi0:** sharing a device pays, but here one process per robot serves as many or more (2 against 2): on this device batching does not beat co-location. Neura, deadline + fairness serves 2 robots per device (0.500 device-hours per robot-hour, against 1 with a device per robot); at 4 robots it misses the SLO, so the crossover where one device stops paying is between 2 and 4.
+- **Same weights on every robot:** sharing a device pays, but here one process per robot serves as many or more (16 against 8): on this device batching does not beat co-location. Neura, lanes + lined-up requests serves 8 robots per device (0.125 device-hours per robot-hour, against 1 with a device per robot); at 12 robots it misses the SLO, so the crossover where one device stops paying is between 8 and 12.
+- **Same weights on every robot: SmolVLA:** sharing pays, and Neura's batching serves the most robots. Neura, lanes + lined-up requests serves 16 robots per device (0.062 device-hours per robot-hour, against 1 with a device per robot); at 24 robots it misses the SLO, so the crossover where one device stops paying is between 16 and 24.
 
 ## Measurements on the device
 
@@ -28,86 +27,73 @@ Forward-pass latency through a worker process, ACT:
 
 | Batch | p50 (ms) | p99 (ms) | Peak memory (MiB) | Samples |
 | --- | --- | --- | --- | --- |
-| 1 | 35.84 | 41.75 | 198 | 275 |
-| 2 | 45.61 | 55.46 | 228 | 215 |
-| 4 | 66.53 | 85.08 | 338 | 148 |
-| 8 | 136.58 | 151.36 | 553 | 74 |
-| 16 | 320.24 | 356.16 | 986 | 31 |
+| 1 | 34.15 | 37.71 | 198 | 292 |
+| 2 | 44.29 | 48.15 | 228 | 224 |
+| 4 | 65.00 | 75.71 | 338 | 153 |
+| 8 | 125.09 | 132.80 | 553 | 80 |
+| 16 | 266.10 | 299.44 | 986 | 38 |
+
+ACT: a worker process holds 807 MiB beyond its peak allocation (CUDA context, workspaces, cache).
 
 Forward-pass latency through a worker process, Diffusion Policy:
 
 | Batch | p50 (ms) | p99 (ms) | Peak memory (MiB) | Samples |
 | --- | --- | --- | --- | --- |
-| 1 | 125.50 | 134.28 | 1051 | 80 |
-| 2 | 135.87 | 171.14 | 1051 | 72 |
-| 4 | 161.90 | 171.38 | 1051 | 62 |
-| 8 | 193.50 | 221.39 | 1051 | 52 |
-| 16 | 302.42 | 344.55 | 1118 | 33 |
+| 1 | 121.96 | 126.64 | 1051 | 83 |
+| 2 | 134.14 | 138.89 | 1051 | 75 |
+| 4 | 150.90 | 154.46 | 1051 | 67 |
+| 8 | 186.79 | 202.38 | 1051 | 54 |
+| 16 | 328.24 | 367.27 | 1118 | 31 |
+
+Diffusion Policy: a worker process holds 703 MiB beyond its peak allocation (CUDA context, workspaces, cache).
 
 Forward-pass latency through a worker process, SmolVLA:
 
 | Batch | p50 (ms) | p99 (ms) | Peak memory (MiB) | Samples |
 | --- | --- | --- | --- | --- |
-| 1 | 399.94 | 471.07 | 1165 | 25 |
-| 2 | 417.22 | 425.49 | 1165 | 25 |
-| 4 | 455.50 | 493.76 | 1165 | 22 |
-| 8 | 535.67 | 585.80 | 1165 | 20 |
-| 16 | 772.62 | 823.06 | 1381 | 20 |
+| 1 | 370.38 | 375.58 | 1165 | 27 |
+| 2 | 389.91 | 418.94 | 1165 | 26 |
+| 4 | 424.29 | 429.25 | 1165 | 24 |
+| 8 | 510.02 | 517.73 | 1165 | 20 |
+| 16 | 773.84 | 810.16 | 1381 | 20 |
 
-Forward-pass latency through a worker process, pi0:
+SmolVLA: a worker process holds 779 MiB beyond its peak allocation (CUDA context, workspaces, cache).
 
-| Batch | p50 (ms) | p99 (ms) | Peak memory (MiB) | Samples |
-| --- | --- | --- | --- | --- |
-| 1 | 377.58 | 413.35 | 8482 | 27 |
-| 2 | 447.77 | 474.06 | 8482 | 23 |
-| 4 | 587.54 | 619.57 | 8482 | 20 |
-| 8 | 904.76 | 932.35 | 8482 | 20 |
-| 16 | 1751.68 | 1769.54 | 9084 | 20 |
-
-Co-location: k workers on the device, each running batches of one back to back. Alone: p50 37.056 ms. A background job (matrix multiplications) slows a lone worker by 1.068x.
+Co-location: k workers on the device, each running batches of one back to back. Alone: p50 34.677 ms. A background job (matrix multiplications) slows a lone worker by 1.092x.
 
 | Workers | Slowdown | p50 (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 1 | 1.00 | 37.06 | 71.08 |
-| 2 | 0.98 | 36.35 | 47.10 |
-| 4 | 1.04 | 38.59 | 47.43 |
-| 8 | 1.68 | 62.38 | 67.94 |
-| 16 | 3.38 | 125.30 | 140.48 |
-| 24 | 5.05 | 187.33 | 439.10 |
+| 1 | 1.00 | 34.68 | 39.94 |
+| 2 | 1.03 | 35.61 | 39.97 |
+| 4 | 1.11 | 38.38 | 44.75 |
+| 8 | 1.81 | 62.88 | 70.82 |
+| 16 | 3.62 | 125.34 | 148.81 |
+| 24 | 5.39 | 186.99 | 234.78 |
 
-Co-location of SmolVLA workers (simulated with this, not ACT's). Alone: p50 382.778 ms.
-
-| Workers | Slowdown | p50 (ms) | p99 (ms) |
-| --- | --- | --- | --- |
-| 1 | 1.00 | 382.78 | 394.92 |
-| 2 | 1.00 | 383.82 | 421.79 |
-| 4 | 1.04 | 399.74 | 437.39 |
-| 8 | 1.38 | 527.52 | 569.78 |
-
-Co-location of pi0 workers (simulated with this, not ACT's). Alone: p50 378.077 ms.
+Co-location of SmolVLA workers (simulated with this, not ACT's). Alone: p50 367.045 ms.
 
 | Workers | Slowdown | p50 (ms) | p99 (ms) |
 | --- | --- | --- | --- |
-| 1 | 1.00 | 378.08 | 389.13 |
-| 2 | 1.19 | 448.83 | 488.97 |
+| 1 | 1.00 | 367.05 | 375.10 |
+| 2 | 1.01 | 371.96 | 382.34 |
+| 4 | 1.04 | 383.07 | 408.30 |
+| 8 | 1.43 | 525.60 | 565.09 |
 
-Simulated link, calibrated from one robot alone in real time: observation age at dispatch p50 8.011 ms, p99 13.646 ms (robot encoding, gRPC and the gateway's checks), simulated as 2.261 ms plus up to 11.5 ms.
+Simulated link, calibrated from one robot alone in real time: observation age at dispatch p50 7.423 ms, p99 9.704 ms (robot encoding, gRPC and the gateway's checks), simulated as 5.095 ms plus up to 4.655 ms.
 
 Multi-adapter batching: 16 rank-16 LoRA adapters on 13 linear layers of the ACT base model; every request in a batch uses a different adapter. Parity with each adapter merged and run alone: max relative error 6.69e-05 (tolerance 1e-04), passed.
 
 | Batch | Base p50 (ms) | Mixed adapters p50 (ms) | Overhead |
 | --- | --- | --- | --- |
-| 1 | 21.34 | 24.55 | 1.15 |
-| 2 | 26.60 | 31.04 | 1.17 |
-| 4 | 46.23 | 52.94 | 1.15 |
-| 8 | 94.15 | 106.86 | 1.14 |
-| 16 | 203.47 | 224.90 | 1.10 |
+| 1 | 20.22 | 23.37 | 1.16 |
+| 2 | 25.71 | 30.13 | 1.17 |
+| 4 | 45.08 | 52.67 | 1.17 |
+| 8 | 94.54 | 106.81 | 1.13 |
+| 16 | 209.84 | 230.05 | 1.10 |
 
-Admission control's estimate for ACT on this device: 3 robots (limited by acceptance_freshness), against 16 measured with synchronized arrivals. Admission assumes the worst case (every robot asks at once, behind a batch already running), so it must not exceed the synchronized capacity: it does not (3 <= 16).
+Admission control's estimate for ACT on this device: 3 robots (limited by acceptance_freshness), against 4 measured with synchronized arrivals. Admission assumes the worst case (every robot asks at once, behind a batch already running), so it must not exceed the synchronized capacity: it does not (3 <= 4).
 
-For SmolVLA: 3 robots (limited by deadline), against 1 measured with synchronized arrivals: it does (3 > 1), so admission is optimistic on this device.
-
-For pi0: 2 robots (limited by deadline), against 2 measured with synchronized arrivals: it does not (2 <= 2).
+For SmolVLA: 6 robots (limited by deadline), against 8 measured with synchronized arrivals: it does not (6 <= 8).
 
 ## Results
 
@@ -117,198 +103,156 @@ Per 1,000 requests: deadline misses (served after the predicted starvation time 
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.6 / 13.7 | 1.00 | 7% | 0.500 | 396 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.3 | 8.0 / 13.7 / 13.7 | 1.00 | 14% | 0.250 | 792 |
-| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 33.3 | 8.5 / 13.7 / 13.8 | 1.00 | 29% | 0.125 | 1584 |
-| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 33.4 | 8.7 / 13.7 / 13.8 | 1.00 | 43% | 0.083 | 2376 |
-| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 33.4 | 8.3 / 13.6 / 13.7 | 1.00 | 57% | 0.062 | 3168 |
-| Dedicated: one process per robot, one device | 24 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.7 / 13.8 | 1.00 | 85% | 0.042 | 4752 |
-| Dedicated: one process per robot, one device | 32 | 0.00 | 0.0 | 0.0 | 33.4 | 8.4 / 13.7 / 13.8 | 1.00 | 98% | 0.031 | 6336 |
-| Dedicated: one process per robot, one device | 48 | 0.00 | 0.0 | 0.0 | 33.4 | 8.4 / 13.7 / 13.8 | 1.00 | 100% | 0.021 | 9504 |
-| Dedicated: one process per robot, one device | 64 | 0.00 | 0.0 | 0.0 | 33.4 | 8.3 / 13.7 / 13.8 | 1.00 | 100% | 0.016 | 12672 |
-| Dedicated: one process per robot, one device | 96 | 0.00 | 0.0 | 0.0 | 33.6 | 8.3 / 13.6 / 13.8 | 1.00 | 100% | 0.010 | 19008 |
-| Dedicated: one process per robot, one device | 128 | 0.00 | 0.0 | 0.0 | 63.5 | 8.4 / 13.7 / 13.8 | 1.00 | 100% | 0.008 | 25344 |
-| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 10.2 / 15.7 / 15.7 | 1.00 | 7% | 0.500 | 198 |
-| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 33.4 | 10.4 / 15.7 / 15.7 | 1.00 | 14% | 0.250 | 198 |
-| Neura, FIFO | 8 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.7 / 15.8 | 1.00 | 29% | 0.125 | 198 |
-| Neura, FIFO | 12 | 0.00 | 0.0 | 0.0 | 33.7 | 10.8 / 15.6 / 15.8 | 1.00 | 43% | 0.083 | 198 |
-| Neura, FIFO | 16 | 0.00 | 0.0 | 0.0 | 33.7 | 10.7 / 20.4 / 28.1 | 1.00 | 57% | 0.062 | 198 |
-| Neura, FIFO | 24 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.6 / 16.6 | 1.00 | 86% | 0.042 | 198 |
-| Neura, FIFO | 32 | 0.00 | 0.0 | 0.0 | 55.6 | 22.6 / 51.4 / 57.4 | 1.27 | 97% | 0.031 | 283 |
-| Neura, FIFO | 48 | 708.28 | 625.0 | 126.2 | 60.3 | 78.0 / 97.5 / 102.0 | 2.14 | 100% | 0.021 | 499 |
-| Neura, FIFO | 64 | 850.57 | 758.9 | 415.3 | 28.5 | 83.4 / 97.4 / 102.0 | 3.04 | 100% | 0.016 | 823 |
-| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 10.2 / 15.7 / 15.7 | 1.00 | 7% | 0.500 | 198 |
-| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 33.4 | 10.4 / 15.7 / 15.7 | 1.00 | 14% | 0.250 | 198 |
-| Neura, round robin | 8 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.7 / 15.8 | 1.00 | 29% | 0.125 | 198 |
-| Neura, round robin | 12 | 0.00 | 0.0 | 0.0 | 33.7 | 10.8 / 15.6 / 15.8 | 1.00 | 43% | 0.083 | 198 |
-| Neura, round robin | 16 | 0.00 | 0.0 | 0.0 | 33.7 | 10.7 / 20.4 / 28.1 | 1.00 | 57% | 0.062 | 198 |
-| Neura, round robin | 24 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.6 / 16.6 | 1.00 | 86% | 0.042 | 198 |
-| Neura, round robin | 32 | 0.00 | 0.0 | 0.0 | 55.6 | 22.6 / 51.4 / 57.4 | 1.27 | 97% | 0.031 | 283 |
-| Neura, round robin | 48 | 283.01 | 56.2 | 3.1 | 80.1 | 39.3 / 94.1 / 99.7 | 2.31 | 100% | 0.021 | 391 |
-| Neura, round robin | 64 | 691.53 | 227.8 | 50.2 | 63.0 | 37.0 / 94.8 / 102.2 | 2.79 | 100% | 0.016 | 499 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 10.2 / 15.7 / 15.7 | 1.00 | 7% | 0.500 | 198 |
-| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 33.4 | 10.4 / 15.7 / 15.7 | 1.00 | 14% | 0.250 | 198 |
-| Neura, deadline + fairness | 8 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.7 / 15.8 | 1.00 | 29% | 0.125 | 198 |
-| Neura, deadline + fairness | 12 | 0.00 | 0.0 | 0.0 | 33.7 | 10.8 / 15.6 / 15.8 | 1.00 | 43% | 0.083 | 198 |
-| Neura, deadline + fairness | 16 | 0.00 | 0.0 | 0.0 | 33.7 | 10.7 / 20.4 / 28.1 | 1.00 | 57% | 0.062 | 198 |
-| Neura, deadline + fairness | 24 | 0.00 | 0.0 | 0.0 | 33.6 | 10.6 / 15.6 / 16.6 | 1.00 | 86% | 0.042 | 198 |
-| Neura, deadline + fairness | 32 | 0.00 | 0.0 | 0.0 | 55.6 | 22.6 / 51.4 / 57.4 | 1.27 | 97% | 0.031 | 283 |
-| Neura, deadline + fairness | 48 | 269.58 | 0.0 | 0.0 | 80.8 | 37.9 / 92.8 / 100.0 | 2.33 | 100% | 0.021 | 391 |
-| Neura, deadline + fairness | 64 | 759.69 | 1195.3 | 7.5 | 25.3 | 50.0 / 95.5 / 103.2 | 2.30 | 100% | 0.016 | 391 |
+| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.7 / 9.7 | 1.00 | 3% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.7 / 9.7 | 1.00 | 3% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 7.5 / 9.7 / 9.7 | 1.00 | 7% | 0.500 | 2010 |
+| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 14% | 0.250 | 4020 |
+| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 33.4 | 7.6 / 9.7 / 9.8 | 1.00 | 27% | 0.125 | 8040 |
+| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 41% | 0.083 | 12060 |
+| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 53% | 0.062 | 16080 |
+| Dedicated: one process per robot, one device | 24 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.8 | 1.00 | 68% | 0.042 | 24120 |
+| Dedicated: one process per robot, one device | 32 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 78% | 0.031 | 32160 |
+| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 66.5 | 40.1 / 42.6 / 43.2 | 1.95 | 4% | 0.500 | 1035 |
+| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 73.3 | 23.2 / 60.1 / 63.4 | 3.66 | 7% | 0.250 | 1145 |
+| Neura, FIFO | 8 | 174.55 | 0.0 | 0.0 | 77.3 | 25.0 / 77.9 / 87.9 | 2.67 | 15% | 0.125 | 1198 |
+| Neura, FIFO | 12 | 304.01 | 0.0 | 0.0 | 79.4 | 22.0 / 91.5 / 95.7 | 2.77 | 23% | 0.083 | 1252 |
+| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 66.5 | 40.1 / 42.6 / 43.2 | 1.95 | 4% | 0.500 | 1035 |
+| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 73.4 | 23.2 / 60.1 / 63.4 | 3.66 | 7% | 0.250 | 1145 |
+| Neura, round robin | 8 | 173.13 | 0.0 | 0.0 | 77.2 | 24.9 / 77.7 / 84.0 | 2.64 | 16% | 0.125 | 1198 |
+| Neura, round robin | 12 | 304.01 | 0.0 | 0.0 | 79.0 | 24.0 / 85.1 / 94.5 | 2.76 | 23% | 0.083 | 1145 |
+| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 66.5 | 40.1 / 42.6 / 43.2 | 1.95 | 4% | 0.500 | 1035 |
+| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 73.3 | 23.2 / 60.1 / 63.4 | 3.66 | 7% | 0.250 | 1145 |
+| Neura, deadline + fairness | 8 | 168.11 | 0.0 | 0.0 | 77.5 | 24.5 / 77.7 / 91.6 | 2.58 | 16% | 0.125 | 1198 |
+| Neura, deadline + fairness | 12 | 300.63 | 0.0 | 0.0 | 79.8 | 28.6 / 81.0 / 94.7 | 2.70 | 23% | 0.083 | 1198 |
+| Neura, lanes + lined-up requests | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 2010 |
+| Neura, lanes + lined-up requests | 2 | 0.00 | 0.0 | 0.0 | 66.5 | 40.1 / 42.6 / 42.7 | 1.97 | 4% | 0.500 | 2070 |
+| Neura, lanes + lined-up requests | 4 | 0.00 | 0.0 | 0.0 | 72.8 | 22.9 / 41.3 / 42.5 | 3.72 | 7% | 0.250 | 2290 |
+| Neura, lanes + lined-up requests | 8 | 0.00 | 0.0 | 0.0 | 70.5 | 15.4 / 40.2 / 42.8 | 4.00 | 9% | 0.125 | 2396 |
+| Neura, lanes + lined-up requests | 12 | 1.39 | 0.0 | 0.0 | 78.1 | 9.3 / 79.8 / 90.0 | 3.01 | 12% | 0.083 | 2396 |
+| Neura, lanes + lined-up requests | 16 | 165.58 | 0.0 | 0.0 | 78.7 | 13.6 / 75.2 / 96.4 | 3.17 | 18% | 0.062 | 2396 |
 
 ### Same weights on every robot: synchronized (bursty) arrivals
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 8.1 / 13.7 / 13.8 | 1.00 | 4% | 0.500 | 396 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.5 | 8.0 / 13.6 / 13.8 | 1.00 | 4% | 0.250 | 792 |
-| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 34.7 | 8.4 / 13.6 / 13.8 | 1.00 | 8% | 0.125 | 1584 |
-| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 60.1 | 8.3 / 13.6 / 13.8 | 1.00 | 10% | 0.083 | 2376 |
-| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 88.8 | 8.2 / 13.7 / 13.7 | 1.00 | 13% | 0.062 | 3168 |
-| Dedicated: one process per robot, one device | 24 | 0.00 | 0.0 | 0.0 | 59.1 | 8.3 / 13.6 / 13.8 | 1.00 | 26% | 0.042 | 4752 |
-| Dedicated: one process per robot, one device | 32 | 999.76 | 0.0 | 0.0 | 0.0 | 37.4 / 90.6 / 99.8 | 1.00 | 100% | 0.031 | 6336 |
-| Dedicated: one process per robot, one device | 48 | 999.27 | 0.0 | 0.0 | 0.0 | 9.8 / 94.7 / 103.0 | 1.00 | 100% | 0.021 | 9504 |
-| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 33.9 | 12.4 / 20.3 / 22.1 | 1.00 | 7% | 0.500 | 198 |
-| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 66.1 | 24.7 / 61.9 / 70.2 | 1.74 | 10% | 0.250 | 283 |
-| Neura, FIFO | 8 | 0.00 | 0.0 | 0.0 | 50.4 | 15.7 / 53.4 / 64.1 | 1.30 | 24% | 0.125 | 283 |
-| Neura, FIFO | 12 | 0.00 | 0.0 | 0.0 | 52.5 | 15.4 / 49.5 / 60.7 | 1.44 | 33% | 0.083 | 283 |
-| Neura, FIFO | 16 | 0.52 | 0.0 | 0.0 | 53.7 | 13.8 / 56.6 / 71.3 | 1.47 | 44% | 0.062 | 715 |
-| Neura, FIFO | 24 | 0.69 | 0.0 | 0.0 | 60.5 | 16.0 / 69.8 / 87.4 | 1.60 | 63% | 0.042 | 715 |
-| Neura, FIFO | 32 | 1.04 | 0.0 | 0.0 | 63.3 | 25.7 / 72.8 / 93.4 | 1.54 | 86% | 0.031 | 986 |
-| Neura, FIFO | 48 | 680.51 | 562.5 | 128.8 | 60.9 | 72.2 / 96.5 / 102.8 | 2.06 | 100% | 0.021 | 823 |
-| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 33.9 | 12.4 / 20.3 / 22.1 | 1.00 | 7% | 0.500 | 198 |
-| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 66.1 | 24.7 / 61.9 / 70.2 | 1.74 | 10% | 0.250 | 283 |
-| Neura, round robin | 8 | 0.00 | 0.0 | 0.0 | 50.4 | 15.7 / 53.4 / 64.1 | 1.30 | 24% | 0.125 | 283 |
-| Neura, round robin | 12 | 0.00 | 0.0 | 0.0 | 52.5 | 15.4 / 49.5 / 60.7 | 1.44 | 33% | 0.083 | 283 |
-| Neura, round robin | 16 | 0.00 | 0.0 | 0.0 | 58.3 | 14.8 / 59.6 / 70.5 | 1.60 | 42% | 0.062 | 715 |
-| Neura, round robin | 24 | 0.35 | 0.0 | 0.0 | 65.9 | 17.9 / 76.0 / 90.7 | 1.75 | 60% | 0.042 | 715 |
-| Neura, round robin | 32 | 2.34 | 0.0 | 0.0 | 63.2 | 18.8 / 70.0 / 96.0 | 1.68 | 81% | 0.031 | 986 |
-| Neura, round robin | 48 | 259.31 | 33.8 | 1.2 | 80.9 | 37.4 / 92.5 / 101.4 | 2.34 | 100% | 0.021 | 445 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 33.9 | 12.4 / 20.3 / 22.1 | 1.00 | 7% | 0.500 | 198 |
-| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 66.1 | 24.7 / 61.9 / 70.2 | 1.74 | 10% | 0.250 | 283 |
-| Neura, deadline + fairness | 8 | 0.00 | 0.0 | 0.0 | 49.5 | 15.4 / 51.3 / 64.3 | 1.32 | 24% | 0.125 | 283 |
-| Neura, deadline + fairness | 12 | 0.00 | 0.0 | 0.0 | 52.5 | 15.4 / 49.5 / 60.7 | 1.44 | 33% | 0.083 | 283 |
-| Neura, deadline + fairness | 16 | 0.00 | 0.0 | 0.0 | 59.2 | 19.9 / 59.2 / 98.2 | 1.51 | 43% | 0.062 | 715 |
-| Neura, deadline + fairness | 24 | 1.73 | 0.0 | 0.0 | 65.0 | 24.6 / 74.1 / 91.3 | 1.71 | 60% | 0.042 | 715 |
-| Neura, deadline + fairness | 32 | 1.82 | 0.0 | 0.0 | 66.1 | 23.7 / 73.3 / 93.2 | 1.68 | 82% | 0.031 | 986 |
+| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.7 / 9.7 | 1.00 | 3% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.7 / 9.7 | 1.00 | 3% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 7.4 / 9.7 / 9.7 | 1.00 | 4% | 0.500 | 2010 |
+| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.3 | 7.7 / 9.7 / 9.7 | 1.00 | 7% | 0.250 | 4020 |
+| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 50.4 | 7.6 / 9.7 / 9.7 | 1.00 | 8% | 0.125 | 8040 |
+| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 63.4 | 7.5 / 9.7 / 9.7 | 1.00 | 10% | 0.083 | 12060 |
+| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 96.9 | 7.5 / 9.7 / 9.7 | 1.00 | 13% | 0.062 | 16080 |
+| Dedicated: one process per robot, one device | 24 | 484.33 | 0.0 | 0.0 | 85.0 | 7.5 / 9.7 / 9.7 | 1.00 | 40% | 0.042 | 24120 |
+| Dedicated: one process per robot, one device | 32 | 999.77 | 0.0 | 0.0 | 0.0 | 43.9 / 91.5 / 96.1 | 1.00 | 100% | 0.031 | 32160 |
+| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 64.4 | 40.0 / 43.0 / 44.1 | 1.76 | 5% | 0.500 | 1035 |
+| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 79.3 | 38.4 / 65.1 / 69.5 | 2.81 | 8% | 0.250 | 1145 |
+| Neura, FIFO | 8 | 200.67 | 0.0 | 0.0 | 76.0 | 8.9 / 81.8 / 89.7 | 2.63 | 16% | 0.125 | 1198 |
+| Neura, FIFO | 12 | 287.48 | 0.0 | 0.0 | 81.6 | 38.7 / 89.3 / 92.2 | 2.46 | 24% | 0.083 | 1198 |
+| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 64.4 | 40.0 / 43.0 / 44.1 | 1.76 | 5% | 0.500 | 1035 |
+| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 79.7 | 38.6 / 64.6 / 69.5 | 2.79 | 8% | 0.250 | 1145 |
+| Neura, round robin | 8 | 194.63 | 0.0 | 0.0 | 76.1 | 23.1 / 79.0 / 87.4 | 2.63 | 15% | 0.125 | 1145 |
+| Neura, round robin | 12 | 281.08 | 0.0 | 0.0 | 80.9 | 24.6 / 88.8 / 93.8 | 2.73 | 23% | 0.083 | 1198 |
+| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 1005 |
+| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 64.4 | 40.0 / 43.0 / 44.1 | 1.76 | 5% | 0.500 | 1035 |
+| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 79.7 | 38.6 / 64.6 / 69.5 | 2.79 | 8% | 0.250 | 1145 |
+| Neura, deadline + fairness | 8 | 203.32 | 0.0 | 0.0 | 75.6 | 22.3 / 79.9 / 90.7 | 2.65 | 15% | 0.125 | 1145 |
+| Neura, deadline + fairness | 12 | 280.72 | 0.0 | 0.0 | 79.4 | 18.1 / 86.8 / 91.2 | 2.76 | 23% | 0.083 | 1198 |
+| Neura, lanes + lined-up requests | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 3% | 1.000 | 2010 |
+| Neura, lanes + lined-up requests | 2 | 0.00 | 0.0 | 0.0 | 64.4 | 39.9 / 43.0 / 43.1 | 1.76 | 5% | 0.500 | 2070 |
+| Neura, lanes + lined-up requests | 4 | 0.00 | 0.0 | 0.0 | 77.6 | 38.7 / 42.3 / 42.8 | 2.65 | 7% | 0.250 | 2290 |
+| Neura, lanes + lined-up requests | 8 | 0.00 | 0.0 | 0.0 | 67.1 | 8.5 / 40.7 / 42.9 | 3.95 | 7% | 0.125 | 2290 |
+| Neura, lanes + lined-up requests | 12 | 4.84 | 0.0 | 0.0 | 75.5 | 8.8 / 81.1 / 85.5 | 3.08 | 12% | 0.083 | 2290 |
+| Neura, lanes + lined-up requests | 16 | 178.08 | 0.0 | 0.0 | 76.3 | 8.3 / 86.0 / 90.9 | 2.85 | 19% | 0.062 | 2290 |
 
 ### Same weights on every robot: phased, with a background GPU job
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.9 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.9 | 8.2 / 13.4 / 13.6 | 1.00 | 4% | 1.000 | 198 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.5 | 8.3 / 13.6 / 13.7 | 1.00 | 8% | 0.500 | 396 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.5 | 8.3 / 13.7 / 13.7 | 1.00 | 15% | 0.250 | 792 |
-| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 33.4 | 8.5 / 13.7 / 13.7 | 1.00 | 31% | 0.125 | 1584 |
-| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 33.5 | 8.4 / 13.6 / 13.8 | 1.00 | 46% | 0.083 | 2376 |
-| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 33.6 | 8.5 / 13.6 / 13.7 | 1.00 | 60% | 0.062 | 3168 |
-| Dedicated: one process per robot, one device | 24 | 0.00 | 0.0 | 0.0 | 33.7 | 8.4 / 13.6 / 13.8 | 1.00 | 90% | 0.042 | 4752 |
-| Dedicated: one process per robot, one device | 32 | 0.00 | 0.0 | 0.0 | 33.6 | 8.3 / 13.7 / 13.8 | 1.00 | 99% | 0.031 | 6336 |
-| Dedicated: one process per robot, one device | 48 | 0.00 | 0.0 | 0.0 | 33.7 | 8.5 / 13.6 / 13.8 | 1.00 | 100% | 0.021 | 9504 |
-| Dedicated: one process per robot, one device | 64 | 0.00 | 0.0 | 0.0 | 33.7 | 8.5 / 13.7 / 13.8 | 1.00 | 100% | 0.016 | 12672 |
-| Dedicated: one process per robot, one device | 96 | 0.00 | 0.0 | 0.0 | 37.7 | 8.4 / 13.7 / 13.8 | 1.00 | 100% | 0.010 | 19008 |
-| Dedicated: one process per robot, one device | 128 | 351.24 | 5.6 | 5.6 | 0.0 | 11.8 / 91.8 / 100.3 | 1.00 | 100% | 0.008 | 25344 |
-| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 33.9 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.7 / 15.7 | 1.00 | 8% | 0.500 | 198 |
-| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 34.6 | 10.3 / 15.6 / 15.7 | 1.00 | 15% | 0.250 | 198 |
-| Neura, FIFO | 8 | 0.00 | 0.0 | 0.0 | 34.4 | 10.4 / 15.6 / 15.8 | 1.00 | 31% | 0.125 | 198 |
-| Neura, FIFO | 12 | 0.00 | 0.0 | 0.0 | 34.2 | 10.6 / 15.7 / 15.7 | 1.00 | 46% | 0.083 | 198 |
-| Neura, FIFO | 16 | 0.00 | 0.0 | 0.0 | 35.1 | 10.7 / 22.5 / 28.4 | 1.00 | 61% | 0.062 | 198 |
-| Neura, FIFO | 24 | 0.00 | 0.0 | 0.0 | 34.4 | 11.3 / 16.2 / 19.1 | 1.00 | 92% | 0.042 | 198 |
-| Neura, FIFO | 32 | 0.00 | 0.0 | 0.0 | 63.9 | 28.7 / 52.0 / 68.2 | 1.37 | 99% | 0.031 | 283 |
-| Neura, FIFO | 48 | 780.21 | 805.6 | 284.4 | 42.8 | 80.1 / 97.2 / 102.1 | 2.60 | 100% | 0.021 | 661 |
-| Neura, FIFO | 64 | 840.12 | 582.2 | 404.1 | 18.8 | 84.3 / 98.3 / 104.0 | 3.87 | 100% | 0.016 | 986 |
-| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 33.9 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.7 / 15.7 | 1.00 | 8% | 0.500 | 198 |
-| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 34.6 | 10.3 / 15.6 / 15.7 | 1.00 | 15% | 0.250 | 198 |
-| Neura, round robin | 8 | 0.00 | 0.0 | 0.0 | 34.4 | 10.4 / 15.6 / 15.8 | 1.00 | 31% | 0.125 | 198 |
-| Neura, round robin | 12 | 0.00 | 0.0 | 0.0 | 34.2 | 10.6 / 15.7 / 15.7 | 1.00 | 46% | 0.083 | 198 |
-| Neura, round robin | 16 | 0.00 | 0.0 | 0.0 | 35.1 | 10.7 / 22.5 / 28.4 | 1.00 | 61% | 0.062 | 198 |
-| Neura, round robin | 24 | 0.00 | 0.0 | 0.0 | 34.4 | 11.3 / 16.2 / 19.1 | 1.00 | 92% | 0.042 | 198 |
-| Neura, round robin | 32 | 0.00 | 0.0 | 0.0 | 64.0 | 28.7 / 52.0 / 68.2 | 1.37 | 99% | 0.031 | 283 |
-| Neura, round robin | 48 | 486.43 | 186.9 | 27.5 | 74.8 | 38.8 / 94.1 / 100.6 | 2.48 | 100% | 0.021 | 391 |
-| Neura, round robin | 64 | 768.12 | 324.4 | 204.4 | 54.8 | 38.7 / 95.0 / 101.2 | 2.57 | 100% | 0.016 | 553 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 33.9 | 10.2 / 15.4 / 15.6 | 1.00 | 4% | 1.000 | 198 |
-| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 33.6 | 10.2 / 15.7 / 15.7 | 1.00 | 8% | 0.500 | 198 |
-| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 34.6 | 10.3 / 15.6 / 15.7 | 1.00 | 15% | 0.250 | 198 |
-| Neura, deadline + fairness | 8 | 0.00 | 0.0 | 0.0 | 34.4 | 10.4 / 15.6 / 15.8 | 1.00 | 31% | 0.125 | 198 |
-| Neura, deadline + fairness | 12 | 0.00 | 0.0 | 0.0 | 34.2 | 10.6 / 15.7 / 15.7 | 1.00 | 46% | 0.083 | 198 |
-| Neura, deadline + fairness | 16 | 0.00 | 0.0 | 0.0 | 35.1 | 10.7 / 22.5 / 28.4 | 1.00 | 61% | 0.062 | 198 |
-| Neura, deadline + fairness | 24 | 0.00 | 0.0 | 0.0 | 34.4 | 11.3 / 16.2 / 19.1 | 1.00 | 92% | 0.042 | 198 |
-| Neura, deadline + fairness | 32 | 0.00 | 0.0 | 0.0 | 64.0 | 28.7 / 52.0 / 68.2 | 1.37 | 99% | 0.031 | 283 |
-| Neura, deadline + fairness | 48 | 485.10 | 0.0 | 0.0 | 77.8 | 36.8 / 93.9 / 101.1 | 2.53 | 100% | 0.021 | 391 |
-| Neura, deadline + fairness | 64 | 814.81 | 1276.4 | 330.5 | 1.5 | 78.7 / 97.5 / 101.9 | 2.83 | 100% | 0.016 | 986 |
+| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.6 / 9.7 | 1.00 | 4% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 33.3 | 7.9 / 9.6 / 9.7 | 1.00 | 4% | 1.000 | 1005 |
+| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 33.3 | 7.5 / 9.7 / 9.7 | 1.00 | 7% | 0.500 | 2010 |
+| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 15% | 0.250 | 4020 |
+| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 30% | 0.125 | 8040 |
+| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 33.3 | 7.5 / 9.7 / 9.7 | 1.00 | 45% | 0.083 | 12060 |
+| Dedicated: one process per robot, one device | 16 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.7 | 1.00 | 56% | 0.062 | 16080 |
+| Dedicated: one process per robot, one device | 24 | 0.00 | 0.0 | 0.0 | 33.3 | 7.5 / 9.7 / 9.8 | 1.00 | 73% | 0.042 | 24120 |
+| Dedicated: one process per robot, one device | 32 | 0.00 | 0.0 | 0.0 | 33.3 | 7.6 / 9.7 / 9.8 | 1.00 | 81% | 0.031 | 32160 |
+| Neura, FIFO | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 4% | 1.000 | 1005 |
+| Neura, FIFO | 2 | 0.00 | 0.0 | 0.0 | 67.9 | 40.1 / 42.6 / 46.6 | 1.95 | 5% | 0.500 | 1035 |
+| Neura, FIFO | 4 | 0.00 | 0.0 | 0.0 | 81.0 | 23.2 / 68.1 / 74.7 | 3.61 | 7% | 0.250 | 1145 |
+| Neura, FIFO | 8 | 224.56 | 0.0 | 0.0 | 81.5 | 24.6 / 86.3 / 89.7 | 2.67 | 17% | 0.125 | 1198 |
+| Neura, FIFO | 12 | 345.75 | 0.0 | 0.0 | 80.7 | 21.9 / 91.2 / 95.3 | 2.45 | 27% | 0.083 | 1252 |
+| Neura, round robin | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 4% | 1.000 | 1005 |
+| Neura, round robin | 2 | 0.00 | 0.0 | 0.0 | 67.9 | 40.1 / 42.6 / 46.6 | 1.95 | 5% | 0.500 | 1035 |
+| Neura, round robin | 4 | 0.00 | 0.0 | 0.0 | 80.8 | 23.2 / 68.1 / 74.7 | 3.61 | 7% | 0.250 | 1145 |
+| Neura, round robin | 8 | 213.12 | 0.0 | 0.0 | 79.7 | 23.0 / 84.2 / 88.6 | 2.62 | 17% | 0.125 | 1198 |
+| Neura, round robin | 12 | 328.98 | 0.0 | 0.0 | 80.3 | 25.1 / 86.7 / 93.2 | 2.51 | 26% | 0.083 | 1198 |
+| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 4% | 1.000 | 1005 |
+| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 67.9 | 40.1 / 42.6 / 46.6 | 1.95 | 5% | 0.500 | 1035 |
+| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 80.8 | 23.2 / 68.1 / 74.7 | 3.61 | 7% | 0.250 | 1145 |
+| Neura, deadline + fairness | 8 | 213.76 | 0.0 | 0.0 | 79.7 | 22.5 / 83.0 / 88.8 | 2.54 | 17% | 0.125 | 1198 |
+| Neura, deadline + fairness | 12 | 324.58 | 0.0 | 0.0 | 80.0 | 22.2 / 85.9 / 92.2 | 2.62 | 26% | 0.083 | 1198 |
+| Neura, lanes + lined-up requests | 1 | 0.00 | 0.0 | 0.0 | 66.7 | 41.2 / 43.0 / 43.1 | 1.00 | 4% | 1.000 | 2010 |
+| Neura, lanes + lined-up requests | 2 | 0.00 | 0.0 | 0.0 | 67.6 | 40.2 / 42.4 / 42.6 | 1.92 | 5% | 0.500 | 2070 |
+| Neura, lanes + lined-up requests | 4 | 0.00 | 0.0 | 0.0 | 80.2 | 22.9 / 42.0 / 42.5 | 3.66 | 7% | 0.250 | 2290 |
+| Neura, lanes + lined-up requests | 8 | 0.00 | 0.0 | 0.0 | 74.6 | 15.1 / 47.4 / 69.0 | 3.79 | 9% | 0.125 | 2396 |
+| Neura, lanes + lined-up requests | 12 | 38.08 | 0.0 | 0.0 | 80.1 | 9.4 / 86.9 / 94.7 | 2.68 | 15% | 0.083 | 2396 |
+| Neura, lanes + lined-up requests | 16 | 221.41 | 0.0 | 0.0 | 77.3 | 12.6 / 82.6 / 91.6 | 2.90 | 20% | 0.062 | 2396 |
 
 ### Same weights on every robot: SmolVLA: phased arrivals
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 601.9 | 8.2 / 13.6 / 13.7 | 1.00 | 60% | 1.000 | 1165 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 601.9 | 8.2 / 13.6 / 13.7 | 1.00 | 60% | 1.000 | 1165 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 602.6 | 8.3 / 13.7 / 13.8 | 1.00 | 100% | 0.500 | 2330 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 608.9 | 8.5 / 13.6 / 13.7 | 1.00 | 100% | 0.250 | 4660 |
-| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 719.2 | 8.2 / 13.6 / 13.7 | 1.00 | 100% | 0.125 | 9320 |
-| Dedicated: one process per robot, one device | 12 | 0.49 | 0.0 | 0.0 | 942.2 | 8.4 / 13.7 / 13.8 | 1.00 | 100% | 0.083 | 13980 |
-| Dedicated: one process per robot, one device | 16 | 293.41 | 354.4 | 1.9 | 806.6 | 8.8 / 90.3 / 215.6 | 1.00 | 100% | 0.062 | 18640 |
-| Dedicated: one process per robot, one device | 24 | 361.36 | 788.8 | 466.2 | 357.7 | 10.2 / 409.7 / 542.0 | 1.00 | 100% | 0.042 | 27960 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 603.1 | 10.2 / 15.6 / 15.7 | 1.00 | 60% | 1.000 | 1165 |
-| Neura, deadline + fairness | 2 | 239.20 | 90.0 | 0.0 | 912.7 | 369.5 / 438.3 / 489.1 | 1.01 | 100% | 0.500 | 1165 |
-| Neura, deadline + fairness | 4 | 516.64 | 412.5 | 0.0 | 772.3 | 379.5 / 448.8 / 456.8 | 2.01 | 98% | 0.250 | 1165 |
+| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 550.0 | 7.6 / 9.6 / 9.7 | 1.00 | 56% | 1.000 | 1944 |
+| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 550.0 | 7.6 / 9.6 / 9.7 | 1.00 | 56% | 1.000 | 1944 |
+| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 550.0 | 7.9 / 9.7 / 9.7 | 1.00 | 100% | 0.500 | 3888 |
+| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 550.1 | 7.4 / 9.7 / 9.7 | 1.00 | 100% | 0.250 | 7776 |
+| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 648.8 | 7.6 / 9.7 / 9.7 | 1.00 | 100% | 0.125 | 15552 |
+| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 938.9 | 7.6 / 9.7 / 9.7 | 1.00 | 100% | 0.083 | 23328 |
+| Dedicated: one process per robot, one device | 16 | 905.36 | 0.0 | 0.0 | 959.9 | 7.5 / 9.7 / 9.7 | 1.00 | 100% | 0.062 | 31104 |
+| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 600.0 | 41.0 / 42.9 / 43.0 | 1.00 | 56% | 1.000 | 1944 |
+| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 861.9 | 334.9 / 365.9 / 378.5 | 1.05 | 96% | 0.500 | 1944 |
+| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 915.8 | 341.6 / 399.9 / 414.8 | 2.00 | 100% | 0.250 | 1944 |
+| Neura, deadline + fairness | 8 | 239.93 | 892.5 | 0.0 | 464.4 | 315.3 / 564.1 / 590.4 | 2.67 | 100% | 0.125 | 1944 |
+| Neura, deadline + fairness | 12 | 282.66 | 1092.5 | 5.0 | 444.1 | 287.2 / 542.8 / 586.6 | 5.52 | 100% | 0.083 | 2052 |
+| Neura, lanes + lined-up requests | 1 | 0.00 | 0.0 | 0.0 | 600.0 | 41.0 / 42.9 / 43.0 | 1.00 | 56% | 1.000 | 3888 |
+| Neura, lanes + lined-up requests | 2 | 0.00 | 0.0 | 0.0 | 628.8 | 40.0 / 42.8 / 43.0 | 1.98 | 58% | 0.500 | 3888 |
+| Neura, lanes + lined-up requests | 4 | 0.00 | 0.0 | 0.0 | 683.7 | 39.3 / 42.7 / 43.1 | 3.23 | 63% | 0.250 | 3888 |
+| Neura, lanes + lined-up requests | 8 | 0.00 | 0.0 | 0.0 | 749.7 | 25.0 / 42.9 / 43.1 | 4.80 | 74% | 0.125 | 3888 |
+| Neura, lanes + lined-up requests | 12 | 0.00 | 0.0 | 0.0 | 919.5 | 38.5 / 299.2 / 341.7 | 5.17 | 97% | 0.083 | 4104 |
+| Neura, lanes + lined-up requests | 16 | 0.00 | 0.0 | 0.0 | 938.2 | 173.0 / 353.2 / 402.1 | 5.34 | 100% | 0.062 | 4050 |
+| Neura, lanes + lined-up requests | 24 | 0.55 | 2.5 | 0.0 | 951.8 | 215.7 / 441.7 / 559.1 | 8.00 | 100% | 0.042 | 4158 |
+| Neura, lanes + lined-up requests | 32 | 314.65 | 890.6 | 215.6 | 461.9 | 244.3 / 572.0 / 591.7 | 8.18 | 100% | 0.031 | 4320 |
 
 ### Same weights on every robot: SmolVLA: synchronized (bursty) arrivals
 
 | Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 601.9 | 8.2 / 13.6 / 13.7 | 1.00 | 60% | 1.000 | 1165 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 601.9 | 8.2 / 13.6 / 13.7 | 1.00 | 60% | 1.000 | 1165 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 606.5 | 7.7 / 13.7 / 13.8 | 1.00 | 67% | 0.500 | 2330 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 622.1 | 8.2 / 13.7 / 13.8 | 1.00 | 69% | 0.250 | 4660 |
-| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 801.8 | 8.3 / 13.6 / 13.8 | 1.00 | 97% | 0.125 | 9320 |
-| Dedicated: one process per robot, one device | 12 | 0.49 | 0.0 | 0.0 | 942.4 | 8.5 / 13.7 / 13.8 | 1.00 | 100% | 0.083 | 13980 |
-| Dedicated: one process per robot, one device | 16 | 299.60 | 333.8 | 0.0 | 817.0 | 8.9 / 80.0 / 168.8 | 1.00 | 100% | 0.062 | 18640 |
-| Dedicated: one process per robot, one device | 24 | 377.33 | 793.8 | 468.8 | 363.2 | 10.4 / 400.8 / 512.5 | 1.00 | 100% | 0.042 | 27960 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 603.1 | 10.2 / 15.6 / 15.7 | 1.00 | 60% | 1.000 | 1165 |
-| Neura, deadline + fairness | 2 | 254.18 | 90.0 | 0.0 | 912.7 | 372.6 / 447.5 / 471.7 | 1.01 | 99% | 0.500 | 1165 |
-| Neura, deadline + fairness | 4 | 439.07 | 517.5 | 0.0 | 711.0 | 376.6 / 462.7 / 492.6 | 2.00 | 97% | 0.250 | 1165 |
-
-### Same weights on every robot: pi0: phased arrivals
-
-| Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 567.5 | 8.5 / 13.6 / 13.7 | 1.00 | 57% | 1.000 | 8482 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 567.5 | 8.5 / 13.6 / 13.7 | 1.00 | 57% | 1.000 | 8482 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 594.2 | 7.9 / 13.7 / 13.7 | 1.00 | 100% | 0.500 | 16964 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 806.5 | 8.3 / 13.7 / 13.7 | 1.00 | 100% | 0.250 | 33928 |
-| Dedicated: one process per robot, one device | 8 | 375.13 | 967.5 | 0.0 | 479.8 | 10.2 / 133.5 / 203.1 | 1.00 | 98% | 0.125 | 67856 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 567.8 | 10.6 / 15.5 / 15.7 | 1.00 | 57% | 1.000 | 8482 |
-| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 955.6 | 353.8 / 397.8 / 398.7 | 1.00 | 100% | 0.500 | 8482 |
-| Neura, deadline + fairness | 4 | 267.99 | 907.5 | 22.5 | 488.8 | 313.9 / 525.1 / 565.1 | 1.81 | 99% | 0.250 | 8482 |
-| Neura, deadline + fairness | 8 | 295.15 | 990.0 | 240.0 | 304.6 | 320.8 / 582.2 / 591.3 | 3.25 | 99% | 0.125 | 8482 |
-
-### Same weights on every robot: pi0: synchronized (bursty) arrivals
-
-| Configuration | Robots | Misses / 1k | Starvation / robot-h | Faults / robot-h | Late-trimmed / 1k actions | Age p50 / p99 / max (ms) | Mean batch | Device busy | GPU-h / robot-h | Peak MiB |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 567.5 | 8.5 / 13.6 / 13.7 | 1.00 | 57% | 1.000 | 8482 |
-| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 567.5 | 8.5 / 13.6 / 13.7 | 1.00 | 57% | 1.000 | 8482 |
-| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 670.6 | 7.9 / 13.6 / 13.8 | 1.00 | 69% | 0.500 | 16964 |
-| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 875.3 | 8.1 / 13.6 / 13.7 | 1.00 | 91% | 0.250 | 33928 |
-| Dedicated: one process per robot, one device | 8 | 371.10 | 937.5 | 0.0 | 487.5 | 10.0 / 139.6 / 206.1 | 1.00 | 98% | 0.125 | 67856 |
-| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 567.8 | 10.6 / 15.5 / 15.7 | 1.00 | 57% | 1.000 | 8482 |
-| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 956.1 | 353.8 / 398.2 / 408.2 | 1.00 | 100% | 0.500 | 8482 |
-| Neura, deadline + fairness | 4 | 282.19 | 900.0 | 0.0 | 514.5 | 321.0 / 536.3 / 594.2 | 1.82 | 99% | 0.250 | 8482 |
-| Neura, deadline + fairness | 8 | 298.93 | 1005.0 | 195.0 | 301.8 | 331.5 / 583.2 / 594.8 | 3.26 | 100% | 0.125 | 8482 |
+| Dedicated: one device per robot | 1 | 0.00 | 0.0 | 0.0 | 550.0 | 7.6 / 9.6 / 9.7 | 1.00 | 56% | 1.000 | 1944 |
+| Dedicated: one process per robot, one device | 1 | 0.00 | 0.0 | 0.0 | 550.0 | 7.6 / 9.6 / 9.7 | 1.00 | 56% | 1.000 | 1944 |
+| Dedicated: one process per robot, one device | 2 | 0.00 | 0.0 | 0.0 | 550.0 | 7.4 / 9.6 / 9.7 | 1.00 | 57% | 0.500 | 3888 |
+| Dedicated: one process per robot, one device | 4 | 0.00 | 0.0 | 0.0 | 581.5 | 7.7 / 9.7 / 9.7 | 1.00 | 62% | 0.250 | 7776 |
+| Dedicated: one process per robot, one device | 8 | 0.00 | 0.0 | 0.0 | 791.0 | 7.6 / 9.7 / 9.7 | 1.00 | 83% | 0.125 | 15552 |
+| Dedicated: one process per robot, one device | 12 | 0.00 | 0.0 | 0.0 | 936.5 | 7.5 / 9.7 / 9.7 | 1.00 | 100% | 0.083 | 23328 |
+| Dedicated: one process per robot, one device | 16 | 1000.00 | 0.0 | 0.0 | 960.1 | 7.6 / 9.7 / 9.7 | 1.00 | 100% | 0.062 | 31104 |
+| Neura, deadline + fairness | 1 | 0.00 | 0.0 | 0.0 | 600.0 | 41.0 / 42.9 / 43.0 | 1.00 | 56% | 1.000 | 1944 |
+| Neura, deadline + fairness | 2 | 0.00 | 0.0 | 0.0 | 895.8 | 336.9 / 363.1 / 366.3 | 1.00 | 100% | 0.500 | 1944 |
+| Neura, deadline + fairness | 4 | 0.00 | 0.0 | 0.0 | 915.1 | 342.5 / 401.6 / 415.5 | 2.00 | 100% | 0.250 | 1944 |
+| Neura, deadline + fairness | 8 | 0.00 | 0.0 | 0.0 | 800.1 | 38.9 / 40.5 / 41.1 | 8.00 | 76% | 0.125 | 1944 |
+| Neura, deadline + fairness | 12 | 277.19 | 1082.5 | 2.5 | 418.9 | 285.5 / 545.5 / 590.9 | 5.22 | 100% | 0.083 | 2052 |
+| Neura, deadline + fairness | 16 | 313.43 | 1198.1 | 65.6 | 362.6 | 302.1 / 580.0 / 589.0 | 7.30 | 100% | 0.062 | 2160 |
+| Neura, lanes + lined-up requests | 1 | 0.00 | 0.0 | 0.0 | 600.0 | 41.0 / 42.9 / 43.0 | 1.00 | 56% | 1.000 | 3888 |
+| Neura, lanes + lined-up requests | 2 | 0.00 | 0.0 | 0.0 | 623.9 | 40.0 / 43.0 / 43.0 | 1.71 | 59% | 0.500 | 3888 |
+| Neura, lanes + lined-up requests | 4 | 0.00 | 0.0 | 0.0 | 669.7 | 39.6 / 42.6 / 43.1 | 2.76 | 63% | 0.250 | 3888 |
+| Neura, lanes + lined-up requests | 8 | 0.00 | 0.0 | 0.0 | 800.1 | 38.9 / 40.5 / 41.1 | 8.00 | 76% | 0.125 | 3888 |
+| Neura, lanes + lined-up requests | 12 | 0.00 | 0.0 | 0.0 | 870.5 | 39.4 / 303.4 / 443.1 | 5.06 | 95% | 0.083 | 4104 |
+| Neura, lanes + lined-up requests | 16 | 5.52 | 24.4 | 0.0 | 927.5 | 158.0 / 363.5 / 477.9 | 5.41 | 100% | 0.062 | 4320 |
+| Neura, lanes + lined-up requests | 24 | 17.62 | 57.5 | 0.0 | 920.0 | 143.3 / 441.8 / 503.2 | 7.93 | 100% | 0.042 | 4320 |
 
 ## Real-time validation
 
@@ -316,19 +260,18 @@ The production gateway with real worker processes on the device and simulated ro
 
 | Case | Configuration | Robots | Requests | Misses / 1k | Starvation / robot-h | Age p50 ms | Age p99 ms | Mean batch | Device busy | Late ticks | Worker restarts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Same weights on every robot: phased arrivals | Dedicated: one device per robot | 1 | 60 / 60 | 0.00 / 0.00 | 0.0 / 0.0 | 6.9 / 8.0 | 10.2 / 13.4 | 1.00 / 1.00 | 4% / 4% | 0.0% | 0 |
-| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 1 | 60 / 60 | 0.00 / 0.00 | 0.0 / 0.0 | 9.8 / 10.0 | 24.7 / 15.4 | 1.00 / 1.00 | 4% / 4% | 0.2% | 0 |
-| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 4 | 240 / 240 | 0.00 / 0.00 | 0.0 / 0.0 | 9.8 / 10.4 | 13.2 / 15.6 | 1.00 / 1.00 | 15% / 14% | 0.0% | 0 |
-| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 8 | 480 / 480 | 0.00 / 0.00 | 0.0 / 0.0 | 10.1 / 10.8 | 13.1 / 15.7 | 1.00 / 1.00 | 31% / 29% | 0.0% | 0 |
-| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 16 | 960 / 960 | 0.00 / 0.00 | 0.0 / 0.0 | 10.0 / 10.9 | 31.1 / 20.8 | 1.00 / 1.00 | 60% / 58% | 0.0% | 0 |
-| Same weights on every robot: phased arrivals | Neura, FIFO | 16 | 960 / 960 | 0.00 / 0.00 | 0.0 / 0.0 | 9.1 / 10.9 | 24.0 / 20.8 | 1.00 / 1.00 | 57% / 58% | 0.0% | 0 |
-| Same weights on every robot: phased arrivals | Dedicated: one process per robot, one device | 16 | 960 / 960 | 0.00 / 0.00 | 0.0 / 0.0 | 6.7 / 8.3 | 9.5 / 13.6 | 1.00 / 1.00 | 57% / 57% | 0.0% | 0 |
-| Same weights on every robot: synchronized (bursty) arrivals | Neura, deadline + fairness | 16 | 961 / 960 | 1.04 / 0.00 | 0.0 / 0.0 | 16.8 / 18.8 | 78.0 / 60.2 | 1.71 / 1.51 | 43% / 43% | 0.0% | 0 |
-| Same weights on every robot: phased, with a background GPU job | Neura, deadline + fairness | 16 | 960 / 960 | 0.00 / 0.00 | 0.0 / 0.0 | 9.9 / 10.7 | 26.3 / 22.3 | 1.00 / 1.00 | 67% / 62% | 0.0% | 0 |
-| Same weights on every robot: SmolVLA: phased arrivals | Neura, deadline + fairness | 4 | 306 / 285 | 0.00 / 491.23 | 0.0 / 450.0 | 365.6 / 381.6 | 402.5 / 448.7 | 2.00 / 2.01 | 100% / 98% | 0.0% | 0 |
-| Same weights on every robot: pi0: phased arrivals | Neura, deadline + fairness | 4 | 290 / 278 | 244.83 / 262.59 | 825.0 / 930.0 | 331.2 / 326.4 | 552.0 / 556.0 | 1.70 / 1.79 | 99% / 100% | 0.0% | 0 |
-| Same weights on every robot: SmolVLA: phased arrivals | Dedicated: one process per robot, one device | 2 | 180 / 180 | 0.00 / 0.00 | 0.0 / 0.0 | 7.0 / 8.1 | 10.9 / 13.7 | 1.00 / 1.00 | 90% / 100% | 0.1% | 0 |
-| Same weights on every robot: pi0: phased arrivals | Dedicated: one process per robot, one device | 2 | 180 / 180 | 0.00 / 0.00 | 0.0 / 0.0 | 7.2 / 8.1 | 10.6 / 13.7 | 1.00 / 1.00 | 100% / 100% | 0.0% | 0 |
+| Same weights on every robot: phased arrivals | Dedicated: one device per robot | 1 | 60 / 60 | 0.00 / 0.00 | 0.0 / 0.0 | 6.8 / 7.8 | 8.8 / 9.6 | 1.00 / 1.00 | 4% / 3% | 0.0% | 0 |
+| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 1 | 60 / 60 | 0.00 / 0.00 | 0.0 / 0.0 | 40.4 / 41.2 | 43.1 / 42.9 | 1.00 / 1.00 | 4% / 3% | 0.0% | 0 |
+| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 4 | 240 / 240 | 0.00 / 0.00 | 0.0 / 0.0 | 40.7 / 22.9 | 50.1 / 51.3 | 4.00 / 3.81 | 7% / 7% | 0.0% | 0 |
+| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 8 | 608 / 583 | 210.53 / 176.67 | 0.0 / 0.0 | 31.9 / 24.7 | 107.3 / 77.6 | 3.50 / 2.60 | 15% / 16% | 0.0% | 0 |
+| Same weights on every robot: phased arrivals | Neura, deadline + fairness | 16 | 1761 / 1529 | 461.10 / 372.14 | 22.5 / 0.0 | 40.7 / 33.9 | 136.4 / 92.0 | 2.30 / 2.17 | 39% / 34% | 1.4% | 0 |
+| Same weights on every robot: phased arrivals | Neura, FIFO | 16 | 1966 / 1539 | 518.82 / 376.22 | 105.0 / 0.0 | 44.6 / 28.4 | 154.2 / 93.1 | 2.85 / 2.56 | 42% / 32% | 2.0% | 0 |
+| Same weights on every robot: phased arrivals | Dedicated: one process per robot, one device | 16 | 960 / 960 | 0.00 / 0.00 | 0.0 / 0.0 | 6.6 / 7.6 | 8.5 / 9.7 | 1.00 / 1.00 | 57% / 53% | 0.0% | 0 |
+| Same weights on every robot: synchronized (bursty) arrivals | Neura, deadline + fairness | 16 | 1854 / 1559 | 494.07 / 384.22 | 56.2 / 0.0 | 41.9 / 20.5 | 136.2 / 85.9 | 2.79 / 2.72 | 39% / 31% | 1.4% | 0 |
+| Same weights on every robot: phased, with a background GPU job | Neura, deadline + fairness | 16 | 2465 / 1561 | 656.79 / 385.01 | 543.7 / 0.0 | 47.9 / 29.5 | 127.6 / 83.5 | 2.04 / 2.27 | 59% / 36% | 0.5% | 0 |
+| Same weights on every robot: SmolVLA: phased arrivals | Neura, deadline + fairness | 4 | 352 / 308 | 36.93 / 0.00 | 45.0 / 0.0 | 46.5 / 341.4 | 446.5 / 399.0 | 3.59 / 1.99 | 69% / 101% | 0.0% | 0 |
+| Same weights on every robot: SmolVLA: phased arrivals | Neura, lanes + lined-up requests | 4 | 360 / 360 | 0.00 / 0.00 | 0.0 / 0.0 | 44.7 / 39.4 | 60.0 / 42.8 | 4.00 / 3.30 | 64% / 63% | 0.0% | 0 |
+| Same weights on every robot: SmolVLA: phased arrivals | Dedicated: one process per robot, one device | 2 | 180 / 180 | 0.00 / 0.00 | 0.0 / 0.0 | 6.9 / 8.0 | 9.4 / 9.7 | 1.00 / 1.00 | 99% / 100% | 0.0% | 0 |
 
 ## Method and limits
 
@@ -343,5 +286,5 @@ The production gateway with real worker processes on the device and simulated ro
 ## Reproduce
 
 ```
-neura-bench run --preset vla --device cuda:0 --size base --out /tmp/neura-bench-08_3ki8a/report
+neura-bench run --preset vla --device cuda:0 --size base --out /tmp/neura-bench-jcy0vt41/report
 ```

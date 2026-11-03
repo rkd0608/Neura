@@ -50,7 +50,9 @@ def checkpoint_path(spec: str | Path, workdir: Path) -> tuple[Path, bool]:
 class LocalPolicy:
     def __init__(self, checkpoint: Path, device: str = "cpu") -> None:
         import torch
-        from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+        from lerobot.policies.factory import make_pre_post_processors
+
+        from neura_adapters.lerobot_compat import policy_class
 
         self._torch = torch
         config = policy_config(checkpoint)
@@ -60,7 +62,7 @@ class LocalPolicy:
             # ImageNet weights first (a site without internet access could not).
             config.pretrained_backbone_weights = None
         self.config = config
-        policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
+        policy = policy_class(config.type).from_pretrained(checkpoint, config=config)
         policy.eval()
         policy.to(device)
         self.policy = policy

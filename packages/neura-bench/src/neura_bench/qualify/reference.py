@@ -39,14 +39,16 @@ class LeRobotReference:
         device: str = "cpu",
     ) -> None:
         import torch
-        from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+        from lerobot.policies.factory import make_pre_post_processors
+
+        from neura_adapters.lerobot_compat import policy_class
 
         self._torch = torch
         self.artifact = artifact
         config = policy_config(checkpoint)
         config.device = device
         self.device = torch.device(device)
-        self.policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
+        self.policy = policy_class(config.type).from_pretrained(checkpoint, config=config)
         self.policy.eval()
         self.policy.to(self.device)
         overrides = {"device_processor": {"device": device}}

@@ -87,6 +87,7 @@ Under `packages/neura-adapters/src/`:
 - `neura_adapters/base.py`: The adapter interface policy workers run (design §12).
 - `neura_adapters/cli.py`: ``neura-adapters`` command line.
 - `neura_adapters/lerobot.py`: LeRobot policies (ACT, SmolVLA, pi0, pi0.5, Diffusion Policy) as Neura adapters (§2.2, §12).
+- `neura_adapters/lerobot_compat.py`: LeRobot 0.6.1 on the transformers this workspace pins: one call LeRobot makes that it no longer takes.
 - `neura_adapters/lora.py`: Multi-adapter batching: one base forward pass serving requests for different LoRA adapters (design §9.5).
 - `neura_adapters/mock.py`: A deterministic policy for tests, the simulator and development stacks.
 - `neura_adapters/profiler.py`: Measuring an adapter on its device: latency per batch size and peak memory (design §9.2).

@@ -96,7 +96,9 @@ class LeRobotAdapter:
         seed: int = 0,
     ) -> None:
         torch = _torch()
-        from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+        from lerobot.policies.factory import make_pre_post_processors
+
+        from neura_adapters.lerobot_compat import policy_class
 
         expected_type = POLICY_TYPES.get(name)
         if expected_type is None:
@@ -132,8 +134,7 @@ class LeRobotAdapter:
         self._dtype = _dtype(precision)
         self._seed = seed
         self._generator = torch.Generator(device="cpu").manual_seed(seed)
-        policy_class = get_policy_class(config.type)
-        policy = policy_class.from_pretrained(checkpoint, config=config)
+        policy = policy_class(config.type).from_pretrained(checkpoint, config=config)
         policy.eval()
         policy.to(self._device)
         if self._dtype != torch.float32:

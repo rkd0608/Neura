@@ -43,8 +43,34 @@ env:
   MODAL_VERSION: "1.6.1"
 
 jobs:
+  # On GitHub's own runner, before any Modal credit is spent: the suite end to end on a CPU (its
+  # report included, which a GPU run once measured for 48 minutes and then failed to write), and
+  # the LeRobot adapters' tests (pi0's Gemma on the pinned transformers among them).
+  smoke:
+    name: The suite on a CPU, before the GPU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Install (with PyTorch and LeRobot)
+        run: uv sync --frozen --group models
+      - name: The LeRobot adapters
+        run: uv run --group models pytest -q packages/neura-adapters/tests/test_lerobot.py
+      - name: The suite, with a two-layer SmolVLA
+        run: uv run --group models neura-bench run --preset smoke-vla --out smoke-vla
+      - name: Summary
+        if: always()
+        run: |
+          [ ! -f smoke-vla/README.md ] || head -n 40 smoke-vla/README.md >> "$GITHUB_STEP_SUMMARY"
+
   gpu:
     name: On an L4 at Modal
+    needs: smoke
     runs-on: ubuntu-24.04
     environment: production # the Modal token: a repository secret or one of this environment's
     timeout-minutes: 240

@@ -236,3 +236,28 @@ def test_loading_a_configuration_leaves_no_file_behind(
     assert tempfile.gettempdir() == str(tmp_path)  # the caller's temporary directory, restored
     PreTrainedConfig.from_pretrained(checkpoint)  # what this guards against: LeRobot's own leaves
     assert [p.suffix for p in tmp_path.iterdir()] == [".json"]
+
+
+def test_pi0s_gemma_runs_on_the_pinned_transformers() -> None:
+    """LeRobot 0.6.1's Gemma for pi0 passed transformers 5.10 an argument it dropped, and pi0's
+    worker failed to load on the GPU benchmark: a forward pass, here in miniature."""
+    import torch
+    from transformers.models.gemma.modeling_gemma import GemmaConfig
+
+    from neura_adapters.lerobot_compat import policy_class
+
+    policy_class("pi0")
+    from lerobot.policies.pi_gemma import PiGemmaModel
+
+    config = GemmaConfig(
+        vocab_size=32,
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=8,
+    )
+    with torch.no_grad():
+        out = PiGemmaModel(config).eval()(inputs_embeds=torch.zeros(1, 3, 16))
+    assert tuple(out.last_hidden_state.shape) == (1, 3, 16)

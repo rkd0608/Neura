@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from neura_bench import report
+from neura_bench import report, suite
 from neura_bench.cli import main
 
 FIXTURE = Path(__file__).with_name("fixtures") / "smoke-results.json"
@@ -30,6 +30,10 @@ def test_the_report_states_capacity_crossovers_and_its_limits() -> None:
     assert "**2 different full fine-tunes" in markdown  # how many, from the run's config
     assert "SmolVLA" not in markdown  # a case whose model was not measured has no table
     assert "Parity with each adapter merged" in markdown
+    # Every configuration the suite runs has a name in the report: a GPU run that measured one
+    # without failed writing its report after the measurements.
+    ran = {c for configurations in suite.CASES.values() for c in configurations}
+    assert ran <= set(report.CONFIG_NAMES)
 
 
 def test_report_command_regenerates_the_markdown(tmp_path: Path) -> None:

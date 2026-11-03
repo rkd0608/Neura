@@ -21,6 +21,7 @@ CONFIG_NAMES = {
     suite.NEURA_FIFO: "Neura, FIFO",
     suite.NEURA_RR: "Neura, round robin",
     suite.NEURA_DEADLINE: "Neura, deadline + fairness",
+    suite.NEURA_LANES: "Neura, lanes + lined-up requests",
     suite.NEURA_MULTI_ADAPTER: "Neura, multi-adapter batching",
     suite.NEURA_CO_LOCATED: "Neura, co-located groups",
 }

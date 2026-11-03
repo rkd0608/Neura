@@ -130,6 +130,43 @@ def test_robots_of_a_slow_model_share_its_passes_instead_of_queueing_behind_them
     assert result.mean_batch > 4
 
 
+# ACT as measured on the same L4: a pass of about 35 ms, four at once 11% slower.
+ACT_L4 = LatencyModel(
+    tuple(
+        ProfilePoint(b, p50 * MS, p99 * MS, mem)
+        for b, p50, p99, mem in (
+            (1, 34, 38, 198),
+            (2, 44, 48, 228),
+            (4, 65, 76, 338),
+            (8, 125, 133, 553),
+            (16, 266, 299, 986),
+        )
+    ),
+    process_overhead_mib=807,
+)
+ACT_L4_CONTENTION = Contention(((1, 1.0), (2, 1.027), (4, 1.107), (8, 1.813), (16, 3.615)))
+
+
+def test_robots_of_a_fast_model_are_served_as_they_ask_not_lined_up(tmp_path: Path) -> None:
+    """Lined up whenever a pass outlasted a control period, 32 ACT robots shared batches their
+    150 ms acceptance limit could not take, and missed 425 deadlines in 1,000, where one lane
+    serves them as they ask."""
+    files = write_files(tmp_path, contracts(model="act", device="cuda", precision="bf16"))
+    names = tuple(f"r{i}" for i in range(32))
+    group = GroupSpec("act", files.binding, "dev-0", ACT_L4, names, max_batch=16)
+    interval = 30 * files.binding.control_period_us  # the example's 50-action chunks, refill at 20
+    result = simulate(
+        Scenario(
+            groups=(group,),
+            contention=ACT_L4_CONTENTION,
+            starts_us={n: i * interval // 32 for i, n in enumerate(names)},
+            warmup_us=5 * SECOND,
+            duration_us=60 * SECOND,
+        )
+    )
+    assert result.meets(Slo()), result
+
+
 def test_a_background_job_costs_capacity(tmp_path: Path) -> None:
     calm = simulate(scenario(tmp_path, 4, FAST))
     busy = simulate(

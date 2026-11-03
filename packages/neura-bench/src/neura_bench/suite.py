@@ -43,12 +43,14 @@ DEDICATED_SHARED = "dedicated_shared_gpu"  # one worker process per robot, all o
 NEURA_FIFO = "neura_fifo"
 NEURA_RR = "neura_round_robin"
 NEURA_DEADLINE = "neura_deadline_fairness"
+NEURA_LANES = "neura_lanes"  # deadline + fairness, SuiteConfig.lanes passes at once (§9.2)
 NEURA_MULTI_ADAPTER = "neura_multi_adapter"
 NEURA_CO_LOCATED = "neura_co_located"
 POLICIES = {
     NEURA_FIFO: Policy.FIFO,
     NEURA_RR: Policy.ROUND_ROBIN,
     NEURA_DEADLINE: Policy.DEADLINE_FAIRNESS,
+    NEURA_LANES: Policy.DEADLINE_FAIRNESS,
 }
 
 SAME_WEIGHTS = "same_weights"
@@ -56,7 +58,7 @@ MULTI_ADAPTER = "multi_adapter"
 CO_LOCATED = "co_located_fine_tunes"
 DIFFERENT = "different_architectures"
 CASES = {
-    SAME_WEIGHTS: (DEDICATED, DEDICATED_SHARED, NEURA_FIFO, NEURA_RR, NEURA_DEADLINE),
+    SAME_WEIGHTS: (DEDICATED, DEDICATED_SHARED, NEURA_FIFO, NEURA_RR, NEURA_DEADLINE, NEURA_LANES),
     MULTI_ADAPTER: (DEDICATED, DEDICATED_SHARED, NEURA_MULTI_ADAPTER),
     CO_LOCATED: (DEDICATED, DEDICATED_SHARED, NEURA_CO_LOCATED),
     DIFFERENT: (DEDICATED, DEDICATED_SHARED, NEURA_CO_LOCATED),
@@ -74,7 +76,7 @@ WORKLOADS = {
 # weights on every robot, against both dedicated baselines.
 VLA_CASES = {"smolvla": "same_weights_smolvla", "pi0": "same_weights_pi0"}
 for _case in VLA_CASES.values():
-    CASES[_case] = (DEDICATED, DEDICATED_SHARED, NEURA_DEADLINE)
+    CASES[_case] = (DEDICATED, DEDICATED_SHARED, NEURA_DEADLINE, NEURA_LANES)
     WORKLOADS[_case] = (PHASED, SYNCHRONIZED)
 
 
@@ -85,6 +87,7 @@ class SuiteConfig:
     image: tuple[int, int] | None = None  # None: the example's 480 x 640 cameras
     precision: str = "bf16"
     max_batch: int = 16
+    lanes: int = 2  # NEURA_LANES: forward passes at once, a worker each
     measure_seconds: float = 10.0
     contention_workers: int = 4
     fine_tunes: int = 4
@@ -385,6 +388,7 @@ class Plan:
     devices: str  # "one" (all on one device) or "each" (a device per group)
     policy: Policy
     max_batch: int
+    lanes: int = 1
 
 
 def model_kinds(case: str, config: SuiteConfig) -> list[str]:
@@ -429,7 +433,8 @@ def plan(
     if configuration == NEURA_CO_LOCATED:
         groups = tuple((f"g-{kind}", kind, n) for kind, n in split(kinds))
         return Plan(groups, "one", Policy.DEADLINE_FAIRNESS, largest)
-    return Plan((("shared", kinds[0], robots),), "one", POLICIES[configuration], largest)
+    lanes = config.lanes if configuration == NEURA_LANES else 1
+    return Plan((("shared", kinds[0], robots),), "one", POLICIES[configuration], largest, lanes)
 
 
 def _interval_s(binding: ExecutionBinding) -> float:
@@ -536,11 +541,9 @@ class Builder:
             counter += n
             named.append((names, binding))
             device = f"dev-{index}" if p.devices == "each" else "dev-0"
-            groups.append(
-                GroupSpec(
-                    name, binding, device, self.latency(kind), tuple(names), p.policy, p.max_batch
-                )
-            )
+            latency, robots_of = self.latency(kind), tuple(names)
+            spec = GroupSpec(name, binding, device, latency, robots_of, p.policy, p.max_batch)
+            groups.append(replace(spec, lanes=p.lanes))
         offsets = starts(workload, named)
         warmup = self.config.sim_warmup_s if warmup_s is None else warmup_s
         duration = self.config.sim_duration_s if duration_s is None else duration_s
@@ -577,6 +580,7 @@ class Builder:
             device=self.config.device,
             policy=p.policy,
             max_batch=p.max_batch,
+            lanes=p.lanes,
             starts_s=starts(workload, named),
             warmup_s=self.config.realtime_warmup_s,
             duration_s=self.config.realtime_duration_s,
@@ -652,24 +656,12 @@ class Calibration:
         }
 
 
-def fit_link(p50_ms: float, p99_ms: float) -> LinkModel:
-    """The uniform delay on [base, base + jitter] with the measured median and 99th percentile
-    (median = base + jitter / 2, p99 = base + 0.99 jitter). A tail too heavy for that keeps the
-    median and a base of at least a fifth of it."""
-    jitter = max(0.0, (p99_ms - p50_ms) / 0.49)
-    base = p50_ms - jitter / 2
-    if base < 0.2 * p50_ms:
-        base = 0.2 * p50_ms
-        jitter = 2 * (p50_ms - base)
-    return LinkModel(base_us=max(1, round(base * 1000)), jitter_us=max(0, round(jitter * 1000)))
-
-
 async def calibrate(builder: Builder) -> Calibration:
     p = replace(plan(SAME_WEIGHTS, DEDICATED, 1, builder.config), devices="one")
     run = await realtime.run(builder.realtime(p, PHASED))
     p50 = run.result.age_at_dispatch_p50_ms or 0.5
     p99 = run.result.age_at_dispatch_p99_ms or p50
-    link = fit_link(p50, p99)
+    link = LinkModel.fitted(p50, p99)
     builder.link = link
     log.info(
         "calibrated the simulated link: %s ms + up to %s ms",
@@ -696,9 +688,10 @@ def validation_plan(
         (DIFFERENT, PHASED, NEURA_CO_LOCATED, max(largest, 2)),
     ]
     runs += [
-        (VLA_CASES[m], PHASED, NEURA_DEADLINE, config.vla_realtime_robots)
+        (VLA_CASES[m], PHASED, configuration, config.vla_realtime_robots)
         for m in vlas
         if m in VLA_CASES
+        for configuration in (NEURA_DEADLINE, NEURA_LANES)
     ]
     # Two processes of the same VLA, the most that fit beside each other for pi0.
     runs += [

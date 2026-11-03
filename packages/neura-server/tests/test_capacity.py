@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from neura_server.admission import AdmissionController, SessionDemand
-from neura_server.capacity import estimate
+from neura_server.admission import SessionDemand
+from neura_server.capacity import admission_for, estimate
 from neura_server.config import ProfilePointConfig, ServingConfig
 from neura_server.profiles import LatencyProfile
 
@@ -18,11 +18,7 @@ def test_estimate_matches_what_admission_would_admit(make_binding: Any) -> None:
     assert n > 0
     assert result["source"] == "configured_profile"
     # Exactly n identical robots are admitted by the controller the gateway runs; n + 1 are not.
-    admission = AdmissionController(
-        LatencyProfile(serving.profile_points()),
-        max_batch=serving.max_batch,
-        reserve_fraction=serving.reserve_fraction,
-    )
+    admission = admission_for(serving, LatencyProfile(serving.profile_points()), binding)
     demand = SessionDemand.from_binding("r", binding, rtt_p99_us=20_000)
     for i in range(n):
         assert admission.try_admit(

@@ -33,6 +33,18 @@ class LinkModel:
     reorder_probability: float = 0.0
     reorder_extra_us: int = 5_000
 
+    @classmethod
+    def fitted(cls, p50_ms: float, p99_ms: float) -> LinkModel:
+        """The uniform delay on [base, base + jitter] with the measured median and 99th
+        percentile (median = base + jitter / 2, p99 = base + 0.99 jitter). A tail too heavy for
+        that keeps the median and a base of at least a fifth of it."""
+        jitter = max(0.0, (p99_ms - p50_ms) / 0.49)
+        base = p50_ms - jitter / 2
+        if base < 0.2 * p50_ms:
+            base = 0.2 * p50_ms
+            jitter = 2 * (p50_ms - base)
+        return cls(base_us=max(1, round(base * 1000)), jitter_us=max(0, round(jitter * 1000)))
+
 
 class Link:
     def __init__(self, model: LinkModel, rng: random.Random) -> None:

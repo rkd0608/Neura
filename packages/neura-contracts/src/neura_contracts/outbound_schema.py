@@ -145,6 +145,8 @@ RESULTS: dict[str, OutboundField] = {
     'capacity.assumptions.acceptance_freshness_ms': OutboundField(False, 'Prepare: estimate input.'),
     'capacity.assumptions.max_batch': OutboundField(False, 'Prepare: estimate input.'),
     'capacity.assumptions.batch_window_ms': OutboundField(False, 'Prepare: estimate input.'),
+    'capacity.assumptions.lanes': OutboundField(False, 'Prepare: estimate input.'),
+    'capacity.assumptions.align_requests': OutboundField(False, 'Prepare: estimate input.'),
     'capacity.assumptions.reserve_fraction': OutboundField(False, 'Prepare: estimate input.'),
     'capacity.assumptions.latency_p99_ms_by_batch.*': OutboundField(False, 'Prepare: measured latency per batch size.'),
     'capacity.assumptions.memory_available_mib': OutboundField(False, 'Prepare: estimate input.'),

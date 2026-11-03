@@ -177,6 +177,11 @@ message ActionChunk {
   PayloadDigest actions_digest = 4;
   // Opaque reference to the worker trace for this inference.
   string trace_id = 5;
+  // Move the next request by this many actions, once (§9.2): negative asks before the refill
+  // threshold, positive after it. The gateway lines up the requests of robots sharing a model so
+  // they share forward passes. The robot never waits past half its refill threshold whatever
+  // this says; 0 (as from an older gateway) changes nothing.
+  sint32 request_shift_actions = 6;
 }
 
 message RequestRejected {

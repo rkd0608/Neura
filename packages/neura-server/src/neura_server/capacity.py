@@ -13,7 +13,24 @@ from typing import Any
 from neura_runtime.binding import ExecutionBinding
 from neura_server.admission import AdmissionController, SessionDemand
 from neura_server.config import ServingConfig
+from neura_server.gateway import batching_window_us
 from neura_server.profiles import LatencyProfile, ProfilePoint
+
+
+def admission_for(
+    serving: ServingConfig, profile: LatencyProfile, binding: ExecutionBinding
+) -> AdmissionController:
+    """The admission controller the gateway runs for a batch group of robots like ``binding``."""
+    return AdmissionController(
+        profile,
+        max_batch=serving.max_batch,
+        reserve_fraction=serving.reserve_fraction,
+        memory_available_mib=serving.memory_available_mib,
+        batch_window_us=batching_window_us(
+            int(serving.batch_window_ms * 1000), binding, serving.align_requests, profile
+        ),
+        lanes=serving.lanes,
+    )
 
 
 def estimate(
@@ -34,13 +51,7 @@ def estimate(
     """
     points = measured if measured is not None else serving.profile_points()
     profile = LatencyProfile(points)
-    admission = AdmissionController(
-        profile,
-        max_batch=serving.max_batch,
-        reserve_fraction=serving.reserve_fraction,
-        memory_available_mib=serving.memory_available_mib,
-        batch_window_us=int(serving.batch_window_ms * 1000),
-    )
+    admission = admission_for(serving, profile, binding)
     demand = SessionDemand.from_binding("template", binding, rtt_p99_us=int(rtt_p99_ms * 1000))
     report = admission.capacity(demand)
     freshness = binding.profile.spec.freshness
@@ -61,7 +72,13 @@ def estimate(
             "dispatch_freshness_ms": ms(freshness.max_observation_age_at_dispatch_us),
             "acceptance_freshness_ms": ms(freshness.max_observation_age_at_acceptance_us),
             "max_batch": serving.max_batch,
-            "batch_window_ms": serving.batch_window_ms,
+            "batch_window_ms": ms(
+                batching_window_us(
+                    int(serving.batch_window_ms * 1000), binding, serving.align_requests, profile
+                )
+            ),
+            "lanes": serving.lanes,
+            "align_requests": serving.align_requests,
             "reserve_fraction": serving.reserve_fraction,
             "latency_p99_ms_by_batch": {
                 str(point.batch_size): round(point.p99_us / 1000, 3) for point in points

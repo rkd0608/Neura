@@ -31,7 +31,7 @@ from neura_bench.metrics import Result, Snapshot, snapshot, summarize, window
 from neura_bench.sim import AdmitAll, LatencyModel
 from neura_runtime.policy import ModelInputs
 from neura_runtime.runtime import RuntimeState, TransitionError
-from neura_server.backends import WorkerBackend
+from neura_server.backends import PooledBackend, WorkerBackend
 from neura_server.config import (
     DeploymentConfig,
     DeviceConfig,
@@ -59,6 +59,7 @@ class RealScenario:
     device: str
     policy: Policy = Policy.DEADLINE_FAIRNESS
     max_batch: int = 8
+    lanes: int = 1
     starts_s: dict[str, float] = field(default_factory=dict)
     warmup_s: float = 5.0
     duration_s: float = 30.0
@@ -74,9 +75,13 @@ class RealResult:
 
 
 def workers(server: GatewayServer) -> list[WorkerBackend]:
-    backends = list(server.backends().values())
-    assert all(isinstance(b, WorkerBackend) for b in backends)
-    return [b for b in backends if isinstance(b, WorkerBackend)]
+    """Every worker process, a group's lanes included."""
+    found = []
+    for backend in server.backends().values():
+        for one in backend.backends if isinstance(backend, PooledBackend) else [backend]:
+            assert isinstance(one, WorkerBackend)
+            found.append(one)
+    return found
 
 
 def _profile_file(directory: Path, name: str, latency: LatencyModel) -> Path:
@@ -208,6 +213,7 @@ async def run(scenario: RealScenario) -> RealResult:
                 backend="workers",
                 policy=scenario.policy,
                 max_batch=scenario.max_batch,
+                lanes=scenario.lanes,
                 worker_command=WORKER,
                 worker_start_timeout_s=900,
                 worker_timeout_ms=5000,

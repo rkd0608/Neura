@@ -196,18 +196,20 @@ class Observation(_message.Message):
     def __init__(self, envelope: _Optional[_Union[_common_pb2.Envelope, _Mapping]] = ..., anchor_index: _Optional[int] = ..., queued_actions: _Optional[int] = ..., budget_us: _Optional[int] = ..., capture_time_us: _Optional[int] = ..., state: _Optional[_Mapping[str, _common_pb2.Tensor]] = ..., images: _Optional[_Iterable[_Union[_common_pb2.Image, _Mapping]]] = ..., instruction: _Optional[str] = ..., frozen_prefix: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ...) -> None: ...
 
 class ActionChunk(_message.Message):
-    __slots__ = ("envelope", "start_index", "actions", "actions_digest", "trace_id")
+    __slots__ = ("envelope", "start_index", "actions", "actions_digest", "trace_id", "request_shift_actions")
     ENVELOPE_FIELD_NUMBER: _ClassVar[int]
     START_INDEX_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_DIGEST_FIELD_NUMBER: _ClassVar[int]
     TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_SHIFT_ACTIONS_FIELD_NUMBER: _ClassVar[int]
     envelope: _common_pb2.Envelope
     start_index: int
     actions: _common_pb2.Tensor
     actions_digest: _common_pb2.PayloadDigest
     trace_id: str
-    def __init__(self, envelope: _Optional[_Union[_common_pb2.Envelope, _Mapping]] = ..., start_index: _Optional[int] = ..., actions: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ..., actions_digest: _Optional[_Union[_common_pb2.PayloadDigest, _Mapping]] = ..., trace_id: _Optional[str] = ...) -> None: ...
+    request_shift_actions: int
+    def __init__(self, envelope: _Optional[_Union[_common_pb2.Envelope, _Mapping]] = ..., start_index: _Optional[int] = ..., actions: _Optional[_Union[_common_pb2.Tensor, _Mapping]] = ..., actions_digest: _Optional[_Union[_common_pb2.PayloadDigest, _Mapping]] = ..., trace_id: _Optional[str] = ..., request_shift_actions: _Optional[int] = ...) -> None: ...
 
 class RequestRejected(_message.Message):
     __slots__ = ("envelope", "reason")

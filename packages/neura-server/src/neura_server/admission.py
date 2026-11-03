@@ -83,9 +83,12 @@ class AdmissionController:
         reserve_fraction: float = 0.2,
         memory_available_mib: int | None = None,
         batch_window_us: int = 0,
+        lanes: int = 1,
     ) -> None:
         if max_batch < 1:
             raise ValueError("max_batch must be >= 1")
+        if lanes < 1:
+            raise ValueError("lanes must be >= 1")
         if not 0.0 <= reserve_fraction < 1.0:
             raise ValueError("reserve_fraction must be in [0, 1)")
         self._profile = profile
@@ -93,6 +96,10 @@ class AdmissionController:
         self._reserve = reserve_fraction
         self._memory = memory_available_mib
         self._window = batch_window_us
+        # Forward passes at once (§9.2): a worker process, and its own copy of the weights, each.
+        # How much passes running together slow each other is the device's and is not modeled
+        # here; the scheduler's profile learns it from the passes it times.
+        self._lanes = lanes
         self._admitted: dict[str, SessionDemand] = {}
 
     @property
@@ -105,63 +112,72 @@ class AdmissionController:
         n = len(demands)
         typical_batch = min(n, self._max_batch)
         if self._memory is not None:
-            needed = self._profile.memory_mib(typical_batch)
+            needed = self._lanes * self._profile.memory_mib(typical_batch)
             if needed > self._memory:
                 return AdmissionDecision(
                     False,
                     ReasonCode.ADMISSION_MEMORY_EXCEEDED,
-                    f"batch of {typical_batch} needs {needed} MiB, {self._memory} MiB available",
+                    f"{self._lanes} worker(s) with batches of {typical_batch} need {needed} MiB, "
+                    f"{self._memory} MiB available",
                     0,
                     0.0,
                     "memory",
                 )
 
-        # One batch of the other sessions already running (a session has at most one request
-        # outstanding, so never its own), and the scheduler's batching window before the next.
-        others = min(n - 1, self._max_batch)
-        blocking = (self._profile.p99_us(others) if others else 0) + self._window
+        # Every lane busy with a batch of the other sessions (a session has at most one request
+        # outstanding, so never its own), unless there are fewer of them than lanes, and the
+        # scheduler's batching window before the next. Then batches, a lane each, in rounds.
+        others = n - 1
+        per_lane = min(-(-others // self._lanes), self._max_batch)
+        busy = others >= self._lanes
+        blocking = (self._profile.p99_us(per_lane) if busy else 0) + self._window
         ordered = sorted(demands, key=lambda d: d.budget_us - d.link_us)
-        elapsed = blocking
+        batches = [
+            ordered[start : start + self._max_batch] for start in range(0, n, self._max_batch)
+        ]
+        dispatched = blocking  # when the current round of batches starts, a lane each
         worst = 0
-        for start in range(0, n, self._max_batch):
-            members = ordered[start : start + self._max_batch]
-            dispatch_wait = elapsed
-            elapsed += self._profile.p99_us(len(members))
-            for demand in members:
-                uplink = demand.link_us // 2
-                completion = elapsed + demand.link_us
-                worst = max(worst, completion)
-                problem = None
-                limit = "deadline"
-                if dispatch_wait + uplink > demand.max_age_at_dispatch_us:
-                    limit = "dispatch_freshness"
-                    problem = (
-                        f"observation age at dispatch {dispatch_wait + uplink} us exceeds "
-                        f"{demand.max_age_at_dispatch_us} us"
-                    )
-                elif completion > demand.max_age_at_acceptance_us:
-                    limit = "acceptance_freshness"
-                    problem = (
-                        f"observation age at acceptance {completion} us exceeds "
-                        f"{demand.max_age_at_acceptance_us} us"
-                    )
-                elif completion > demand.budget_us:
-                    problem = (
-                        f"predicted completion {completion} us exceeds the "
-                        f"{demand.budget_us} us starvation budget"
-                    )
-                if problem is not None:
-                    return AdmissionDecision(
-                        False,
-                        ReasonCode.ADMISSION_CAPACITY_EXCEEDED,
-                        f"{n} sessions: {problem} for {demand.session_id}",
-                        worst,
-                        0.0,
-                        limit,
-                    )
+        for first in range(0, len(batches), self._lanes):
+            ends = []
+            for members in batches[first : first + self._lanes]:
+                elapsed = dispatched + self._profile.p99_us(len(members))
+                ends.append(elapsed)
+                for demand in members:
+                    uplink = demand.link_us // 2
+                    completion = elapsed + demand.link_us
+                    worst = max(worst, completion)
+                    problem = None
+                    limit = "deadline"
+                    if dispatched + uplink > demand.max_age_at_dispatch_us:
+                        limit = "dispatch_freshness"
+                        problem = (
+                            f"observation age at dispatch {dispatched + uplink} us exceeds "
+                            f"{demand.max_age_at_dispatch_us} us"
+                        )
+                    elif completion > demand.max_age_at_acceptance_us:
+                        limit = "acceptance_freshness"
+                        problem = (
+                            f"observation age at acceptance {completion} us exceeds "
+                            f"{demand.max_age_at_acceptance_us} us"
+                        )
+                    elif completion > demand.budget_us:
+                        problem = (
+                            f"predicted completion {completion} us exceeds the "
+                            f"{demand.budget_us} us starvation budget"
+                        )
+                    if problem is not None:
+                        return AdmissionDecision(
+                            False,
+                            ReasonCode.ADMISSION_CAPACITY_EXCEEDED,
+                            f"{n} sessions: {problem} for {demand.session_id}",
+                            worst,
+                            0.0,
+                            limit,
+                        )
+            dispatched = max(ends)
 
         per_request = self._profile.p99_us(typical_batch) / typical_batch
-        utilization = sum(per_request / d.interval_us for d in demands)
+        utilization = sum(per_request / d.interval_us for d in demands) / self._lanes
         if utilization > 1.0 - self._reserve:
             return AdmissionDecision(
                 False,

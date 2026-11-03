@@ -326,6 +326,7 @@ One observation, sent when the robot's queued actions fall to the refill thresho
 | `actions` | `Tensor` | 3 | Shape [chunk_length, action_dim], in the artifact's declared action order and units. |
 | `actions_digest` | `PayloadDigest` | 4 |  |
 | `trace_id` | `string` | 5 | Opaque reference to the worker trace for this inference. |
+| `request_shift_actions` | `sint32` | 6 | Move the next request by this many actions, once (§9.2): negative asks before the refill threshold, positive after it. The gateway lines up the requests of robots sharing a model so they share forward passes. The robot never waits past half its refill threshold whatever this says; 0 (as from an older gateway) changes nothing. |
 
 ### Message `RequestRejected`
 

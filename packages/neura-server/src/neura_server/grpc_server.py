@@ -34,8 +34,14 @@ from prometheus_client import CONTENT_TYPE_LATEST
 from neura.v1 import capture_pb2, dataplane_pb2, dataplane_pb2_grpc
 from neura_adapters import MockPolicy, PolicyBackend
 from neura_runtime.policy import ModelInputs, PolicyError
-from neura_server.admission import AdmissionController
-from neura_server.backends import Backend, InProcessBackend, WorkerBackend, WorkerSpec
+from neura_server.backends import (
+    Backend,
+    InProcessBackend,
+    PooledBackend,
+    WorkerBackend,
+    WorkerSpec,
+)
+from neura_server.capacity import admission_for
 from neura_server.config import (
     DeploymentConfig,
     DeviceRegistry,
@@ -48,7 +54,13 @@ from neura_server.config import (
     load_profile_points,
     profile_batch_sizes,
 )
-from neura_server.gateway import BatchGroup, Delivery, Deployment, GatewayCore
+from neura_server.gateway import (
+    BatchGroup,
+    Delivery,
+    Deployment,
+    GatewayCore,
+    batching_window_us,
+)
 from neura_server.leases import (
     GenerationStore,
     LeaseTable,
@@ -110,6 +122,7 @@ class _Group:
     key: str
     backend: Backend
     profile_source: str
+    lanes: int = 1  # batches at once: the backend has a worker per lane
     wake: asyncio.Event = field(default_factory=asyncio.Event)
     task: asyncio.Task[None] | None = None
 
@@ -206,23 +219,28 @@ class GatewayServer:
             else:
                 points, source = serving.profile_points(), "configured_profile"
             profile = LatencyProfile(points)
+            window = batching_window_us(
+                int(serving.batch_window_ms * 1000),
+                deployment.binding,
+                serving.align_requests,
+                profile,
+            )
             groups[key] = BatchGroup(
                 key,
                 Scheduler(
                     profile,
                     policy=serving.policy,
                     max_batch=serving.max_batch,
-                    batch_window_us=int(serving.batch_window_ms * 1000),
+                    batch_window_us=window,
                 ),
-                AdmissionController(
-                    profile,
-                    max_batch=serving.max_batch,
-                    reserve_fraction=serving.reserve_fraction,
-                    memory_available_mib=serving.memory_available_mib,
-                    batch_window_us=int(serving.batch_window_ms * 1000),
-                ),
+                admission_for(serving, profile, deployment.binding),
+                align=serving.align_requests,
             )
-            backends[key] = _Group(key, self._backend(serving, item, deployment, profile), source)
+            lanes = [
+                self._backend(serving, item, deployment, profile) for _ in range(serving.lanes)
+            ]
+            backend = lanes[0] if len(lanes) == 1 else PooledBackend(lanes)
+            backends[key] = _Group(key, backend, source, lanes=serving.lanes)
         return deployments, groups, backends
 
     def _backend(
@@ -539,31 +557,50 @@ class GatewayServer:
             del self._streams[session_id]
 
     async def _dispatch(self, group: _Group) -> None:
+        """Dispatch the group's batches, up to one per lane at once (§9.2): its backend has a
+        worker process per lane. Cancelling the dispatcher cancels its passes."""
         worker_timeout_us = int(self.config.serving.worker_timeout_ms * 1000)
-        while True:
-            await group.wake.wait()
-            group.wake.clear()
+        running: set[asyncio.Task[None]] = set()
+        async with asyncio.TaskGroup() as passes:
             while True:
-                batch, dropped = self.core.next_batch(group.key, monotonic_us())
-                self.route(dropped)
-                if batch is None:
-                    hold = self.core.hold_until(group.key)
-                    if hold is None:
-                        break
-                    # Holding the batch open: ask again at the deadline or on a new arrival.
-                    with contextlib.suppress(TimeoutError):
-                        delay = max(hold - monotonic_us(), 0) / 1e6
-                        await asyncio.wait_for(group.wake.wait(), timeout=delay)
-                    group.wake.clear()
-                    continue
-                outputs = await self._run(group, batch, worker_timeout_us)
-                done_us = monotonic_us()
-                self.metrics.batch_done(
-                    group.key,
-                    (done_us - batch.dispatched_at_us) / 1e6,
-                    failed=isinstance(outputs, PolicyError),
-                )
-                self.route(self.core.complete(group.key, batch, outputs, done_us))
+                await group.wake.wait()
+                group.wake.clear()
+                await self._fill_lanes(group, passes, running, worker_timeout_us)
+
+    async def _fill_lanes(
+        self,
+        group: _Group,
+        passes: asyncio.TaskGroup,
+        running: set[asyncio.Task[None]],
+        worker_timeout_us: int,
+    ) -> None:
+        while len(running) < group.lanes:
+            batch, dropped = self.core.next_batch(group.key, monotonic_us())
+            self.route(dropped)
+            if batch is None:
+                hold = self.core.hold_until(group.key)
+                if hold is None:
+                    return
+                # Holding the batch open: ask again at the deadline or on a new arrival.
+                with contextlib.suppress(TimeoutError):
+                    delay = max(hold - monotonic_us(), 0) / 1e6
+                    await asyncio.wait_for(group.wake.wait(), timeout=delay)
+                group.wake.clear()
+                continue
+            task = passes.create_task(self._pass(group, batch, worker_timeout_us))
+            running.add(task)
+            task.add_done_callback(running.discard)
+
+    async def _pass(self, group: _Group, batch: Batch, worker_timeout_us: int) -> None:
+        outputs = await self._run(group, batch, worker_timeout_us)
+        done_us = monotonic_us()
+        self.metrics.batch_done(
+            group.key,
+            (done_us - batch.dispatched_at_us) / 1e6,
+            failed=isinstance(outputs, PolicyError),
+        )
+        self.route(self.core.complete(group.key, batch, outputs, done_us))
+        group.wake.set()  # a lane is free
 
     @staticmethod
     async def _run(

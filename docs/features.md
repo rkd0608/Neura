@@ -155,6 +155,11 @@ signed upgrades, and the local site API.
   and a worker image: a worker sees only its own socket),
   `tests/integration/test_shutdown.py` (stopped with SIGTERM, it stops its workers and leaves
   nothing behind)
+- Lanes and lined-up requests (§9.2): `serving.lanes` worker processes per group
+  (`PooledBackend` in `backends.py`, the dispatcher in `grpc_server.py`), `request_shift_actions`
+  in `gateway.py` and the runtime; proven in `packages/neura-bench/tests/test_sim.py` (12 SmolVLA
+  robots on an L4's measured timings, two lanes), measured in real time by the GPU benchmark's
+  `neura_lanes` configuration
 - Model adapters: `packages/neura-adapters/src/neura_adapters/` (LeRobot, Python classes, LoRA
   batching); their real-model tests need `make models-setup`, then `make test-models`
 

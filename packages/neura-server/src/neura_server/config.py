@@ -173,6 +173,13 @@ class ServingConfig(_Model):
     max_batch: int = Field(default=8, ge=1, le=256)
     # How long a queued request may wait for others to share its batch (within deadlines).
     batch_window_ms: float = Field(default=2.0, ge=0, le=50)
+    # Line up the requests of robots sharing a model so they share its forward passes (§9.2):
+    # each chunk tells its robot when to ask next, and the window spans one control period.
+    align_requests: bool = True
+    # Forward passes of one batch group at once (§9.2): a worker process, and its own copy of the
+    # weights, per lane. A slow model that leaves the device idle serves many more robots on two
+    # or more; admission counts each lane's memory.
+    lanes: int = Field(default=1, ge=1, le=16)
     reserve_fraction: float = Field(default=0.2, ge=0, lt=1)
     memory_available_mib: int | None = Field(default=None, ge=1)
     profile: list[ProfilePointConfig] = Field(

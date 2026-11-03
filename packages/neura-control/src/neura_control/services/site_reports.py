@@ -125,6 +125,8 @@ class _CapacityAssumptions(BaseModel):
     acceptance_freshness_ms: float | None = Field(default=None, ge=0)
     max_batch: int = Field(ge=1)
     batch_window_ms: float = Field(default=0, ge=0, le=1000)
+    lanes: int = Field(default=1, ge=1, le=16)
+    align_requests: bool = False
     reserve_fraction: float = Field(ge=0, le=1)
     latency_p99_ms_by_batch: dict[str, float]
     memory_available_mib: int | None = Field(default=None, ge=0)

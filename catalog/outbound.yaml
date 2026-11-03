@@ -138,6 +138,8 @@ results:
   capacity.assumptions.acceptance_freshness_ms: {minimal: false, description: "Prepare: estimate input."}
   capacity.assumptions.max_batch: {minimal: false, description: "Prepare: estimate input."}
   capacity.assumptions.batch_window_ms: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.lanes: {minimal: false, description: "Prepare: estimate input."}
+  capacity.assumptions.align_requests: {minimal: false, description: "Prepare: estimate input."}
   capacity.assumptions.reserve_fraction: {minimal: false, description: "Prepare: estimate input."}
   capacity.assumptions.latency_p99_ms_by_batch.*: {minimal: false, description: "Prepare: measured latency per batch size."}
   capacity.assumptions.memory_available_mib: {minimal: false, description: "Prepare: estimate input."}

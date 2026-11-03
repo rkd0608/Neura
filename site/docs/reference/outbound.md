@@ -146,6 +146,8 @@ Schema version 1.
 | `capacity.assumptions.acceptance_freshness_ms` | no | Prepare: estimate input. |
 | `capacity.assumptions.max_batch` | no | Prepare: estimate input. |
 | `capacity.assumptions.batch_window_ms` | no | Prepare: estimate input. |
+| `capacity.assumptions.lanes` | no | Prepare: estimate input. |
+| `capacity.assumptions.align_requests` | no | Prepare: estimate input. |
 | `capacity.assumptions.reserve_fraction` | no | Prepare: estimate input. |
 | `capacity.assumptions.latency_p99_ms_by_batch.*` | no | Prepare: measured latency per batch size. |
 | `capacity.assumptions.memory_available_mib` | no | Prepare: estimate input. |

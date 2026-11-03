@@ -4266,6 +4266,13 @@ components:
               type: number
               minimum: 0
               description: How long a queued request may wait for others to share its batch.
+            lanes:
+              type: integer
+              minimum: 1
+              description: Forward passes of the group at once, a worker process each.
+            align_requests:
+              type: boolean
+              description: Whether the gateway lines up its robots' requests to share passes.
             reserve_fraction:
               type: number
               minimum: 0

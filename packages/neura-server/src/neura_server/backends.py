@@ -85,6 +85,49 @@ class InProcessBackend:
         return {"backend": "simulated", "state": "ready"}
 
 
+class PooledBackend:
+    """Several backends serving one batch group, a batch each at once (§9.2): a lane each. A
+    batch goes to whichever is free; the gateway never runs more batches than there are."""
+
+    def __init__(self, backends: Sequence[Backend]) -> None:
+        if not backends:
+            raise ValueError("a pool needs at least one backend")
+        self._backends = list(backends)
+        self._free: asyncio.Queue[Backend] = asyncio.Queue()
+        for backend in self._backends:
+            self._free.put_nowait(backend)
+
+    @property
+    def backends(self) -> list[Backend]:
+        return list(self._backends)
+
+    async def start(self) -> None:
+        await asyncio.gather(*(b.start() for b in self._backends))
+
+    async def infer(
+        self, batch_id: int, batch: Sequence[ModelInputs], *, timeout_s: float
+    ) -> list[NDArray[np.float32]]:
+        backend = await self._free.get()
+        try:
+            return await backend.infer(batch_id, batch, timeout_s=timeout_s)
+        finally:
+            self._free.put_nowait(backend)
+
+    async def stop(self) -> None:
+        await asyncio.gather(*(b.stop() for b in self._backends))
+
+    def status(self) -> dict[str, Any]:
+        lanes = [b.status() for b in self._backends]
+        states = [lane.get("state") for lane in lanes]
+        return {
+            **lanes[0],
+            "state": next((st for st in states if st != "ready"), "ready"),
+            "restarts": sum(int(lane.get("restarts", 0)) for lane in lanes),
+            "peak_memory_mib": max(int(lane.get("peak_memory_mib", 0)) for lane in lanes),
+            "lanes": lanes,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class WorkerSpec:
     """Everything a worker process needs to load its model."""

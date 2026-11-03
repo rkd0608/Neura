@@ -20,6 +20,7 @@ from neura_control.database import database_reachable
 from neura_control.db.engine import create_engine, session_factory
 from neura_control.db.models import LoginSession
 from neura_control.problems import PROBLEM_MEDIA_TYPE
+from neura_control.services.site_reports import _CapacityAssumptions
 
 
 def _client(*, db_ok: bool = True) -> TestClient:
@@ -185,6 +186,10 @@ def test_implemented_routes_are_in_the_published_spec() -> None:
     for method, path in served:
         assert path in spec["paths"], f"{path} is served but not declared in the OpenAPI spec"
         assert method.lower() in spec["paths"][path], f"{method} {path} is not declared"
+    # What a site may report is checked by models of the spec's schemas, field for field: a field
+    # the spec gained and the model lacked made the control plane drop every site's estimate.
+    capacity = spec["components"]["schemas"]["CapacityEstimate"]["properties"]
+    assert set(_CapacityAssumptions.model_fields) == set(capacity["assumptions"]["properties"])
 
 
 @pytest.mark.skipif(

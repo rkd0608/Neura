@@ -25,6 +25,7 @@ from neura_bench.sim import (
 )
 from neura_server.profiles import ProfilePoint
 from neura_server.scheduler import Policy
+from neura_sim.network import LinkModel
 
 FAST = LatencyModel(
     (ProfilePoint(1, 20 * MS, 25 * MS, 500), ProfilePoint(8, 35 * MS, 45 * MS, 900))
@@ -86,6 +87,47 @@ def test_an_overloaded_device_starves_robots(tmp_path: Path) -> None:
     result = simulate(scenario(tmp_path, 8, SLOW))
     assert not result.meets(Slo())
     assert result.starvations_per_robot_hour > 0 or result.misses_per_1000 > 0
+
+
+# SmolVLA as measured on an NVIDIA L4 (bench/reports/nvidia-l4-vla): a pass of about 0.4 s that
+# leaves the device mostly idle (four at once run 4% slower) and batches well (16 in 0.77 s).
+SMOLVLA_L4 = LatencyModel(
+    tuple(
+        ProfilePoint(b, p50 * MS, p99 * MS, 1165)
+        for b, p50, p99 in (
+            (1, 400, 471),
+            (2, 417, 425),
+            (4, 455, 494),
+            (8, 536, 586),
+            (16, 773, 823),
+        )
+    )
+)
+SMOLVLA_L4_CONTENTION = Contention(((1, 1.0), (2, 1.003), (4, 1.044), (8, 1.378)))
+
+
+def test_robots_of_a_slow_model_share_its_passes_instead_of_queueing_behind_them(
+    tmp_path: Path,
+) -> None:
+    """One pass at a time, each robot waited out another's 0.4 s pass and missed its deadline from
+    the second robot on, while separate processes served 12. Two lanes keep the answers in time,
+    which lets the gateway line the requests up, so robots share passes: 12 robots on two
+    workers' memory."""
+    files = write_files(tmp_path, contracts(model="smolvla", vla_timing=VlaTiming()))
+    names = tuple(f"r{i}" for i in range(12))
+    group = GroupSpec("smolvla", files.binding, "dev-0", SMOLVLA_L4, names, max_batch=16, lanes=2)
+    result = simulate(
+        Scenario(
+            groups=(group,),
+            contention=SMOLVLA_L4_CONTENTION,
+            starts_us={n: i * SECOND // 12 for i, n in enumerate(names)},
+            warmup_us=5 * SECOND,
+            duration_us=60 * SECOND,
+        )
+    )
+    assert result.meets(Slo()), result
+    assert result.peak_memory_mib == 2 * 1165
+    assert result.mean_batch > 4
 
 
 def test_a_background_job_costs_capacity(tmp_path: Path) -> None:
@@ -159,11 +201,11 @@ def test_per_robot_baselines_get_a_batch_group_each_at_any_count(tmp_path: Path)
 
 
 def test_the_link_fit_reproduces_the_measured_median_and_tail() -> None:
-    link = suite.fit_link(2.0, 3.0)
+    link = LinkModel.fitted(2.0, 3.0)
     base, jitter = link.base_us / 1000, link.jitter_us / 1000
     assert base + jitter / 2 == pytest.approx(2.0, abs=0.01)
     assert base + 0.99 * jitter == pytest.approx(3.0, abs=0.01)
-    heavy = suite.fit_link(1.0, 9.0)  # a tail no uniform delay with a positive base can match
+    heavy = LinkModel.fitted(1.0, 9.0)  # a tail no uniform delay with a positive base can match
     assert heavy.base_us == 200
     assert heavy.base_us + heavy.jitter_us / 2 == pytest.approx(1000)
 

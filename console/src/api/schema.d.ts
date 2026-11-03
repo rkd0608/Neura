@@ -1335,6 +1335,10 @@ export interface components {
         max_batch?: number;
         /** @description How long a queued request may wait for others to share its batch. */
         batch_window_ms?: number;
+        /** @description Forward passes of the group at once, a worker process each. */
+        lanes?: number;
+        /** @description Whether the gateway lines up its robots' requests to share passes. */
+        align_requests?: boolean;
         reserve_fraction?: number;
         latency_p99_ms_by_batch?: {
           [key: string]: number;

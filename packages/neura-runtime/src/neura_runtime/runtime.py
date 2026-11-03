@@ -183,6 +183,9 @@ class RobotRuntime:
         self._lease_generation: int | None = None
         self._sequence = 0
         self._pending: _Pending | None = None
+        # Where to ask next time, once: the gateway lines up the requests of robots that share a
+        # model so they share its forward passes (§9.2). Never later than half the threshold.
+        self._threshold = self._refill
         self._completed: deque[tuple[int, int]] = deque(maxlen=self._config.duplicate_window)
         self._waiting_since: int | None = None
         self._instruction = ""
@@ -348,7 +351,7 @@ class RobotRuntime:
         if self._session_id is None or self._pending is not None:
             return False
         if self.state is RuntimeState.RUNNING:
-            return len(self._queue) <= self._refill
+            return len(self._queue) <= self._threshold
         return True  # Armed or Waiting: the queue is empty
 
     def _enter_waiting(self, now_us: int) -> None:
@@ -443,6 +446,7 @@ class RobotRuntime:
                 model_prefix = binding.action_transform.to_model(prefix)
                 message.frozen_prefix.CopyFrom(tensors.encode(model_prefix.astype(np.float32)))
         self._pending = _Pending(self._sequence, anchor, oldest, now_us)
+        self._threshold = self._refill
         return message
 
     def _envelope(self, sequence: int) -> common_pb2.Envelope:
@@ -535,6 +539,7 @@ class RobotRuntime:
         self.counters["chunks_accepted"] += 1
         self.counters["actions_trimmed"] += result.trimmed
         self._trimmed = result.trimmed
+        self._threshold = max(self._refill - chunk.request_shift_actions, (self._refill + 1) // 2)
         if self.state in (RuntimeState.ARMED, RuntimeState.WAITING):
             self.state = RuntimeState.RUNNING
             self._waiting_since = None

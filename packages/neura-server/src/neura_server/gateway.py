@@ -21,6 +21,7 @@ from neura_runtime.policy import ModelInputs, PolicyError
 from neura_runtime.serving import InvalidObservation, chunk_from, decode_observation
 from neura_server.admission import AdmissionController, SessionDemand
 from neura_server.leases import Lease, LeaseDenied, LeaseTable
+from neura_server.profiles import LatencyProfile
 from neura_server.scheduler import Batch, Dropped, InferenceRequest, Scheduler
 from neura_server.shadow import ShadowDeployment, ShadowRequest, ShadowTracker
 
@@ -53,6 +54,46 @@ class BatchGroup:
     key: str
     scheduler: Scheduler
     admission: AdmissionController
+    # Line up its robots' requests so they share forward passes (§9.2): each chunk tells its
+    # robot how many actions early to ask next, so that requests land on one beat from origin_us.
+    align: bool = True
+    origin_us: int | None = None
+
+
+def batching_window_us(
+    configured_us: int, binding: ExecutionBinding, align: bool, profile: LatencyProfile
+) -> int:
+    """How long a request may wait for others to share its pass. Lined-up robots still ask up to
+    a control period apart (each on its own control tick), so the window spans one, where that
+    pays: when a pass takes longer than a period. A faster pass costs less than the wait."""
+    period = binding.control_period_us
+    if align and profile.p99_us(1) > period:
+        return max(configured_us, period)
+    return configured_us
+
+
+def request_shift_actions(
+    received_us: int, origin_us: int, binding: ExecutionBinding, answer_us: int
+) -> int:
+    """How many actions to move the next request of the robot whose request arrived at
+    ``received_us`` so it lands on the group's beat (origin_us plus whole request intervals):
+    negative asks earlier, positive later, whichever is nearer. A robot asks a request interval
+    after its observation, when its queue is down to the refill threshold; asking later spends
+    that queue, so a later request must still leave ``answer_us`` (a pass, and the way back) and
+    a period before the robot runs out, and the robot never waits past half the threshold."""
+    chunk = binding.profile.spec.chunk
+    period = binding.control_period_us
+    interval = (chunk.actions_per_chunk - chunk.refill_threshold_actions) * period
+    if interval <= 0:
+        return 0
+    behind = (received_us + interval - origin_us) % interval
+    earlier = behind // period  # lands within a period after the beat
+    later = -(-(interval - behind) // period)  # lands within a period before it
+    spare = chunk.refill_threshold_actions * period - answer_us - period
+    allowed = min(spare // period, chunk.refill_threshold_actions // 2)
+    if later < earlier and later <= allowed:
+        return later
+    return -earlier
 
 
 @dataclass(slots=True)
@@ -377,6 +418,8 @@ class GatewayCore:
 
         session.task_epoch = env.task_epoch
         session.observations += 1
+        if session.group.origin_us is None:
+            session.group.origin_us = now_us
         freshness = binding.profile.spec.freshness
         # Durations only: the robot's budget and freshness limits are converted to gateway time at
         # receipt, minus link allowances (design §8). The recent RTT is used here because these
@@ -496,6 +539,17 @@ class GatewayCore:
                 )
                 continue
             session.chunks += 1
+            group = self.groups[group_key]
+            if group.align and group.origin_us is not None:
+                # Lined up, every robot of the group shares one pass.
+                robots = sum(1 for s in self.sessions.values() if s.group is group)
+                batch_size = max(1, min(robots, scheduler.max_batch))
+                answer = scheduler.profile.p99_us(batch_size) + 2 * (
+                    session.rtt_p99_us or self.default_rtt_us
+                )
+                chunk.request_shift_actions = request_shift_actions(
+                    request.received_at_us, group.origin_us, binding, answer
+                )
             deliveries.append(
                 Delivery(request.session_id, dataplane_pb2.GatewayMessage(action_chunk=chunk))
             )

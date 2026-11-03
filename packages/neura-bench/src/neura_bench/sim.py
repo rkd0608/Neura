@@ -34,7 +34,13 @@ from neura_runtime.binding import ExecutionBinding
 from neura_runtime.runtime import RobotRuntime, RuntimeState, TransitionError
 from neura_runtime.session import Outbound, SessionClient, SessionConfig
 from neura_server.admission import AdmissionController, AdmissionDecision, SessionDemand
-from neura_server.gateway import BatchGroup, Delivery, Deployment, GatewayCore
+from neura_server.gateway import (
+    BatchGroup,
+    Delivery,
+    Deployment,
+    GatewayCore,
+    batching_window_us,
+)
 from neura_server.leases import LeaseTable, MemoryGenerationStore
 from neura_server.profiles import LatencyProfile, ProfilePoint
 from neura_server.scheduler import Batch, Policy, Scheduler
@@ -204,6 +210,8 @@ class GroupSpec:
     policy: Policy = Policy.DEADLINE_FAIRNESS
     max_batch: int = 8
     batch_window_us: int = 2_000  # the gateway's default (ServingConfig.batch_window_ms)
+    align: bool = True  # the gateway's default (ServingConfig.align_requests)
+    lanes: int = 1  # forward passes at once: worker processes (ServingConfig.lanes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,11 +343,14 @@ class Simulation:
                 profile,
                 policy=spec.policy,
                 max_batch=spec.max_batch,
-                batch_window_us=spec.batch_window_us,
+                batch_window_us=batching_window_us(
+                    spec.batch_window_us, spec.binding, spec.align, profile
+                ),
             )
             scheduler.on_dispatch = self._on_dispatch
             scheduler.on_complete = self._on_complete
-            groups[key] = BatchGroup(key, scheduler, AdmitAll(profile, max_batch=spec.max_batch))
+            admission = AdmitAll(profile, max_batch=spec.max_batch)
+            groups[key] = BatchGroup(key, scheduler, admission, align=spec.align)
             self._group_of[key] = spec
             self._samplers[key] = spec.latency.profile()
             self._policies[key] = MockPolicy(spec.binding)
@@ -348,7 +359,7 @@ class Simulation:
             groups=groups,
             leases=LeaseTable(MemoryGenerationStore(), 2 * SECOND),
         )
-        self._busy: dict[str, bool] = dict.fromkeys(groups, False)
+        self._running: dict[str, int] = dict.fromkeys(groups, 0)
         self._robots: dict[str, _Robot] = {}
         self._by_session: dict[str, _Robot] = {}
         for spec in scenario.groups:
@@ -409,7 +420,7 @@ class Simulation:
                 self.loop.at(at, functools.partial(robot.stream, delivery.message))
 
     def _dispatch(self, key: str) -> None:
-        if self._busy[key]:
+        if self._running[key] >= self._group_of[key].lanes:
             return
         batch, dropped = self.core.next_batch(key, self.loop.now_us)
         self._deliver(dropped)
@@ -418,20 +429,20 @@ class Simulation:
             if hold is not None:
                 self.loop.at(hold, functools.partial(self._dispatch, key))
             return
-        self._busy[key] = True
+        self._running[key] += 1
         spec = self._group_of[key]
         work = sample_us(self._samplers[key], len(batch.requests), self.rng)
         self.devices[spec.device].start(work, lambda: self._complete(key, batch))
 
     def _complete(self, key: str, batch: Batch) -> None:
-        self._busy[key] = False
+        self._running[key] -= 1
         outputs = self._policies[key].infer([r.inputs for r in batch.requests])
         self._deliver(self.core.complete(key, batch, outputs, self.loop.now_us))
         self._dispatch(key)
 
     def _sweep(self) -> None:
         self.core.sweep(self.loop.now_us)
-        for key in self._busy:
+        for key in self._running:
             self._dispatch(key)
         self.loop.at(self.loop.now_us + 100 * MS, self._sweep)
 
@@ -474,7 +485,7 @@ class Simulation:
         memory: Counter[str] = Counter()
         for key, spec in self._group_of.items():
             sizes = self.core.groups[key].scheduler.stats.batch_sizes
-            memory[spec.device] += (
+            memory[spec.device] += spec.lanes * (  # a worker process, and its weights, per lane
                 spec.latency.memory_mib(max(sizes) if sizes else 1)
                 + spec.latency.process_overhead_mib
             )

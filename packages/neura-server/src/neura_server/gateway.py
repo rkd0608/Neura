@@ -19,9 +19,8 @@ from neura_contracts import DeviceKind, ReasonCode
 from neura_runtime.binding import ExecutionBinding
 from neura_runtime.policy import ModelInputs, PolicyError
 from neura_runtime.serving import InvalidObservation, chunk_from, decode_observation
-from neura_server.admission import AdmissionController, SessionDemand
+from neura_server.admission import AdmissionController, SessionDemand, lined_up
 from neura_server.leases import Lease, LeaseDenied, LeaseTable
-from neura_server.profiles import LatencyProfile
 from neura_server.scheduler import Batch, Dropped, InferenceRequest, Scheduler
 from neura_server.shadow import ShadowDeployment, ShadowRequest, ShadowTracker
 
@@ -54,22 +53,14 @@ class BatchGroup:
     key: str
     scheduler: Scheduler
     admission: AdmissionController
-    # Line up its robots' requests so they share forward passes (§9.2): each chunk tells its
-    # robot how many actions early to ask next, so that requests land on one beat from origin_us.
+    # Line up its robots' requests so they share forward passes (§9.2), while they need it
+    # (admission.lined_up): each chunk tells its robot when to ask next, so that requests land on
+    # one beat from origin_us, and the batching window spans a control period, since lined-up
+    # robots still ask on their own ticks.
     align: bool = True
     origin_us: int | None = None
-
-
-def batching_window_us(
-    configured_us: int, binding: ExecutionBinding, align: bool, profile: LatencyProfile
-) -> int:
-    """How long a request may wait for others to share its pass. Lined-up robots still ask up to
-    a control period apart (each on its own control tick), so the window spans one, where that
-    pays: when a pass takes longer than a period. A faster pass costs less than the wait."""
-    period = binding.control_period_us
-    if align and profile.p99_us(1) > period:
-        return max(configured_us, period)
-    return configured_us
+    lanes: int = 1  # forward passes at once (ServingConfig.lanes)
+    window_us: int = 0  # the configured batching window (ServingConfig.batch_window_ms)
 
 
 def request_shift_actions(
@@ -418,8 +409,12 @@ class GatewayCore:
 
         session.task_epoch = env.task_epoch
         session.observations += 1
-        if session.group.origin_us is None:
-            session.group.origin_us = now_us
+        group = session.group
+        if group.origin_us is None:
+            group.origin_us = now_us
+        aligned = self._lined_up(group, binding)
+        window = max(group.window_us, binding.control_period_us) if aligned else group.window_us
+        group.scheduler.batch_window_us = window
         freshness = binding.profile.spec.freshness
         # Durations only: the robot's budget and freshness limits are converted to gateway time at
         # receipt, minus link allowances (design §8). The recent RTT is used here because these
@@ -540,9 +535,9 @@ class GatewayCore:
                 continue
             session.chunks += 1
             group = self.groups[group_key]
-            if group.align and group.origin_us is not None:
+            if group.origin_us is not None and self._lined_up(group, binding):
                 # Lined up, every robot of the group shares one pass.
-                robots = sum(1 for s in self.sessions.values() if s.group is group)
+                robots = self._robots(group)
                 batch_size = max(1, min(robots, scheduler.max_batch))
                 answer = scheduler.profile.p99_us(batch_size) + 2 * (
                     session.rtt_p99_us or self.default_rtt_us
@@ -556,6 +551,26 @@ class GatewayCore:
             for tracker in self._shadows_of(session.deployment.revision_id):
                 tracker.primary(request.session_id, request.sequence, output, binding)
         return deliveries
+
+    def _robots(self, group: BatchGroup) -> int:
+        return sum(1 for s in self.sessions.values() if s.group is group)
+
+    def _lined_up(self, group: BatchGroup, binding: ExecutionBinding) -> bool:
+        if not group.align:
+            return False
+        chunk = binding.profile.spec.chunk
+        interval = (chunk.actions_per_chunk - chunk.refill_threshold_actions) * (
+            binding.control_period_us
+        )
+        return lined_up(
+            self._robots(group),
+            group.scheduler.profile,
+            lanes=group.lanes,
+            max_batch=group.scheduler.max_batch,
+            interval_us=interval,
+            window_us=max(group.window_us, binding.control_period_us),
+            acceptance_us=binding.profile.spec.freshness.max_observation_age_at_acceptance_us,
+        )
 
     def sweep(self, now_us: int) -> None:
         """Expire leases and forget their sessions; let old latency observations expire."""

@@ -39,7 +39,6 @@ from neura_server.gateway import (
     Delivery,
     Deployment,
     GatewayCore,
-    batching_window_us,
 )
 from neura_server.leases import LeaseTable, MemoryGenerationStore
 from neura_server.profiles import LatencyProfile, ProfilePoint
@@ -343,14 +342,19 @@ class Simulation:
                 profile,
                 policy=spec.policy,
                 max_batch=spec.max_batch,
-                batch_window_us=batching_window_us(
-                    spec.batch_window_us, spec.binding, spec.align, profile
-                ),
+                batch_window_us=spec.batch_window_us,
             )
             scheduler.on_dispatch = self._on_dispatch
             scheduler.on_complete = self._on_complete
             admission = AdmitAll(profile, max_batch=spec.max_batch)
-            groups[key] = BatchGroup(key, scheduler, admission, align=spec.align)
+            groups[key] = BatchGroup(
+                key,
+                scheduler,
+                admission,
+                align=spec.align,
+                lanes=spec.lanes,
+                window_us=spec.batch_window_us,
+            )
             self._group_of[key] = spec
             self._samplers[key] = spec.latency.profile()
             self._policies[key] = MockPolicy(spec.binding)

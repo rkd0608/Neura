@@ -59,7 +59,6 @@ from neura_server.gateway import (
     Delivery,
     Deployment,
     GatewayCore,
-    batching_window_us,
 )
 from neura_server.leases import (
     GenerationStore,
@@ -219,12 +218,7 @@ class GatewayServer:
             else:
                 points, source = serving.profile_points(), "configured_profile"
             profile = LatencyProfile(points)
-            window = batching_window_us(
-                int(serving.batch_window_ms * 1000),
-                deployment.binding,
-                serving.align_requests,
-                profile,
-            )
+            window = int(serving.batch_window_ms * 1000)
             groups[key] = BatchGroup(
                 key,
                 Scheduler(
@@ -235,6 +229,8 @@ class GatewayServer:
                 ),
                 admission_for(serving, profile, deployment.binding),
                 align=serving.align_requests,
+                lanes=serving.lanes,
+                window_us=window,
             )
             lanes = [
                 self._backend(serving, item, deployment, profile) for _ in range(serving.lanes)

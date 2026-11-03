@@ -13,7 +13,6 @@ from typing import Any
 from neura_runtime.binding import ExecutionBinding
 from neura_server.admission import AdmissionController, SessionDemand
 from neura_server.config import ServingConfig
-from neura_server.gateway import batching_window_us
 from neura_server.profiles import LatencyProfile, ProfilePoint
 
 
@@ -26,10 +25,9 @@ def admission_for(
         max_batch=serving.max_batch,
         reserve_fraction=serving.reserve_fraction,
         memory_available_mib=serving.memory_available_mib,
-        batch_window_us=batching_window_us(
-            int(serving.batch_window_ms * 1000), binding, serving.align_requests, profile
-        ),
+        batch_window_us=int(serving.batch_window_ms * 1000),
         lanes=serving.lanes,
+        aligned_window_us=binding.control_period_us if serving.align_requests else None,
     )
 
 
@@ -72,11 +70,7 @@ def estimate(
             "dispatch_freshness_ms": ms(freshness.max_observation_age_at_dispatch_us),
             "acceptance_freshness_ms": ms(freshness.max_observation_age_at_acceptance_us),
             "max_batch": serving.max_batch,
-            "batch_window_ms": ms(
-                batching_window_us(
-                    int(serving.batch_window_ms * 1000), binding, serving.align_requests, profile
-                )
-            ),
+            "batch_window_ms": serving.batch_window_ms,
             "lanes": serving.lanes,
             "align_requests": serving.align_requests,
             "reserve_fraction": serving.reserve_fraction,

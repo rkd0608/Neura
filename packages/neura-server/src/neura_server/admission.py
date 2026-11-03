@@ -74,6 +74,28 @@ class CapacityReport:
     limiting_factor: str  # the limit that refused one more session, or "search_limit"
 
 
+def lined_up(
+    robots: int,
+    profile: LatencyProfile,
+    *,
+    lanes: int,
+    max_batch: int,
+    interval_us: int,
+    window_us: int,
+    acceptance_us: int,
+) -> bool:
+    """Whether a group's robots' requests should be lined up to share forward passes (§9.2): when,
+    asking one at a time, they would keep every lane busier than a request interval allows, and
+    the batch lining them up makes (a lane's share of them, after the batching window) still
+    answers before the robots would refuse its chunk as too old. A faster pass leaves the lanes
+    room to serve each robot as it asks; a batch that cannot meet the acceptance limit would only
+    turn waiting into refused chunks."""
+    if robots * profile.p99_us(1) <= lanes * interval_us:
+        return False
+    batch = min(-(-robots // lanes), max_batch)
+    return window_us + profile.p99_us(batch) <= acceptance_us
+
+
 class AdmissionController:
     def __init__(
         self,
@@ -84,6 +106,7 @@ class AdmissionController:
         memory_available_mib: int | None = None,
         batch_window_us: int = 0,
         lanes: int = 1,
+        aligned_window_us: int | None = None,
     ) -> None:
         if max_batch < 1:
             raise ValueError("max_batch must be >= 1")
@@ -96,6 +119,8 @@ class AdmissionController:
         self._reserve = reserve_fraction
         self._memory = memory_available_mib
         self._window = batch_window_us
+        # The batching window while the group's requests are lined up (None: never lined up).
+        self._aligned_window = aligned_window_us
         # Forward passes at once (§9.2): a worker process, and its own copy of the weights, each.
         # How much passes running together slow each other is the device's and is not modeled
         # here; the scheduler's profile learns it from the passes it times.
@@ -130,7 +155,18 @@ class AdmissionController:
         others = n - 1
         per_lane = min(-(-others // self._lanes), self._max_batch)
         busy = others >= self._lanes
-        blocking = (self._profile.p99_us(per_lane) if busy else 0) + self._window
+        window = self._window
+        if self._aligned_window is not None and lined_up(
+            n,
+            self._profile,
+            lanes=self._lanes,
+            max_batch=self._max_batch,
+            interval_us=min(d.interval_us for d in demands),
+            window_us=self._aligned_window,
+            acceptance_us=min(d.max_age_at_acceptance_us for d in demands),
+        ):
+            window = max(window, self._aligned_window)
+        blocking = (self._profile.p99_us(per_lane) if busy else 0) + window
         ordered = sorted(demands, key=lambda d: d.budget_us - d.link_us)
         batches = [
             ordered[start : start + self._max_batch] for start in range(0, n, self._max_batch)

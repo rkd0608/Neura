@@ -179,7 +179,7 @@ COPY console/src/styles/tokens.css /src/console/src/styles/tokens.css
 ARG NEURA_SITE_URL NEURA_CONSOLE_URL NEURA_CONTACT_URL
 RUN pnpm run build
 
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS neura-landing
+FROM nginx:1.31-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606 AS neura-landing
 COPY deploy/landing/default.conf /etc/nginx/conf.d/default.conf
 COPY deploy/landing/base-headers.inc deploy/landing/security-headers.inc \
     deploy/landing/docs-headers.inc /etc/nginx/conf.d/
@@ -208,7 +208,7 @@ COPY api /src/api
 ARG VITE_DOCS_URL
 RUN pnpm run build
 
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS neura-console
+FROM nginx:1.31-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606 AS neura-console
 COPY deploy/console/default.conf.template deploy/console/security-headers.inc.template \
     /etc/nginx/templates/
 COPY --from=console-build /src/console/dist /usr/share/nginx/html

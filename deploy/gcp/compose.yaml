@@ -102,7 +102,7 @@ services:
   # Moving from Cloud SQL to the Postgres container: the old database, for the one import. The
   # same proxy as compose.cloudsql.yaml's (Dependabot updates both).
   import-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1@sha256:5cf206e6b9609aaa666db20c6c6632521985a5412ebbe4835e83d39bc76501e9
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.28.0@sha256:e0cbea7b63455c1635d354ef456696d019dd02a5db47bf1994e849823e71ae89
     profiles: [tools]
 
 networks:
